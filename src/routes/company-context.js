@@ -1,8 +1,30 @@
 const express = require("express");
-const { randomUUID } = require("crypto");
+const { getRequestId, getCorrelationId } = require("../app/request-context");
+const { sendError } = require("../app/error-contract");
 
-function createCompanyContextRouter({ companyContextService }) {
+function createCompanyContextRouter({ companyContextService, companyContextDraftService, getCompanyContextDraftService } = {}) {
   const router = express.Router();
+
+  router.post("/api/v1/company-context/draft", requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const draftService = companyContextDraftService || getCompanyContextDraftService?.();
+    if (!draftService?.createDraft) {
+      return sendError(res, req, Object.assign(new Error("Company Context draft pipeline is not configured"), { code: "NOT_READY", statusCode: 503 }));
+    }
+    const companyId = req.authContext?.companyId || req.get("X-Company-Id");
+    const tenantId = req.authContext?.tenantId || req.get("X-Tenant-Id");
+    const result = await draftService.createDraft({
+      trustedContext: {
+        tenantId,
+        companyId,
+        actor: req.user,
+        scopeTrusted: req.authContext?.scopeTrusted === true,
+        extractionLanguage: req.body?.extraction_language || "id",
+        limits: req.body?.limits || {},
+      },
+      sources: req.body?.source ? [req.body.source] : [],
+    });
+    res.status(202).json({ success: true, data: { draft: serializeDraft(result.draft), provenance: result.provenance }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
+  }));
 
   router.get("/api/v1/companies/:companyId/context", asyncHandler(async (req, res) => {
     const context = await companyContextService.getEffectiveContext({
@@ -34,6 +56,7 @@ function createCompanyContextRouter({ companyContextService }) {
       draftId: req.params.draftId,
       fields: req.body?.fields,
       reviewNote: req.body?.review_note,
+      expectedRevision: readExpectedRevision(req),
     });
     success(res, serializeDraft(draft), req);
   }));
@@ -43,6 +66,7 @@ function createCompanyContextRouter({ companyContextService }) {
       actor: req.user,
       draftId: req.params.draftId,
       reviewNote: req.body?.review_note,
+      expectedRevision: readExpectedRevision(req),
     });
     success(res, serializeDraft(draft), req);
   }));
@@ -52,20 +76,13 @@ function createCompanyContextRouter({ companyContextService }) {
       actor: req.user,
       draftId: req.params.draftId,
       approvalNote: req.body?.approval_note,
+      expectedRevision: readExpectedRevision(req),
     });
     success(res, { draft: serializeDraft(result.draft), effective_context: serializeContext(result.effectiveContext) }, req);
   }));
 
   router.use((error, req, res, _next) => {
-    const statusCode = error.statusCode || 500;
-    res.status(statusCode).json({
-      success: false,
-      error: {
-        code: error.code || "INTERNAL_ERROR",
-        message: statusCode === 500 ? "Internal server error" : error.message,
-      },
-      meta: { request_id: getRequestId(req) },
-    });
+    return sendError(res, req, error);
   });
 
   return router;
@@ -74,11 +91,7 @@ function createCompanyContextRouter({ companyContextService }) {
 function requireIdempotencyKey(req, res, next) {
   const key = req.get("Idempotency-Key");
   if (!key || key.length < 16 || key.length > 255) {
-    return res.status(400).json({
-      success: false,
-      error: { code: "VALIDATION_ERROR", message: "Idempotency-Key header must be 16 to 255 characters" },
-      meta: { request_id: getRequestId(req) },
-    });
+    return sendError(res, req, Object.assign(new Error("Idempotency-Key header must be 16 to 255 characters"), { code: "VALIDATION_ERROR", statusCode: 400 }));
   }
   return next();
 }
@@ -88,21 +101,23 @@ function requireIfMatch(req, res, next) {
   const requestedVersion = req.body?.version;
   const currentVersion = Number(header);
   if (!/^[0-9]+$/.test(header || "") || !Number.isInteger(requestedVersion) || requestedVersion !== currentVersion + 1) {
-    return res.status(409).json({
-      success: false,
-      error: { code: "VERSION_CONFLICT", message: "If-Match must reference the previous context version" },
-      meta: { request_id: getRequestId(req) },
-    });
+    return sendError(res, req, Object.assign(new Error("If-Match must reference the previous context version"), { code: "VERSION_CONFLICT", statusCode: 409 }));
   }
   return next();
 }
 
-function success(res, data, req) {
-  res.status(200).json({ success: true, data, meta: { request_id: getRequestId(req) } });
+function readExpectedRevision(req) {
+  const header = req.get("If-Match");
+  if (!header) return undefined;
+  if (!/^\d+$/.test(header)) {
+    const error = Object.assign(new Error("If-Match must contain the current draft revision"), { code: "VERSION_CONFLICT", statusCode: 409 });
+    throw error;
+  }
+  return Number(header);
 }
 
-function getRequestId(req) {
-  return req.get("X-Request-Id") || randomUUID();
+function success(res, data, req) {
+  res.status(200).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
 }
 
 function asyncHandler(handler) {

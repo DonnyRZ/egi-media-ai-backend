@@ -14,6 +14,7 @@ const t09PriorityEnum = require("./tasks/t09-priority-enum");
 const t10PriorityReason = require("./tasks/t10-priority-reason");
 const t12DirectBlurbs = require("./tasks/t12-direct-blurbs");
 const t13ReportNarrative = require("./tasks/t13-report-narrative");
+const t14ConstrainedRewrite = require("./tasks/t14-constrained-rewrite");
 const { createCmsSourceGate } = require("../cms");
 const issueMutation = require("../issues");
 const analysisGate = require("../analysis");
@@ -60,6 +61,7 @@ module.exports = {
   t10PriorityReason,
   t12DirectBlurbs,
   t13ReportNarrative,
+  t14ConstrainedRewrite,
   createT01CompanyContextDraftRuntime,
   createCmsSourceGate,
   issueMutation,

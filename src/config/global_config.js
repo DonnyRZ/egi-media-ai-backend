@@ -21,6 +21,9 @@ const config = {
     nanoModel: process.env.OPENAI_NANO_MODEL,
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
   },
+  auth: {
+    accessTokenSecret: process.env.AUTH_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET,
+  },
   email: {
     transport: process.env.EMAIL_TRANSPORT || "smtp",
     smtp: {
@@ -32,6 +35,15 @@ const config = {
     },
     from: { address: process.env.EMAIL_FROM_ADDRESS, name: process.env.EMAIL_FROM_NAME || "EGI Media" },
     retry: { maxAttempts: Number(process.env.EMAIL_RETRY_MAX_ATTEMPTS || 3), baseDelayMs: Number(process.env.EMAIL_RETRY_BASE_DELAY_MS || 1000) },
+  },
+  database: {
+    sourceUrl: process.env.SOURCE_DATABASE_URL,
+    aiUrl: process.env.AI_DATABASE_URL,
+    sourcePoolMax: Number(process.env.SOURCE_DB_POOL_MAX || 5),
+    aiPoolMax: Number(process.env.AI_DB_POOL_MAX || 10),
+    connectionTimeoutMs: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
+    idleTimeoutMs: Number(process.env.DB_IDLE_TIMEOUT_MS || 10000),
+    ssl: process.env.DB_SSL === "true",
   },
   postgresqlUrl: process.env.POSTGRESQL_URL,
   redisUrl: process.env.REDIS_URL || "redis://localhost:6379",

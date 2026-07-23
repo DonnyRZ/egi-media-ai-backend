@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.production.example
+node_modules
+logs
+*.log
+.git
+.github
+test
+Docs
+*.md
+coverage

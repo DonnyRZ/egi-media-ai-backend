@@ -22,6 +22,12 @@ class InMemoryIssueStore {
       .map(cloneForRead);
   }
 
+  listScoped({ tenantId, companyId }) {
+    return [...this.issuesById.values()]
+      .filter((issue) => issue.tenantId === tenantId && issue.companyId === companyId)
+      .map(cloneForRead);
+  }
+
   seed(issue) {
     if (!issue || typeof issue !== "object" || typeof issue.issueId !== "string"
       || typeof issue.tenantId !== "string" || typeof issue.companyId !== "string"

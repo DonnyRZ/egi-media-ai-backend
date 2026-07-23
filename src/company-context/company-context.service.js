@@ -18,9 +18,10 @@ class CompanyContextService {
     return draft;
   }
 
-  async editDraft({ actor, draftId, fields, reviewNote = null }) {
+  async editDraft({ actor, draftId, fields, reviewNote = null, expectedRevision }) {
     const current = this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.edit");
+    this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
     const mergedFields = mergeAndValidateFields(current.result.context, fields);
 
@@ -32,9 +33,10 @@ class CompanyContextService {
     }));
   }
 
-  async submitForReview({ actor, draftId, reviewNote = null }) {
+  async submitForReview({ actor, draftId, reviewNote = null, expectedRevision }) {
     const current = this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.review");
+    this._assertRevision(current, expectedRevision);
     if (current.status !== "draft") {
       throw new CompanyContextConflictError("Only draft Company Context can be submitted for review", {
         details: { draftId, status: current.status },
@@ -53,9 +55,10 @@ class CompanyContextService {
     }));
   }
 
-  async approveDraft({ actor, draftId, approvalNote = null }) {
+  async approveDraft({ actor, draftId, approvalNote = null, expectedRevision }) {
     const current = this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.approve");
+    this._assertRevision(current, expectedRevision);
     if (current.status !== "in_review") {
       throw new CompanyContextConflictError("Only Company Context in review can be approved", {
         details: { draftId, status: current.status },
@@ -130,6 +133,15 @@ class CompanyContextService {
     if (!["draft", "in_review"].includes(draft.status)) {
       throw new CompanyContextConflictError("Approved Company Context draft cannot be edited", {
         details: { draftId: draft.draftId, status: draft.status },
+      });
+    }
+  }
+
+  _assertRevision(draft, expectedRevision) {
+    if (expectedRevision === undefined) return;
+    if (!Number.isInteger(expectedRevision) || expectedRevision !== draft.revision) {
+      throw new CompanyContextConflictError("Company Context draft revision is stale", {
+        details: { draftId: draft.draftId, expectedRevision, actualRevision: draft.revision },
       });
     }
   }

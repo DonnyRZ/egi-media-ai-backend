@@ -10,6 +10,6 @@ const allowedOrigins = configuredOrigins
 module.exports = cors({
   origin: allowedOrigins,
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "X-Company-Id", "X-Request-Id", "Idempotency-Key", "If-Match"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-Id", "X-Company-Id", "X-Request-Id", "X-Correlation-Id", "Idempotency-Key", "If-Match"],
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
