@@ -40,7 +40,7 @@ class InMemoryAlertEventStore {
   create({ tenantId, companyId, issueId, developmentId, recipientId, channel, status, reasonCode, dedupeKey }) {
     const value = {
       alertEventId: this.uuid(), tenantId, companyId, issueId, developmentId, recipientId,
-      channel, status, reasonCode, dedupeKey, createdAt: new Date(this.now()).toISOString(),
+      channel, status, reasonCode, dedupeKey, read: false, readAt: null, createdAt: new Date(this.now()).toISOString(),
     };
     this.eventsById.set(value.alertEventId, value);
     if (status === "eligible") this.eligibleEventIdByDedupeKey.set(dedupeKey, value.alertEventId);
@@ -48,6 +48,17 @@ class InMemoryAlertEventStore {
   }
 
   list() { return [...this.eventsById.values()].map(cloneForRead); }
+  listScoped({ tenantId, companyId, recipientId = null, page = 1, limit = 20 }) {
+    const all = [...this.eventsById.values()].filter((event) => event.tenantId === tenantId && event.companyId === companyId && (!recipientId || event.recipientId === recipientId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const offset = (page - 1) * limit;
+    return { items: all.slice(offset, offset + limit).map(cloneForRead), page, limit, total: all.length };
+  }
+  markRead({ tenantId, companyId, alertEventId, read = true }) {
+    const event = this.eventsById.get(alertEventId);
+    if (!event || event.tenantId !== tenantId || event.companyId !== companyId) return null;
+    event.read = read; event.readAt = read ? new Date(this.now()).toISOString() : null;
+    return cloneForRead(event);
+  }
 }
 
 function cloneForRead(value) { return deepFreeze(structuredClone(value)); }

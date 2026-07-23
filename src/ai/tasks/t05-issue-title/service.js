@@ -26,18 +26,18 @@ class IssueTitleService {
 
   async generate({ tenantId, companyId, issueId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     this._validateIssue(issue);
-    const development = this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
+    const development = await this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
     if (!development) throw new AiConfigurationError("T05 requires a valid issue development");
-    const existing = this.issueStore.getGeneratedTitle({ issueId, developmentId: development.developmentId, promptVersion: T05_PROMPT_VERSION });
+    const existing = await this.issueStore.getGeneratedTitle({ issueId, developmentId: development.developmentId, promptVersion: T05_PROMPT_VERSION });
     if (existing) return { title: existing, issue, reused: true };
     if (typeof issue.title === "string" && issue.title.trim()) {
       throw new AiConfigurationError("T05 runs only for an issue that needs a title");
     }
-    const matchDecision = this.matchDecisionStore.getById(development.matchDecisionId);
+    const matchDecision = await this.matchDecisionStore.getById(development.matchDecisionId);
     this._validateMatchDecision(matchDecision, { tenantId, companyId, development });
-    const relevanceDecision = this.relevanceDecisionStore.getById(development.relevanceDecisionId);
+    const relevanceDecision = await this.relevanceDecisionStore.getById(development.relevanceDecisionId);
     this._validateRelevanceDecision(relevanceDecision, { companyId, matchDecision });
     const source = await this.cmsSourceGate.requirePublishedArticle({
       articleId: relevanceDecision.articleId, locale: relevanceDecision.source.requestedLocale,
@@ -53,11 +53,11 @@ class IssueTitleService {
       outputSchema: T05_OUTPUT_SCHEMA,
       validateResult: validateT05Output,
     });
-    const applied = this.issueStore.applyGeneratedTitle({
+    const applied = await this.issueStore.applyGeneratedTitle({
       tenantId, companyId, issueId, developmentId: development.developmentId,
       promptVersion: T05_PROMPT_VERSION, title: execution.data.title, provenance: execution.provenance,
     });
-    return { title: applied.title, issue: this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
+    return { title: applied.title, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }
 
   _validateIssue(issue) {

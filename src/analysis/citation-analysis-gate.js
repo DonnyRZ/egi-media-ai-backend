@@ -12,13 +12,13 @@ class CitationAnalysisGate {
 
   async validateAndPromote({ tenantId, companyId, analysisId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const analysis = this.analysisStore.getById(analysisId);
+    const analysis = await this.analysisStore.getById(analysisId);
     if (!analysis || analysis.tenantId !== tenantId || analysis.companyId !== companyId || analysis.status !== "validated") {
       throw new AiConfigurationError("Analysis gate requires a validated analysis in the same tenant and company");
     }
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId: analysis.issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId: analysis.issueId });
     if (!issue) throw new AiConfigurationError("Analysis gate requires its scoped issue");
-    const linked = this.issueStore.listArticles({ issueId: analysis.issueId });
+    const linked = await this.issueStore.listArticles({ issueId: analysis.issueId });
     this._validateEvidenceSet({ linked, evidence: analysis.evidence, tenantId, companyId, issueId: analysis.issueId });
     await Promise.all(analysis.evidence.map((evidence) => this._validateFreshCanonicalEvidence(evidence)));
     this._validateCitations({ analysis, evidence: analysis.evidence });

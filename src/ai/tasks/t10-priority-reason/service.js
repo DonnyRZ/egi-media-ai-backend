@@ -20,26 +20,26 @@ class PriorityReasonService {
 
   async generate({ tenantId, companyId, issueId, analysisId, priorityDecisionId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !["baru", "berkembang", "dipantau"].includes(issue.status)) throw new AiConfigurationError("T10 requires an active issue in the same tenant and company");
-    const analysis = this.analysisStore.getById(analysisId);
-    const currentAnalysis = this.analysisStore.getCurrent({ tenantId, companyId, issueId });
+    const analysis = await this.analysisStore.getById(analysisId);
+    const currentAnalysis = await this.analysisStore.getCurrent({ tenantId, companyId, issueId });
     if (!analysis || analysis.tenantId !== tenantId || analysis.companyId !== companyId || analysis.issueId !== issueId
       || analysis.status !== "current" || currentAnalysis?.analysisId !== analysisId || !analysis.gate) {
       throw new AiConfigurationError("T10 requires the current citation-gated analysis for the same issue, tenant, and company");
     }
-    const priorityDecision = this.priorityStore.get({ tenantId, companyId, issueId, analysisId, promptVersion: T09_PROMPT_VERSION });
+    const priorityDecision = await this.priorityStore.get({ tenantId, companyId, issueId, analysisId, promptVersion: T09_PROMPT_VERSION });
     if (!priorityDecision || priorityDecision.priorityDecisionId !== priorityDecisionId || !["tinggi", "sedang", "rendah"].includes(priorityDecision.priority)
       || issue.currentPriority !== priorityDecision.priority || issue.currentPriorityAnalysisId !== analysisId || issue.currentPriorityDecisionId !== priorityDecisionId) {
       throw new AiConfigurationError("T10 requires the immutable current T09 priority decision for this analysis");
     }
-    const labels = this.labelStore.get({ analysisId, promptVersion: T08_PROMPT_VERSION });
+    const labels = await this.labelStore.get({ analysisId, promptVersion: T08_PROMPT_VERSION });
     const labeledClaims = buildLabeledClaims({ analysis, labels });
     const context = await this.getEffectiveContext(companyId);
     if (!context || context.companyId !== companyId || context.status !== "effective" || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T10 requires an effective Company Context for the same company");
     }
-    const existing = this.reasonStore.get({ priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
+    const existing = await this.reasonStore.get({ priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
     if (existing) return { reason: existing, priorityDecision, analysis, reused: true };
     const claimIds = new Set(labeledClaims.map((claim) => claim.claimId));
     const execution = await this.promptExecutionService.executeActive({
@@ -50,7 +50,7 @@ class PriorityReasonService {
       outputSchema: T10_OUTPUT_SCHEMA,
       validateResult: (data) => validateT10Output(data, { claimIds }),
     });
-    const reason = this.reasonStore.create({
+    const reason = await this.reasonStore.create({
       tenantId, companyId, issueId, analysisId, priorityDecisionId, promptVersion: T10_PROMPT_VERSION,
       reason: execution.data.reason, sourceClaimIds: execution.data.sourceClaimIds, provenance: execution.provenance,
     });

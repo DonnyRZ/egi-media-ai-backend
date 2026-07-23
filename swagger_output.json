@@ -21,6 +21,26 @@
     { "name": "Internal Pipeline", "description": "Service/operator-only pipeline operations" }
   ],
   "paths": {
+    "/api/v1/auth/session": {
+      "get": {
+        "tags": ["Auth"], "summary": "Read the authenticated session context", "operationId": "getAuthSession", "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Authenticated actor and trusted scope" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/companies": {
+      "get": {
+        "tags": ["Company Context"],
+        "summary": "List authorized companies",
+        "operationId": "listAuthorizedCompanies",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": {
+          "200": { "description": "Authorized companies", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyListResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/api/v1/dashboard/executive-summary": {
       "get": {
         "tags": ["Dashboard"],
@@ -84,6 +104,25 @@
         }
       }
     },
+    "/api/v1/saved/issues": {
+      "get": {
+        "tags": ["Issues"],
+        "summary": "List saved issues for the current user",
+        "operationId": "listSavedIssues",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/PageQuery" },
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated saved issues", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SavedIssueListResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/api/v1/issues/{issueId}/saved": {
       "post": {
         "tags": ["Issues"],
@@ -119,6 +158,14 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
+      }
+    },
+    "/api/v1/issues/{issueId}/complete": {
+      "post": {
+        "tags": ["Issues"], "summary": "Mark an issue complete", "operationId": "completeIssue", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IssueIdPath" }, { "$ref": "#/components/parameters/CompanyIdHeader" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["version"], "properties": { "version": { "type": "integer", "minimum": 1 } }, "additionalProperties": false } } } },
+        "responses": { "200": { "description": "Issue completed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueDetailResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/api/v1/inbox/emails": {
@@ -480,6 +527,13 @@
         }
       }
     },
+    "/api/v1/articles/{articleId}/source": {
+      "get": {
+        "tags": ["Source"], "summary": "Read a published article source", "operationId": "getArticleSource", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "articleId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "name": "locale", "in": "query", "required": false, "schema": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": { "200": { "description": "Published source article and locale-aware citation" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } }
+      }
+    },
     "/api/v1/internal/source/articles/{articleId}": {
       "get": {
         "tags": ["Internal Source Boundary"],
@@ -536,7 +590,7 @@
     "/api/v1/internal/analyses/{analysisId}/promote-current": { "post": { "tags": ["Internal Issue Analysis"], "summary": "Promote citation-gated current analysis", "description": "Revalidates fresh canonical evidence, citations, and T08 labels before replacing the current analysis.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "name": "analysisId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Current validated analysis" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
     "/api/v1/internal/issues/{issueId}/priority": { "post": { "tags": ["Internal Priority"], "summary": "Run T09 priority enum", "description": "Produces only tinggi, sedang, or rendah for a current citation-gated analysis. It does not select Top 5.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "name": "issueId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Priority decision" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
     "/api/v1/internal/issues/{issueId}/priority/reason": { "post": { "tags": ["Internal Priority"], "summary": "Run T10 priority reason", "description": "Produces a grounded reason for the immutable T09 decision. It does not rank or select Top 5.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "name": "issueId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Priority reason" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
-    "/api/v1/companies/{companyId}/alert-preference": { "put": { "tags": ["Alert Eligibility"], "summary": "Upsert alert preference", "description": "Stores recipient preference used by backend alert eligibility rules. It does not send email.", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/CompanyIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertPreferenceRequest" } } } }, "responses": { "200": { "description": "Alert preference saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertPreferenceResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
+    "/api/v1/companies/{companyId}/alert-preference": { "get": { "tags": ["Alert Eligibility"], "summary": "Get alert preference", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/CompanyIdPath" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Alert preference", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertPreferenceResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } } }, "put": { "tags": ["Alert Eligibility"], "summary": "Upsert alert preference", "description": "Stores recipient preference used by backend alert eligibility rules. It does not send email.", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/CompanyIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertPreferenceRequest" } } } }, "responses": { "200": { "description": "Alert preference saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertPreferenceResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
     "/api/v1/internal/alerts/eligibility": { "post": { "tags": ["Alert Eligibility"], "summary": "Evaluate alert eligibility", "description": "Rules-only decision for preference, priority, dedupe, and quiet hours. Material update with no product decision is fail-closed as suppressed. This endpoint never sends email and never exposes recipient or subject selection to an AI model.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertEligibilityRequest" } } } }, "responses": { "200": { "description": "Rules-only eligibility decision", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertEligibilityResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "503": { "$ref": "#/components/responses/ServiceUnavailable" } } } },
     "/api/v1/internal/reports/drafts": { "post": { "tags": ["Report Draft"], "summary": "Create a daily, weekly, or monthly report draft", "description": "Creates a backend-owned report draft from a period-consistent metric set and validated issue/insight pack. The input excludes raw article bodies and does not use the dashboard Top 5 as an implicit cap.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportDraftRequest" } } } }, "responses": { "200": { "description": "Report draft created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportDraftResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
     "/api/v1/reports/{reportId}/narrative/{reportNarrativeId}/rewrite": { "post": { "tags": ["Report Review"], "summary": "Constrained rewrite of one report span", "description": "Human-only T14 rewrite. The caller selects exactly one cited span and supplies one bounded instruction. Backend preserves the existing citation set and checks the narrative version before applying the replacement.", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/ReportIdPath" }, { "name": "reportNarrativeId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/IfMatchHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConstrainedRewriteRequest" } } } }, "responses": { "200": { "description": "Rewritten cited span", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConstrainedRewriteResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
@@ -796,6 +850,8 @@
       "ReplayRunRequest": { "type": "object", "required": ["from_stage", "reason"], "additionalProperties": false, "properties": { "from_stage": { "$ref": "#/components/schemas/PipelineStageName" }, "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }, "expected_input_fingerprint": { "type": "string", "maxLength": 255 } } },
       "PipelineRun": { "type": "object", "required": ["id", "trigger", "state", "stages", "created_at", "trace_id"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "trigger": { "type": "string", "enum": ["scheduled", "manual", "backfill", "replay", "context_draft"] }, "state": { "$ref": "#/components/schemas/PipelineStageState" }, "tenant_id": { "$ref": "#/components/schemas/Uuid" }, "company_id": { "$ref": "#/components/schemas/Uuid" }, "stages": { "type": "array", "items": { "$ref": "#/components/schemas/PipelineStage" } }, "created_at": { "$ref": "#/components/schemas/Timestamp" }, "completed_at": { "$ref": "#/components/schemas/Timestamp" }, "trace_id": { "type": "string" } } },
       "SavedItemResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["issue_id", "saved_at"], "properties": { "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "SavedIssueListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items", "meta"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/SavedIssue" } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "SavedIssue": { "type": "object", "required": ["saved_id", "issue_id", "saved_at", "issue"], "properties": { "saved_id": { "$ref": "#/components/schemas/Uuid" }, "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" }, "issue": { "$ref": "#/components/schemas/IssueCard" } } },
       "FeedbackResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "created_at"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "created_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ShareIntentResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "state"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "state": { "type": "string", "enum": ["queued", "waiting_review", "suppressed"] } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ExecutiveSummaryResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ExecutiveSummary" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
@@ -806,6 +862,7 @@
       "ReportResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/Report" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ReportListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/Report" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ReportDetailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ReportDetail" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "CompanyListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "type": "object", "required": ["company_id"], "properties": { "company_id": { "$ref": "#/components/schemas/Uuid" }, "name": { "type": ["string", "null"] } } } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "CompanyContextResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/CompanyContext" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "CompanyContextDraftResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/CompanyContextDraft" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "CompanyContextDraftApprovalResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["draft", "effective_context"], "properties": { "draft": { "$ref": "#/components/schemas/CompanyContextDraft" }, "effective_context": { "$ref": "#/components/schemas/CompanyContext" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },

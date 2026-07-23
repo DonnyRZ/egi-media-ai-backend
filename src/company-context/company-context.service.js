@@ -13,13 +13,13 @@ class CompanyContextService {
   }
 
   async getDraft({ actor, draftId }) {
-    const draft = this._requireDraft(draftId);
+    const draft = await this._requireDraft(draftId);
     await this._authorize(actor, draft.companyId, "company_context.read");
     return draft;
   }
 
   async editDraft({ actor, draftId, fields, reviewNote = null, expectedRevision }) {
-    const current = this._requireDraft(draftId);
+    const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.edit");
     this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
@@ -34,7 +34,7 @@ class CompanyContextService {
   }
 
   async submitForReview({ actor, draftId, reviewNote = null, expectedRevision }) {
-    const current = this._requireDraft(draftId);
+    const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.review");
     this._assertRevision(current, expectedRevision);
     if (current.status !== "draft") {
@@ -56,7 +56,7 @@ class CompanyContextService {
   }
 
   async approveDraft({ actor, draftId, approvalNote = null, expectedRevision }) {
-    const current = this._requireDraft(draftId);
+    const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.companyId, "company_context.approve");
     this._assertRevision(current, expectedRevision);
     if (current.status !== "in_review") {
@@ -65,7 +65,7 @@ class CompanyContextService {
       });
     }
 
-    const activation = this.effectiveContextStore.activate({
+    const activation = await this.effectiveContextStore.activate({
       companyId: current.companyId,
       fields: current.result.context,
       source: "ai_draft",
@@ -79,7 +79,7 @@ class CompanyContextService {
       });
     }
 
-    const draft = this.draftStore.update(draftId, (item) => ({
+    const draft = await this.draftStore.update(draftId, (item) => ({
       ...item,
       status: "approved",
       review: {
@@ -95,7 +95,7 @@ class CompanyContextService {
 
   async getEffectiveContext({ actor, companyId }) {
     await this._authorize(actor, companyId, "company_context.read");
-    const context = this.effectiveContextStore.getEffective(companyId);
+    const context = await this.effectiveContextStore.getEffective(companyId);
     if (!context) {
       throw new CompanyContextNotFoundError("No approved effective Company Context exists", { details: { companyId } });
     }
@@ -105,7 +105,7 @@ class CompanyContextService {
   async replaceEffectiveContext({ actor, companyId, version, fields, changeReason = null }) {
     await this._authorize(actor, companyId, "company_context.write");
     const validatedFields = validateFullFields(fields);
-    const activation = this.effectiveContextStore.activate({
+    const activation = await this.effectiveContextStore.activate({
       companyId,
       fields: validatedFields,
       source: "manual",
@@ -121,8 +121,8 @@ class CompanyContextService {
     return activation.context;
   }
 
-  _requireDraft(draftId) {
-    const draft = this.draftStore.get(draftId);
+  async _requireDraft(draftId) {
+    const draft = await this.draftStore.get(draftId);
     if (!draft) {
       throw new CompanyContextNotFoundError("Company Context draft was not found", { details: { draftId } });
     }

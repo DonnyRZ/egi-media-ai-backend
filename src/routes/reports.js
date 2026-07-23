@@ -7,11 +7,23 @@ const { validateReportPack } = require("../ai/tasks/t13-report-narrative/service
 function createReportRouter({ getReportRuntime } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  router.get("/api/v1/reports", scope, asyncHandler(async (req, res) => {
+    const result = await getReportRuntime().draftStore.list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 20, 100), reportType: req.query.report_type || null, reviewStatus: req.query.review_status || null });
+    return success(res, { items: result.items.map(serializeDraft), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
+  }));
+  router.get("/api/v1/reports/:reportId", scope, asyncHandler(async (req, res) => {
+    const report = await getReportRuntime().draftStore.get({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, reportId: req.params.reportId });
+    if (!report) throw Object.assign(new Error("Report was not found"), { code: "NOT_FOUND", statusCode: 404 });
+    const narrative = await getReportRuntime().narrativeStore?.get({ reportId: report.reportId, promptVersion: "1.0.0" }) || null;
+    return success(res, { report: serializeDraft(report), narrative: narrative ? serializeNarrative(narrative) : null, activity: report.activity || [] }, req);
+  }));
   router.post("/api/v1/internal/reports/drafts", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const payload = normalizeDraftPayload(req.body);
     const draft = buildDraftCandidate(req.authContext, payload);
     validateReportPack(draft);
-    const stored = getReportRuntime().draftStore.create(draft);
+    const stored = typeof getReportRuntime().draftStore.create === "function"
+      ? await getReportRuntime().draftStore.create(draft)
+      : await getReportRuntime().draftStore.createDraft(draft);
     return success(res, serializeDraft(stored), req);
   }));
   router.post("/api/v1/internal/reports/:reportId/narrative", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
@@ -72,6 +84,8 @@ function serializeNarrative(narrative) { return { report_narrative_id: narrative
 function actorScope(req) { return { tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, actor: req.authContext.actor }; }
 function readVersion(req) { const header = req.get("If-Match"); const value = header || req.body?.version; const version = Number(value); if (!Number.isInteger(version) || version < 1) throw validationError("A positive report version is required"); return version; }
 function nullableNote(value) { return value === undefined ? null : value; }
+function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
+function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
 function isDate(value) { return typeof value === "string" && Number.isFinite(Date.parse(value)); }
 function isTimezone(value) { try { Intl.DateTimeFormat("en-US", { timeZone: value }).format(); return true; } catch { return false; } }
 function validationError(message) { return Object.assign(new Error(message), { code: "VALIDATION_ERROR", statusCode: 400 }); }

@@ -56,5 +56,7 @@ test("S04 migration file discovery is deterministic", () => {
     "0003_create_queue_jobs.sql",
     "0004_create_ingest_tables.sql",
     "0005_create_pipeline_states.sql",
+    "0006_create_user_read_models.sql",
+    "0007_create_company_context_drafts.sql",
   ]);
 });

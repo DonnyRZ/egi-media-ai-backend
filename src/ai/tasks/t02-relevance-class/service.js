@@ -25,7 +25,7 @@ class RelevanceClassificationService {
     this._validateEffectiveContext(context, companyId);
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId, locale });
     const inputFingerprint = fingerprint({ source, contextVersion: context.version });
-    const existing = this.decisionStore.get({ articleId, companyId, contextVersion: context.version, inputFingerprint });
+    const existing = await this.decisionStore.get({ articleId, companyId, contextVersion: context.version, inputFingerprint });
     if (existing) return { decision: existing, reused: true, shouldContinue: existing.branch === "continue" };
 
     const execution = await this.promptExecutionService.executeActive({
@@ -36,7 +36,7 @@ class RelevanceClassificationService {
       outputSchema: T02_OUTPUT_SCHEMA,
       validateResult: validateT02Output,
     });
-    const decision = this.decisionStore.create({
+    const decision = await this.decisionStore.create({
       articleId,
       companyId,
       contextVersion: context.version,

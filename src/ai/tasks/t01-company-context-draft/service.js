@@ -45,7 +45,7 @@ class CompanyContextDraftService {
       validateResult: (data) => validateT01Output(data, { sourceLocators }),
     });
 
-    const draft = this.draftStore.create({
+    const draft = await this.draftStore.create({
       companyId,
       result: execution.data,
       sourceFingerprints: sanitizedSources.map((source) => ({

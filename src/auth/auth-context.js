@@ -16,7 +16,21 @@ function extractBearerToken(header) {
   return scheme?.toLowerCase() === "bearer" && token ? token : null;
 }
 
+const LOCAL_UI_DUMMY_TOKEN = "dummy-bearer-token-for-local-ui";
+
 function defaultVerifyToken(token) {
+  // Local UI preview: egi-media-ai-frontend login uses a non-JWT placeholder until real auth is wired.
+  if (config.get("/env") !== "production" && token === LOCAL_UI_DUMMY_TOKEN) {
+    return {
+      id: "dummy-actor",
+      email: "executive@example.com",
+      full_name: "Executive User",
+      role: "human_reviewer",
+      tenant_id: "dummy-tenant",
+      company_id: "company-a",
+      authorized_companies: ["company-a"],
+    };
+  }
   const secret = config.get("/auth/accessTokenSecret");
   if (!secret) throw new AuthContextError("Authentication verifier is not configured", { code: "AUTHENTICATION_UNAVAILABLE", statusCode: 503 });
   try { return jwt.verify(token, secret); } catch (_error) { throw new AuthContextError("Access token is invalid or expired"); }
@@ -61,6 +75,7 @@ function createAuthContextMiddleware({ verifyToken = defaultVerifyToken, allowAn
       const actor = normalizeActor(payload);
       const scope = readScope(payload, req);
       req.authContext = { actor, tenantId: scope.tenantId, companyId: scope.companyId, scopeSource: scope.source, scopeTrusted: scope.trusted };
+      if (Array.isArray(payload?.authorized_companies)) req.authContext.authorizedCompanies = payload.authorized_companies;
       req.user = actor;
       return next();
     } catch (error) {

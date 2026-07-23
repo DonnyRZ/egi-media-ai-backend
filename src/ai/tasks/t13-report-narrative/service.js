@@ -13,7 +13,7 @@ class ReportNarrativeService {
 
   async generate({ tenantId, companyId, reportId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const report = this.reportDraftStore.get({ tenantId, companyId, reportId });
+    const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
     if (!report || report.reviewStatus !== "draft") throw new AiConfigurationError("T13 requires a draft report in the same tenant and company");
     const existing = this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
     if (existing) return { narrative: existing, report, reused: true };
@@ -27,7 +27,7 @@ class ReportNarrativeService {
       const narrative = this.narrativeStore.create({ tenantId, companyId, reportId, promptVersion: T13_PROMPT_VERSION, narrative: execution.data, provenance: execution.provenance });
       return { narrative, report, reused: false };
     } catch (error) {
-      this.reportDraftStore.markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode: error?.code === "AI_OUTPUT_SCHEMA_INVALID" ? "invalid_narrative_output" : "report_narrative_gate_failed" });
+      await this.reportDraftStore.markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode: error?.code === "AI_OUTPUT_SCHEMA_INVALID" ? "invalid_narrative_output" : "report_narrative_gate_failed" });
       throw error;
     }
   }

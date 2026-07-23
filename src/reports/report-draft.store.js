@@ -7,6 +7,11 @@ class InMemoryReportDraftStore {
     this.draftsById.set(value.reportId, value); return cloneForRead(value);
   }
   get({ tenantId, companyId, reportId }) { const value = this.draftsById.get(reportId); return value && value.tenantId === tenantId && value.companyId === companyId ? cloneForRead(value) : null; }
+  list({ tenantId, companyId, page = 1, limit = 20, reportType = null, reviewStatus = null }) {
+    const filtered = [...this.draftsById.values()].filter((value) => value.tenantId === tenantId && value.companyId === companyId && (!reportType || value.reportType === reportType) && (!reviewStatus || value.reviewStatus === reviewStatus)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const offset = (page - 1) * limit;
+    return { items: filtered.slice(offset, offset + limit).map(cloneForRead), page, limit, total: filtered.length };
+  }
   markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode }) {
     const value = this.draftsById.get(reportId); if (!value || value.tenantId !== tenantId || value.companyId !== companyId) return null;
     value.reviewStatus = "needs_review"; value.narrativeFailureCode = reasonCode; value.version += 1; value.updatedAt = timestamp(this.now); return cloneForRead(value);

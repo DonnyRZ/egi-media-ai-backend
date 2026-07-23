@@ -10,7 +10,7 @@ function createIngestRouter({ getIngestRuntime } = {}) {
     if (["content", "title", "summary", "article"].some((field) => Object.hasOwn(req.body || {}, field))) throw validationError("Ingest trigger does not accept article content; worker reads CMS");
     if (!["poll", "article"].includes(mode) || !["id", "en", "uz"].includes(locale) || !Number.isInteger(limit) || limit < 1 || limit > 100 || (mode === "article" && typeof req.body?.article_id !== "string")) throw validationError("Ingest requires mode, supported locale, and a bounded article limit");
     const idempotencyKey = req.get("Idempotency-Key"); const payload = { mode, locale, limit, article_id: mode === "article" ? req.body.article_id : null };
-    const result = getIngestRuntime().queue.enqueue({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, queueName: "ingest", jobType: mode === "poll" ? "cms.poll" : "cms.article.trigger", idempotencyKey, payload, maxAttempts: 3 });
+    const result = await getIngestRuntime().queue.enqueue({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, queueName: "ingest", jobType: mode === "poll" ? "cms.poll" : "cms.article.trigger", idempotencyKey, payload, maxAttempts: 3 });
     return res.status(202).json({ success: true, data: { id: result.job.jobId, trigger: "ingest", state: result.job.status, reused: result.reused, stages: [{ name: "ingest", state: result.job.status, updated_at: result.job.updatedAt }] }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
   }));
   router.use((error, req, res, _next) => sendError(res, req, error)); return router;

@@ -15,8 +15,8 @@ class ConstrainedRewriteService {
   async rewrite({ tenantId, companyId, reportId, reportNarrativeId, expectedVersion, allowedSpanId, humanInstruction, actor }) {
     assertHumanActor(actor); assertInstruction(humanInstruction);
     await this._authorizeCompany({ tenantId, companyId, actor });
-    const report = this.reportDraftStore.get({ tenantId, companyId, reportId });
-    const narrative = this.narrativeStore.getById({ tenantId, companyId, reportNarrativeId });
+    const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
+    const narrative = await this.narrativeStore.getById({ tenantId, companyId, reportNarrativeId });
     if (!report || !narrative || narrative.reportId !== reportId || report.reviewStatus !== "draft" || narrative.reviewStatus !== "draft") throw new AiConfigurationError("T14 requires a draft report and draft narrative in the same tenant and company");
     if (!Number.isInteger(expectedVersion) || narrative.version !== expectedVersion) throw new AiConfigurationError("T14 target narrative version conflict");
     const span = resolveConstrainedSpan(narrative.narrative, allowedSpanId);
@@ -28,7 +28,7 @@ class ConstrainedRewriteService {
       input: buildT14Input({ tenantId, companyId, report, narrative, span, humanInstruction, sourceClaims }), outputSchema: T14_OUTPUT_SCHEMA,
       validateResult: validateT14Output,
     });
-    const result = this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: execution.provenance });
+    const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: execution.provenance });
     if (!result?.narrative) throw new AiConfigurationError("T14 target narrative version conflict");
     return { narrative: result.narrative, report, rewrittenSpan: { spanId: span.spanId, sourceClaimIds: span.sourceClaimIds }, reused: false };
   }

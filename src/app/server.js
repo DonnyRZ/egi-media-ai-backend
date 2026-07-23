@@ -16,7 +16,7 @@ const registerRoutes = require("../routes");
 const { createCompanyContextRuntime } = require("../company-context/runtime");
 const { createT01CompanyContextDraftRuntime, t02RelevanceClass, t03RelevanceRationale, t04IssueMatch, t05IssueTitle, t06IssueOneLiner, t07IssueAnalysis, t08ClaimLabels, t09PriorityEnum, t10PriorityReason, t12DirectBlurbs, t13ReportNarrative, t14ConstrainedRewrite, createAiTaskKernel } = require("../ai");
 const { createCmsSourceGate } = require("../cms");
-const { InMemoryIssueStore, createIssueMutationRuntime } = require("../issues");
+const { InMemoryIssueStore, InMemorySavedIssueStore, createIssueMutationRuntime } = require("../issues");
 const { CitationAnalysisGate } = require("../analysis");
 const { ExecutiveSummaryService, IssueReadService } = require("../dashboard");
 const { AlertEligibilityService, InMemoryAlertPreferenceStore, InMemoryAlertEventStore } = require("../alerts");
@@ -26,6 +26,8 @@ const { InMemoryReportDraftStore } = reports;
 const { InMemoryJobStore, JobQueueService } = require("../queue");
 const { InMemorySourceSnapshotStore, InMemoryWatermarkStore, IngestWorker } = require("../ingest");
 const { createLogger, MetricsRegistry, observabilityMiddleware } = require("../observability");
+const { InMemoryFeedbackStore } = require("../feedback");
+const { createPostgresPersistence } = require("../persistence");
 
 class Server {
   constructor() {
@@ -34,12 +36,14 @@ class Server {
     this.port = config.get("/port");
     this.httpServer = null;
     this.databaseRuntime = null;
-    this.companyContextRuntime = createCompanyContextRuntime();
+    this.companyContextRuntime = null;
     this.companyContextDraftRuntime = null;
     this.cmsSourceGate = createCmsSourceGate();
     this.relevanceRuntime = null;
     this.rationaleRuntime = null;
     this.issueFormationRuntime = null;
+    this.savedIssueStore = new InMemorySavedIssueStore();
+    this.feedbackStore = new InMemoryFeedbackStore();
     this.analysisRuntime = null;
     this.priorityRuntime = null;
     this.dashboardRuntime = null;
@@ -93,7 +97,7 @@ class Server {
     }));
 
     registerRoutes(this.app, {
-      companyContextService: this.companyContextRuntime.service,
+      companyContextService: this._getCompanyContextRuntime().service,
       getCompanyContextDraftService: () => this._getCompanyContextDraftService(),
       cmsSourceGate: this.cmsSourceGate,
       getT02Service: () => this._getT02Service(),
@@ -109,11 +113,14 @@ class Server {
       getT10Service: () => this._getT10Service(),
       getExecutiveSummaryService: () => this._getExecutiveSummaryService(),
       getIssueReadService: () => this._getIssueReadService(),
+      getSavedIssueStore: () => this._getSavedIssueStore(),
+      getIssueStore: () => this._getIssueStore(),
       getAlertRuntime: () => this._getAlertRuntime(),
       getT12Service: () => this._getT12Service(),
       getEmailDeliveryService: () => this._getEmailDeliveryService(),
       getReportRuntime: () => this._getReportRuntime(),
       getIngestRuntime: () => this._getIngestRuntime(),
+      getFeedbackStore: () => this._getFeedbackStore(),
     });
 
     this.app.use((_req, res) => {
@@ -167,9 +174,18 @@ class Server {
     return this.databaseRuntime;
   }
 
+  _getCompanyContextRuntime() {
+    if (!this.companyContextRuntime) {
+      const persistence = this._getPersistenceRuntime();
+      this.companyContextRuntime = createCompanyContextRuntime({ draftStore: persistence?.contextDraftStore, effectiveContextStore: persistence?.effectiveContextStore });
+    }
+    return this.companyContextRuntime;
+  }
+
   _getCompanyContextDraftService() {
     if (!this.companyContextDraftRuntime) {
       this.companyContextDraftRuntime = createT01CompanyContextDraftRuntime({
+        draftStore: this._getCompanyContextRuntime().draftStore,
         authorizeCompany: async ({ companyId, tenantId, actor, scopeTrusted }) => Boolean(
           companyId && tenantId && scopeTrusted === true && actor?.actorId,
         ),
@@ -184,7 +200,8 @@ class Server {
         aiTaskKernel: createAiTaskKernel(),
         openaiConfig: config.get("/openai"),
         cmsSourceGate: this.cmsSourceGate,
-        getEffectiveContext: async (companyId) => this.companyContextRuntime.effectiveContextStore.getEffective(companyId),
+        decisionStore: this._getPersistenceRuntime()?.relevanceDecisionStore,
+        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -199,7 +216,8 @@ class Server {
         openaiConfig: config.get("/openai"),
         cmsSourceGate: this.cmsSourceGate,
         decisionStore: this.relevanceRuntime.decisionStore,
-        getCompanyContextVersion: async (companyId, version) => this.companyContextRuntime.effectiveContextStore.getVersion(companyId, version),
+        rationaleStore: this._getPersistenceRuntime()?.rationaleStore,
+        getCompanyContextVersion: async (companyId, version) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(companyId, version),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -209,10 +227,10 @@ class Server {
   _getIssueFormationRuntime() {
     if (!this.issueFormationRuntime) {
       const t02 = this._getT02Service();
-      const issueStore = new InMemoryIssueStore();
+      const issueStore = this._getPersistenceRuntime()?.issueStore || new InMemoryIssueStore();
       const t04 = t04IssueMatch.createT04IssueMatchRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
-        decisionStore: this.relevanceRuntime.decisionStore, issueCandidateStore: issueStore,
+        decisionStore: this.relevanceRuntime.decisionStore, matchDecisionStore: this._getPersistenceRuntime()?.matchDecisionStore, issueCandidateStore: issueStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const mutation = createIssueMutationRuntime({
@@ -233,6 +251,17 @@ class Server {
     }
     return this.issueFormationRuntime;
   }
+  _getIssueStore() { return this._getIssueFormationRuntime().issueStore; }
+  _getPersistenceRuntime() {
+    if (process.env.AI_PERSISTENCE_MODE !== "postgres") return null;
+    if (!this.persistenceRuntime) {
+      if (!this.databaseRuntime) this.databaseRuntime = createDatabaseRuntime();
+      this.persistenceRuntime = createPostgresPersistence({ db: this.databaseRuntime.ai });
+    }
+    return this.persistenceRuntime;
+  }
+  _getSavedIssueStore() { return this._getPersistenceRuntime()?.savedIssueStore || this.savedIssueStore; }
+  _getFeedbackStore() { return this._getPersistenceRuntime()?.feedbackStore || this.feedbackStore; }
   _getT04Service() { return this._getIssueFormationRuntime().t04.service; }
   _getIssueMutationService() { return this._getIssueFormationRuntime().mutation.service; }
   _getT05Service() { return this._getIssueFormationRuntime().t05.service; }
@@ -243,12 +272,12 @@ class Server {
       const issueRuntime = this._getIssueFormationRuntime();
       const t07 = t07IssueAnalysis.createT07IssueAnalysisRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
-        issueStore: issueRuntime.issueStore,
-        getEffectiveContext: async (companyId) => this.companyContextRuntime.effectiveContextStore.getEffective(companyId),
+        issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
+        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t08 = t08ClaimLabels.createT08ClaimLabelsRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), analysisStore: t07.analysisStore,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), analysisStore: t07.analysisStore, labelStore: this._getPersistenceRuntime()?.labelStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const gate = new CitationAnalysisGate({
@@ -270,14 +299,14 @@ class Server {
       const analysisRuntime = this._getAnalysisRuntime();
       const t09 = t09PriorityEnum.createT09PriorityEnumRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
-        analysisStore: analysisRuntime.t07.analysisStore,
-        getEffectiveContext: async (companyId) => this.companyContextRuntime.effectiveContextStore.getEffective(companyId),
+        analysisStore: analysisRuntime.t07.analysisStore, priorityStore: this._getPersistenceRuntime()?.priorityStore,
+        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t10 = t10PriorityReason.createT10PriorityReasonRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
-        analysisStore: analysisRuntime.t07.analysisStore, priorityStore: t09.priorityStore, labelStore: analysisRuntime.t08.labelStore,
-        getEffectiveContext: async (companyId) => this.companyContextRuntime.effectiveContextStore.getEffective(companyId),
+        analysisStore: analysisRuntime.t07.analysisStore, priorityStore: t09.priorityStore, labelStore: analysisRuntime.t08.labelStore, reasonStore: this._getPersistenceRuntime()?.reasonStore,
+        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       this.priorityRuntime = { t09, t10 };
@@ -306,7 +335,7 @@ class Server {
   _getAlertRuntime() {
     if (!this.alertRuntime) {
       const issueRuntime = this._getIssueFormationRuntime(); const analysisRuntime = this._getAnalysisRuntime(); const priorityRuntime = this._getPriorityRuntime();
-      const preferenceStore = new InMemoryAlertPreferenceStore(); const eventStore = new InMemoryAlertEventStore();
+      const preferenceStore = this._getPersistenceRuntime()?.alertPreferenceStore || new InMemoryAlertPreferenceStore(); const eventStore = this._getPersistenceRuntime()?.alertEventStore || new InMemoryAlertEventStore();
       this.alertRuntime = { preferenceStore, eventStore, service: new AlertEligibilityService({ issueStore: issueRuntime.issueStore, analysisStore: analysisRuntime.t07.analysisStore, priorityStore: priorityRuntime.t09.priorityStore, reasonStore: priorityRuntime.t10.reasonStore, preferenceStore, eventStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId) }) };
     }
     return this.alertRuntime;
@@ -317,7 +346,7 @@ class Server {
       this.directBlurbRuntime = t12DirectBlurbs.createT12DirectBlurbsRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), eventStore: alertRuntime.eventStore,
         issueStore: issueRuntime.issueStore, analysisStore: analysisRuntime.t07.analysisStore, priorityStore: priorityRuntime.t09.priorityStore,
-        reasonStore: priorityRuntime.t10.reasonStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
+        reasonStore: priorityRuntime.t10.reasonStore, blurbStore: this._getPersistenceRuntime()?.blurbStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
     }
     return this.directBlurbRuntime.service;
@@ -327,7 +356,7 @@ class Server {
       const issueRuntime = this._getIssueFormationRuntime(); const analysisRuntime = this._getAnalysisRuntime(); const alertRuntime = this._getAlertRuntime(); const t12Runtime = this._getDirectBlurbRuntime();
       this.emailDeliveryRuntime = createEmailDeliveryRuntime({
         eventStore: alertRuntime.eventStore, blurbStore: t12Runtime.blurbStore, issueStore: issueRuntime.issueStore,
-        analysisStore: analysisRuntime.t07.analysisStore, recipientStore: new InMemoryRecipientStore(), deliveryStore: new InMemoryEmailDeliveryStore(),
+        analysisStore: analysisRuntime.t07.analysisStore, recipientStore: new InMemoryRecipientStore(), deliveryStore: this._getPersistenceRuntime()?.deliveryStore || new InMemoryEmailDeliveryStore(),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
     }
@@ -339,9 +368,9 @@ class Server {
   }
   _getReportRuntime() {
     if (!this.reportRuntime) {
-      const draftStore = new InMemoryReportDraftStore();
+      const draftStore = this._getPersistenceRuntime()?.reportDraftStore || new InMemoryReportDraftStore();
       const narrativeRuntime = t13ReportNarrative.createT13ReportNarrativeRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore, narrativeStore: this._getPersistenceRuntime()?.reportNarrativeStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const shareIntents = [];
@@ -354,13 +383,13 @@ class Server {
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore, narrativeStore: narrativeRuntime.narrativeStore,
         authorizeCompany: async ({ actor, tenantId, companyId }) => Boolean(actor?.actorType === "human" && actor?.actorId && tenantId && companyId),
       });
-      this.reportRuntime = { draftStore, narrativeService: narrativeRuntime.service, narrativeRuntime, lifecycleService, shareIntents, rewriteService: rewriteRuntime.service, rewriteRuntime };
+      this.reportRuntime = { draftStore, narrativeService: narrativeRuntime.service, narrativeRuntime, narrativeStore: narrativeRuntime.narrativeStore, lifecycleService, shareIntents, rewriteService: rewriteRuntime.service, rewriteRuntime };
     }
     return this.reportRuntime;
   }
   _getIngestRuntime() {
     if (!this.ingestRuntime) {
-      const jobStore = new InMemoryJobStore(); const queue = new JobQueueService({ jobStore, workerId: "ingest-worker" }); const snapshotStore = new InMemorySourceSnapshotStore(); const watermarkStore = new InMemoryWatermarkStore();
+      const persistence = this._getPersistenceRuntime(); const jobStore = persistence?.jobStore || new InMemoryJobStore(); const queue = new JobQueueService({ jobStore, workerId: "ingest-worker" }); const snapshotStore = persistence?.snapshotStore || new InMemorySourceSnapshotStore(); const watermarkStore = persistence?.watermarkStore || new InMemoryWatermarkStore();
       const worker = new IngestWorker({ sourceGate: this.cmsSourceGate, articleListClient: this.cmsSourceGate.cmsArticleClient, snapshotStore, watermarkStore, enqueueStageJob: async ({ tenantId, companyId, stage, sourceSnapshotId, sourceArticleId, locale }) => queue.enqueue({ tenantId, companyId, queueName: "pipeline-stage", jobType: `${stage}.dispatch`, idempotencyKey: `stage-${sourceSnapshotId}-${companyId}`.slice(0, 255), payload: { stage, source_snapshot_id: sourceSnapshotId, source_article_id: sourceArticleId, locale }, maxAttempts: 3 }) });
       const runNext = () => queue.processNext({ queueName: "ingest", handler: (job) => job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
       this.ingestRuntime = { queue, jobStore, worker, snapshotStore, watermarkStore, runNext };

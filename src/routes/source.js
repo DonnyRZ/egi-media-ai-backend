@@ -6,7 +6,7 @@ const { sendError } = require("../app/error-contract");
 function createSourceRouter({ cmsSourceGate } = {}) {
   const router = express.Router();
 
-  router.get("/api/v1/internal/source/articles/:articleId", requireAuthContext({ tenant: false, company: false }), asyncHandler(async (req, res) => {
+  router.get(["/api/v1/internal/source/articles/:articleId", "/api/v1/articles/:articleId/source"], requireAuthContext({ tenant: false, company: false }), asyncHandler(async (req, res) => {
     if (!cmsSourceGate?.requirePublishedArticle) {
       return sendError(res, req, Object.assign(new Error("CMS source gate is not configured"), { code: "NOT_READY", statusCode: 503 }));
     }

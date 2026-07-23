@@ -13,11 +13,11 @@ class IssueMutationService {
 
   async apply({ tenantId, companyId, matchDecisionId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const matchDecision = this.matchDecisionStore.getById(matchDecisionId);
+    const matchDecision = await this.matchDecisionStore.getById(matchDecisionId);
     if (!matchDecision || matchDecision.tenantId !== tenantId || matchDecision.companyId !== companyId) {
       throw new AiConfigurationError("Issue mutation requires a T04 decision in the same tenant and company");
     }
-    const relevanceDecision = this.relevanceDecisionStore.getById(matchDecision.relevanceDecisionId);
+    const relevanceDecision = await this.relevanceDecisionStore.getById(matchDecision.relevanceDecisionId);
     if (!relevanceDecision || relevanceDecision.companyId !== companyId || !["high", "medium", "low"].includes(relevanceDecision.relevance)) {
       throw new AiConfigurationError("Issue mutation requires a continuing T02 decision in the same company");
     }

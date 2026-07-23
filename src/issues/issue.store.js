@@ -14,6 +14,7 @@ class InMemoryIssueStore {
     this.titleGenerationsByKey = new Map();
     this.oneLinerGenerationsByKey = new Map();
     this.currentPriorityApplicationsByKey = new Map();
+    this.completionsByKey = new Map();
   }
 
   listActive({ tenantId, companyId }) {
@@ -148,6 +149,19 @@ class InMemoryIssueStore {
     issue.updatedAt = this._timestamp();
     issue.version += 1;
     this.currentPriorityApplicationsByKey.set(key, true);
+    return { issue: cloneForRead(issue), reused: false };
+  }
+
+  complete({ tenantId, companyId, issueId, expectedVersion, idempotencyKey }) {
+    const key = `${tenantId}|${companyId}|${issueId}|${idempotencyKey}`;
+    const prior = this.completionsByKey.get(key);
+    if (prior) return { issue: cloneForRead(prior), reused: true };
+    const issue = this.issuesById.get(issueId);
+    if (!issue || issue.tenantId !== tenantId || issue.companyId !== companyId) throw Object.assign(new Error("Issue was not found"), { code: "NOT_FOUND", statusCode: 404 });
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== issue.version) throw Object.assign(new Error("Issue version is stale"), { code: "VERSION_CONFLICT", statusCode: 409 });
+    if (issue.status === "selesai") { this.completionsByKey.set(key, issue); return { issue: cloneForRead(issue), reused: true }; }
+    issue.status = "selesai"; issue.closedAt = new Date(this.now()).toISOString(); issue.updatedAt = issue.closedAt; issue.version += 1;
+    this.completionsByKey.set(key, issue);
     return { issue: cloneForRead(issue), reused: false };
   }
 

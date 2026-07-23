@@ -17,48 +17,48 @@ class DirectAlertBlurbService {
 
   async generate({ tenantId, companyId, alertEventId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const event = this.eventStore.get({ tenantId, companyId, alertEventId });
+    const event = await this.eventStore.get({ tenantId, companyId, alertEventId });
     if (!event || event.channel !== "langsung" || event.status !== "eligible") {
       throw new AiConfigurationError("T12 requires a backend-eligible direct alert event in the same tenant and company");
     }
-    const existing = this.blurbStore.get({ alertEventId, promptVersion: T12_PROMPT_VERSION });
+    const existing = await this.blurbStore.get({ alertEventId, promptVersion: T12_PROMPT_VERSION });
     if (existing) return { blurb: existing, event, reused: true };
     try {
-      const input = this._loadValidatedInput({ tenantId, companyId, event });
+      const input = await this._loadValidatedInput({ tenantId, companyId, event });
       const execution = await this.promptExecutionService.executeActive({
         promptId: T12_PROMPT_ID, promptVersion: T12_PROMPT_VERSION, model: "nano",
         input: buildT12Input({ tenantId, companyId, ...input }), outputSchema: T12_OUTPUT_SCHEMA,
         validateResult: (data) => validateT12Output(data, { claimIds: new Set(input.sourceClaims.map((claim) => claim.claimId)) }),
       });
-      const blurb = this.blurbStore.create({
+      const blurb = await this.blurbStore.create({
         tenantId, companyId, issueId: event.issueId, developmentId: event.developmentId, alertEventId,
         promptVersion: T12_PROMPT_VERSION, newDevelopmentBlurb: execution.data.newDevelopmentBlurb,
         shortImpactBlurb: execution.data.shortImpactBlurb, sourceClaimIds: execution.data.sourceClaimIds, provenance: execution.provenance,
       });
       return { blurb, event, reused: false };
     } catch (error) {
-      this.eventStore.markContentBlocked({ tenantId, companyId, alertEventId, reasonCode: classifyFailure(error) });
+      await this.eventStore.markContentBlocked({ tenantId, companyId, alertEventId, reasonCode: classifyFailure(error) });
       throw error;
     }
   }
 
-  _loadValidatedInput({ tenantId, companyId, event }) {
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId: event.issueId });
-    const development = this.issueStore.getDevelopment({ tenantId, companyId, developmentId: event.developmentId });
-    const article = this.issueStore.getArticleForDevelopment({ tenantId, companyId, developmentId: event.developmentId });
-    const readiness = this.issueStore.getAlertContentReadiness({ tenantId, companyId, issueId: event.issueId });
+  async _loadValidatedInput({ tenantId, companyId, event }) {
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId: event.issueId });
+    const development = await this.issueStore.getDevelopment({ tenantId, companyId, developmentId: event.developmentId });
+    const article = await this.issueStore.getArticleForDevelopment({ tenantId, companyId, developmentId: event.developmentId });
+    const readiness = await this.issueStore.getAlertContentReadiness({ tenantId, companyId, issueId: event.issueId });
     if (!issue || !development || development.issueId !== issue.issueId || !article || !readiness?.contentReady || typeof article.canonicalUrl !== "string" || !article.canonicalUrl) {
       throw new AiConfigurationError("T12 requires complete scoped issue content and a canonical development detail URL");
     }
-    const analysis = this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
+    const analysis = await this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
     if (!analysis || analysis.analysisId !== issue.currentPriorityAnalysisId || analysis.status !== "current" || !analysis.gate) {
       throw new AiConfigurationError("T12 requires a current citation-gated analysis");
     }
-    const priority = this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
+    const priority = await this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
     if (!priority || priority.priority !== "tinggi" || priority.priorityDecisionId !== issue.currentPriorityDecisionId || issue.currentPriority !== "tinggi") {
       throw new AiConfigurationError("T12 requires the current high T09 priority used by the eligible alert");
     }
-    const reason = this.reasonStore.get({ priorityDecisionId: priority.priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
+    const reason = await this.reasonStore.get({ priorityDecisionId: priority.priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
     const sourceClaims = selectSourceClaims({ analysis, sourceClaimIds: reason?.sourceClaimIds });
     if (!reason || sourceClaims.length < 1) throw new AiConfigurationError("T12 requires a validated T10 reason with source claims");
     return { issue, development, detailUrl: article.canonicalUrl, priority: priority.priority, sourceClaims };

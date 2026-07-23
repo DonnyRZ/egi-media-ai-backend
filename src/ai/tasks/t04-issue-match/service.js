@@ -23,7 +23,7 @@ class IssueMatchService {
 
   async match({ tenantId, companyId, relevanceDecisionId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const relevanceDecision = this.decisionStore.getById(relevanceDecisionId);
+    const relevanceDecision = await this.decisionStore.getById(relevanceDecisionId);
     this._validateRelevanceDecision(relevanceDecision, companyId);
     const existing = this.matchDecisionStore.get({ tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION });
     if (existing) return { match: existing, relevanceDecision, reused: true };
@@ -36,7 +36,7 @@ class IssueMatchService {
       throw new AiConfigurationError("T04 refuses to match a stale T02 article snapshot");
     }
 
-    const candidates = this.issueCandidateStore.listActive({ tenantId, companyId });
+    const candidates = await this.issueCandidateStore.listActive({ tenantId, companyId });
     this._validateCandidates(candidates, { tenantId, companyId });
     const candidateIssueIds = new Set(candidates.map((candidate) => candidate.issueId));
     const execution = await this.promptExecutionService.executeActive({

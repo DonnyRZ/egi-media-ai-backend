@@ -14,7 +14,7 @@ function createDashboardRouter({ getExecutiveSummaryService, getIssueReadService
   router.get("/api/v1/issues", scope, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.query.company_id || req.authContext.companyId);
     const page = positiveInt(req.query.page, 1); const limit = Math.min(100, positiveInt(req.query.limit, 20));
-    const result = await getIssueReadService().list({ tenantId: req.authContext.tenantId, companyId, q: req.query.q, status: req.query.status, priority: req.query.priority, page, limit });
+    const result = await getIssueReadService().list({ tenantId: req.authContext.tenantId, companyId, q: req.query.q, status: req.query.status, priority: req.query.priority, period: req.query.period || null, page, limit });
     return success(res, { items: result.items, meta: { page: result.page, limit: result.limit, total: result.total } }, req);
   }));
   router.get("/api/v1/issues/:issueId", scope, asyncHandler(async (req, res) => {

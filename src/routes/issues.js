@@ -3,9 +3,34 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 
-function createIssueFormationRouter({ getT04Service, getIssueMutationService, getT05Service, getT06Service } = {}) {
+function createIssueFormationRouter({ getT04Service, getIssueMutationService, getT05Service, getT06Service, getSavedIssueStore, getIssueReadService, getIssueStore } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+
+  router.get("/api/v1/saved/issues", scope, asyncHandler(async (req, res) => {
+    const page = positiveInt(req.query.page, 1); const limit = boundedInt(req.query.limit, 20, 100);
+    const saved = await getSavedIssueStore().list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, actorId: req.authContext.actor.actorId, page, limit });
+    const items = await Promise.all(saved.items.map(async (item) => ({ ...item, issue: await readIssue(getIssueReadService(), req, item.issueId) })));
+    return success(res, { items, meta: { page: saved.page, limit: saved.limit, total: saved.total } }, req);
+  }));
+
+  router.post("/api/v1/issues/:issueId/saved", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
+    const result = await getSavedIssueStore().save({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });
+    return success(res, { saved: serializeSaved(result.saved), issue, reused: result.reused }, req, result.reused ? 200 : 201);
+  }));
+
+  router.delete("/api/v1/issues/:issueId/saved", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
+    const result = await getSavedIssueStore().remove({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });
+    return success(res, { removed: result.removed, issue_id: issue.issue_id }, req);
+  }));
+
+  router.post("/api/v1/issues/:issueId/complete", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    if (req.authContext.actor?.actorType !== "human") throw Object.assign(new Error("Completing an issue requires a human actor"), { code: "FORBIDDEN", statusCode: 403 });
+    const result = getIssueStore().complete({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: req.params.issueId, expectedVersion: req.body?.version, idempotencyKey: req.get("Idempotency-Key") });
+    return success(res, { issue: serializeIssue(result.issue), reused: result.reused }, req);
+  }));
 
   router.post("/api/v1/internal/issues/match", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const context = bodyScope(req);
@@ -40,6 +65,11 @@ function bodyScope(req) {
   return scope;
 }
 function requireIdempotencyKey(req, res, next) { const key = req.get("Idempotency-Key"); if (!key || key.length < 16 || key.length > 255) return sendError(res, req, Object.assign(new Error("Idempotency-Key header must be 16 to 255 characters"), { code: "VALIDATION_ERROR", statusCode: 400 })); return next(); }
-function success(res, data, req) { return res.status(200).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); }
+function success(res, data, req, statusCode = 200) { return res.status(statusCode).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); }
+function readIssue(service, req, issueId) { return service.detail({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId }); }
+function serializeSaved(value) { return value ? { saved_id: value.savedId, issue_id: value.issueId, saved_at: value.savedAt } : null; }
+function serializeIssue(issue) { return { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, status: issue.status, priority: issue.currentPriority, version: issue.version, first_seen_at: issue.firstSeenAt, last_developed_at: issue.lastDevelopedAt }; }
+function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
+function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
 function asyncHandler(handler) { return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next); }
 module.exports = { createIssueFormationRouter };
