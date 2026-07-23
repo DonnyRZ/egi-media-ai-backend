@@ -1,0 +1,37 @@
+{
+  "name": "egi-media-ai-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI backend workspace for EGI Media",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node --test",
+    "test:golden": "node --test test/golden-prompt-release.test.js test/t01-company-context-draft.test.js test/t02-relevance-class.test.js test/t03-relevance-rationale.test.js test/t04-issue-match.test.js test/t05-issue-title.test.js test/t06-issue-oneliner.test.js test/t07-issue-analysis.test.js test/t08-claim-labels.test.js test/t09-priority-enum.test.js test/t10-priority-reason.test.js test/t12-direct-blurbs.test.js test/t13-report-narrative.test.js test/t14-constrained-rewrite.test.js",
+    "prompt:release:check": "node scripts/prompt-release-gate.js",
+    "prompt:release:promote": "node scripts/prompt-release-gate.js --promote",
+    "swagger:validate": "node -e \"const fs=require('fs'); JSON.parse(fs.readFileSync('swagger_output.json','utf8')); console.log('swagger_output.json is valid JSON')\""
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "bullmq": "^5.79.2",
+    "confidence": "^5.0.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "ioredis": "^5.11.1",
+    "joi": "^18.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.16",
+    "openai": "^6.48.0",
+    "pg": "^8.16.3",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^14.0.1",
+    "winston": "^3.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

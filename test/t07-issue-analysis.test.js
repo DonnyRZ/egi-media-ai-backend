@@ -1,0 +1,120 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+const { InMemoryRelevanceDecisionStore } = require("../src/ai/tasks/t02-relevance-class");
+const { InMemoryIssueMatchDecisionStore } = require("../src/ai/tasks/t04-issue-match");
+const { InMemoryIssueStore } = require("../src/issues");
+const { createT07IssueAnalysisRuntime } = require("../src/ai/tasks/t07-issue-analysis");
+
+const tenantId = "tenant-h";
+const companyId = "company-a";
+const articleOne = "123e4567-e89b-12d3-a456-426614174000";
+const articleTwo = "123e4567-e89b-12d3-a456-426614174001";
+const unknownArticle = "123e4567-e89b-12d3-a456-426614174099";
+
+function source(articleId, { updatedAt = "2026-07-22T11:00:00.000Z", content = "Evidence body." } = {}) {
+  return {
+    sourceArticleId: articleId, requestedLocale: "id", contentLocale: "id", canonicalUrl: `https://portal.example/id/articles/${articleId}`,
+    article: { id: articleId, title: `Article ${articleId.slice(-3)}`, summary: "A relevant source summary.", content, status: "published", publishedAt: "2026-07-22T10:00:00.000Z", updatedAt },
+  };
+}
+
+function context() {
+  return { companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" } };
+}
+
+function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
+  const relevanceDecisionStore = new InMemoryRelevanceDecisionStore();
+  const matchDecisionStore = new InMemoryIssueMatchDecisionStore();
+  const issueStore = new InMemoryIssueStore({ now: () => Date.parse("2026-07-22T12:00:00.000Z") });
+  const initialSources = new Map([
+    [articleOne, source(articleOne, { content: "FIRST_LINKED_CONTENT" })],
+    [articleTwo, source(articleTwo, { content: "SECOND_LINKED_CONTENT" })],
+  ]);
+  const sources = new Map(initialSources);
+  for (const [articleId, sourceValue] of Object.entries(sourceOverrides)) sources.set(articleId, sourceValue);
+  const makeRelevance = (articleId, version) => relevanceDecisionStore.create({
+    articleId, companyId, contextVersion: 3, inputFingerprint: `fingerprint-${articleId}-${version}`,
+    source: initialSources.get(articleId), output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+  });
+  const firstRelevance = makeRelevance(articleOne, 1);
+  const firstMatch = matchDecisionStore.create({ tenantId, companyId, relevanceDecisionId: firstRelevance.decisionId, promptVersion: "1.0.0", output: { decision: "new", candidate_issue_id: null, reason_code: "new_event" }, provenance: { runId: "t04" } });
+  const created = issueStore.apply({ tenantId, companyId, matchDecision: firstMatch, relevanceDecision: firstRelevance }).mutation;
+  const secondRelevance = makeRelevance(articleTwo, 2);
+  const secondMatch = matchDecisionStore.create({ tenantId, companyId, relevanceDecisionId: secondRelevance.decisionId, promptVersion: "1.0.0", output: { decision: "update", candidate_issue_id: created.issueId, reason_code: "same_event" }, provenance: { runId: "t04" } });
+  issueStore.apply({ tenantId, companyId, matchDecision: secondMatch, relevanceDecision: secondRelevance });
+  let kernelCalls = 0;
+  const runtime = createT07IssueAnalysisRuntime({
+    aiTaskKernel: { execute: async (request) => {
+      kernelCalls += 1; onKernelRequest?.(request);
+      return { data: output || validOutput(), model: { alias: "mini", name: "mini-test-model" }, correlation: { requestId: request.requestId, providerRequestId: "req_t07" }, providerResponseId: "resp_t07", usage: { inputTokens: 100, outputTokens: 40, totalTokens: 140 }, latencyMs: 21 };
+    } },
+    openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
+    cmsSourceGate: { requirePublishedArticle: async ({ articleId }) => sources.get(articleId) },
+    issueStore, getEffectiveContext: async () => context(),
+    authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.analyze",
+  });
+  return { runtime, issueStore, created, kernelCalls: () => kernelCalls };
+}
+
+function validOutput() {
+  return {
+    what_happened: "Regulasi baru diumumkan untuk operator logistik.",
+    why_matters: "Perubahan ini dapat memengaruhi operasi armada perusahaan.",
+    impacts: [{ text: "Operator perlu meninjau kepatuhan armada.", source_article_ids: [articleOne] }],
+    risks: [{ text: "Biaya penyesuaian dapat meningkat.", source_article_ids: [articleTwo] }],
+    watch: [{ text: "Pantau panduan pelaksanaan regulator.", source_article_ids: [articleOne] }],
+    claims: [{ claim_id: "c1", text: "Regulasi menyasar operator logistik.", source_article_ids: [articleOne] }],
+  };
+}
+
+test("T07 analyzes only linked evidence, persists cited claims, and does not create priority or alert state", async () => {
+  let input;
+  const { runtime, issueStore, created, kernelCalls } = buildRuntime({ onKernelRequest: (request) => { input = request.input; } });
+  const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+
+  assert.equal(kernelCalls(), 1);
+  assert.equal(result.reused, false);
+  assert.equal(result.analysis.analysis.claims[0].claim_id, "c1");
+  assert.deepEqual(result.analysis.analysis.claims[0].source_article_ids, [articleOne]);
+  assert.equal(result.analysis.evidence.length, 2);
+  assert.equal(issueStore.getIssue({ tenantId, companyId, issueId: created.issueId }).currentPriority, null);
+  assert.equal(Object.hasOwn(result.analysis.analysis, "priority"), false);
+  assert.equal(Object.hasOwn(result.analysis.analysis, "alert"), false);
+  assert.match(input[1].content, /FIRST_LINKED_CONTENT/);
+  assert.match(input[1].content, /SECOND_LINKED_CONTENT/);
+  assert.doesNotMatch(input[1].content, new RegExp(unknownArticle));
+});
+
+test("T07 is idempotent for the same issue, context, and linked evidence fingerprint", async () => {
+  const { runtime, created, kernelCalls } = buildRuntime();
+  const first = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+  const second = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+  assert.equal(second.reused, true);
+  assert.equal(second.analysis.analysisId, first.analysis.analysisId);
+  assert.equal(kernelCalls(), 1);
+});
+
+test("T07 rejects an out-of-evidence citation without persisting an analysis", async () => {
+  const output = validOutput();
+  output.claims[0].source_article_ids = [unknownArticle];
+  const { runtime, created } = buildRuntime({ output });
+  await assert.rejects(runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }), { code: "AI_OUTPUT_SCHEMA_INVALID" });
+  assert.deepEqual(runtime.analysisStore.list(), []);
+  assert.equal(runtime.runStore.list()[0].validationOutcome, "failed");
+});
+
+test("T07 does not call the model when linked evidence is stale or cross-scope", async (t) => {
+  await t.test("stale linked source", async () => {
+    const { runtime, created, kernelCalls } = buildRuntime({ sourceOverrides: { [articleOne]: source(articleOne, { updatedAt: "2026-07-23T11:00:00.000Z" }) } });
+    await assert.rejects(runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }), { code: "AI_CONFIGURATION_INVALID" });
+    assert.equal(kernelCalls(), 0);
+  });
+  await t.test("cross-scope relation", async () => {
+    const { runtime, issueStore, created, kernelCalls } = buildRuntime();
+    const linked = issueStore.listArticles({ issueId: created.issueId })[0];
+    for (const record of issueStore.issueArticlesByKey.values()) if (record.issueArticleId === linked.issueArticleId) record.companyId = "company-other";
+    await assert.rejects(runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }), { code: "AI_CONFIGURATION_INVALID" });
+    assert.equal(kernelCalls(), 0);
+  });
+});

@@ -1,0 +1,748 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "EGI Media AI Backend API",
+    "version": "0.1.0",
+    "description": "API contract for the EGI Media AI decision-support service. The service is tenant- and company-scoped, reads editorial articles from egi-media-backend, and exposes only validated AI projections. It never exposes prompts, provider credentials, raw provider output, or CMS write operations."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5003",
+      "description": "Local AI backend"
+    }
+  ],
+  "tags": [
+    { "name": "Dashboard", "description": "Validated Executive Summary projections" },
+    { "name": "Issues", "description": "Company-scoped issue search, detail, and saved items" },
+    { "name": "Inbox", "description": "Archived alert and digest email projections" },
+    { "name": "Reports", "description": "Report read and human review commands" },
+    { "name": "Company Context", "description": "Versioned Company Context and async draft requests" },
+    { "name": "Feedback", "description": "Human feedback; no automatic learning in v0.1" },
+    { "name": "Internal Pipeline", "description": "Service/operator-only pipeline operations" }
+  ],
+  "paths": {
+    "/api/v1/dashboard/executive-summary": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get the ranked Executive Summary",
+        "description": "Returns at most five active, validated issues for one authorized company. The Top 5 cap exists only in this projection; it is not a storage, search, report, or analysis cap.",
+        "operationId": "getExecutiveSummary",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/PeriodQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Validated Executive Summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExecutiveSummaryResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/issues": {
+      "get": {
+        "tags": ["Issues"],
+        "summary": "Search and browse issues",
+        "description": "Returns company-scoped issue projections. Results are not limited to Top 5. Only current validated data is returned; pending or failed stages are represented by safe pipeline state, not raw model output.",
+        "operationId": "listIssues",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/PeriodQuery" },
+          { "$ref": "#/components/parameters/PriorityQuery" },
+          { "$ref": "#/components/parameters/IssueStatusQuery" },
+          { "$ref": "#/components/parameters/SearchQuery" },
+          { "$ref": "#/components/parameters/PageQuery" },
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated issues", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueListResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/issues/{issueId}": {
+      "get": {
+        "tags": ["Issues"],
+        "summary": "Get issue detail",
+        "description": "Returns the issue timeline, current validated analysis, priority, claims, and canonical article citations. The caller must be authorized for the requested company.",
+        "operationId": "getIssue",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IssueIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Issue detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueDetailResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/issues/{issueId}/saved": {
+      "post": {
+        "tags": ["Issues"],
+        "summary": "Save an issue for the current user",
+        "operationId": "saveIssue",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IssueIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "201": { "description": "Issue saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SavedItemResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      },
+      "delete": {
+        "tags": ["Issues"],
+        "summary": "Remove an issue from saved items",
+        "operationId": "unsaveIssue",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IssueIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "204": { "description": "Issue removed from saved items" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/inbox/emails": {
+      "get": {
+        "tags": ["Inbox"],
+        "summary": "List archived alert and digest emails",
+        "description": "Returns the AI service archive of validated delivery intents and provider outcomes, scoped to the authorized user and company. It is not a direct mailbox provider API.",
+        "operationId": "listInboxEmails",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/EmailChannelQuery" },
+          { "$ref": "#/components/parameters/PageQuery" },
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated inbox archive", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailListResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/inbox/emails/{emailId}/read": {
+      "patch": {
+        "tags": ["Inbox"],
+        "summary": "Mark an archived email as read",
+        "description": "Read state is a user interaction and does not alter alert eligibility, issue priority, or source truth.",
+        "operationId": "markInboxEmailRead",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/EmailIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/IfMatchHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReadStateRequest" } } } },
+        "responses": {
+          "200": { "description": "Read state changed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "List reports",
+        "operationId": "listReports",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/ReportTypeQuery" },
+          { "$ref": "#/components/parameters/ReportReviewStatusQuery" },
+          { "$ref": "#/components/parameters/PageQuery" },
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated report list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportListResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/reports/{reportId}": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Get the current report version",
+        "operationId": "getReport",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ReportIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Report detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportDetailResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/reports/{reportId}/review": {
+      "post": {
+        "tags": ["Reports"],
+        "summary": "Submit a report for review or request changes",
+        "operationId": "reviewReport",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ReportIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/IfMatchHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportReviewRequest" } } } },
+        "responses": {
+          "200": { "description": "Review state updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/reports/{reportId}/approve": {
+      "post": {
+        "tags": ["Reports"],
+        "summary": "Approve the current report version",
+        "description": "Human-only command. The model cannot approve a report. Exact approver role is product/security controlled.",
+        "operationId": "approveReport",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ReportIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/IfMatchHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Report approved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/reports/{reportId}/share": {
+      "post": {
+        "tags": ["Reports"],
+        "summary": "Create a report share delivery intent",
+        "description": "External delivery command. It accepts only an approved current report, records an auditable intent, and may be held for human review. It never sends from unvalidated AI output.",
+        "operationId": "shareReport",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ReportIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/IfMatchHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportShareRequest" } } } },
+        "responses": {
+          "202": { "description": "Share intent accepted or queued for review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ShareIntentResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/context": {
+      "get": {
+        "tags": ["Company Context"],
+        "summary": "Get effective Company Context",
+        "operationId": "getCompanyContext",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Effective Company Context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Company Context"],
+        "summary": "Create a new Company Context version",
+        "description": "Human edit becomes the effective source of truth. The command creates a new version and never overwrites prior context in place.",
+        "operationId": "putCompanyContext",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/IfMatchHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextWriteRequest" } } } },
+        "responses": {
+          "200": { "description": "New context version created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/company-context/draft": {
+      "post": {
+        "tags": ["Company Context"],
+        "summary": "Request an asynchronous Company Context draft",
+        "description": "Starts T01. URL/file/manual text is untrusted. Backend validates source policy before a worker can call the model; the result is always a draft and never automatically effective.",
+        "operationId": "requestCompanyContextDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftRequest" } } } },
+        "responses": {
+          "202": { "description": "Draft pipeline run accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PipelineRunResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/company-context/drafts/{draftId}": {
+      "get": {
+        "tags": ["Company Context"],
+        "summary": "Get a Company Context draft for human review",
+        "operationId": "getCompanyContextDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/DraftIdPath" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": {
+          "200": { "description": "Company Context draft", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["Company Context"],
+        "summary": "Edit a Company Context draft before approval",
+        "description": "Human edits move an in-review draft back to draft. Approved drafts cannot be edited.",
+        "operationId": "editCompanyContextDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/DraftIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftEditRequest" } } } },
+        "responses": {
+          "200": { "description": "Edited draft", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/company-context/drafts/{draftId}/submit-review": {
+      "post": {
+        "tags": ["Company Context"],
+        "summary": "Submit a Company Context draft for human review",
+        "operationId": "submitCompanyContextDraftReview",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/DraftIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextReviewRequest" } } } },
+        "responses": {
+          "200": { "description": "Draft is in review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/company-context/drafts/{draftId}/approve": {
+      "post": {
+        "tags": ["Company Context"],
+        "summary": "Approve a reviewed Company Context draft",
+        "description": "Only this human-approved action creates an effective Company Context version for downstream T02 use.",
+        "operationId": "approveCompanyContextDraft",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/DraftIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextReviewRequest" } } } },
+        "responses": {
+          "200": { "description": "Draft approved and effective context version created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyContextDraftApprovalResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/feedback": {
+      "post": {
+        "tags": ["Feedback"],
+        "summary": "Submit human feedback",
+        "description": "Stores advisory feedback against a scoped target. It does not automatically retrain, alter relevance, or mutate priority in v0.1.",
+        "operationId": "createFeedback",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FeedbackRequest" } } } },
+        "responses": {
+          "201": { "description": "Feedback stored", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FeedbackResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/internal/pipeline/ingest": {
+      "post": {
+        "tags": ["Internal Pipeline"],
+        "summary": "Start a scoped ingest or backfill run",
+        "description": "Internal-only. Does not accept article content from callers. The worker reads CMS using the source contract and performs published/source validation before creating snapshots.",
+        "operationId": "startIngestRun",
+        "security": [{ "internalServiceAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IngestRunRequest" } } } },
+        "responses": {
+          "202": { "description": "Ingest run accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PipelineRunResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/internal/runs/{runId}": {
+      "get": {
+        "tags": ["Internal Pipeline"],
+        "summary": "Get safe pipeline run status",
+        "operationId": "getPipelineRun",
+        "security": [{ "internalServiceAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/RunIdPath" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Pipeline run status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PipelineRunResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/internal/runs/{runId}/replay": {
+      "post": {
+        "tags": ["Internal Pipeline"],
+        "summary": "Replay a selected pipeline stage from a recorded input version",
+        "description": "Internal/operator-only. Replay creates a new run and never overwrites historical stage output in place. Scope, source version, and idempotency are revalidated.",
+        "operationId": "replayPipelineRun",
+        "security": [{ "internalServiceAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/RunIdPath" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplayRunRequest" } } } },
+        "responses": {
+          "202": { "description": "Replay accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PipelineRunResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "End-user identity. Tenant/company scope is derived and verified server-side." },
+      "internalServiceAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "Service JWT", "description": "Internal service or authorized operator identity; never available to frontend." }
+    },
+    "parameters": {
+      "CompanyIdQuery": { "name": "company_id", "in": "query", "required": true, "description": "Company context to read. Server verifies tenant membership.", "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "CompanyIdHeader": { "name": "X-Company-Id", "in": "header", "required": true, "description": "Active company for a mutation. Server verifies tenant/company access.", "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "PeriodQuery": { "name": "period", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/Period" } },
+      "PriorityQuery": { "name": "priority", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/Priority" } },
+      "IssueStatusQuery": { "name": "status", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/IssueStatus" } },
+      "EmailChannelQuery": { "name": "channel", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/AlertChannel" } },
+      "ReportTypeQuery": { "name": "type", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/ReportType" } },
+      "ReportReviewStatusQuery": { "name": "review_status", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/ReportReviewStatus" } },
+      "SearchQuery": { "name": "q", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 200 } },
+      "PageQuery": { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+      "LimitQuery": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+      "IssueIdPath": { "name": "issueId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "EmailIdPath": { "name": "emailId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "ReportIdPath": { "name": "reportId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "CompanyIdPath": { "name": "companyId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "DraftIdPath": { "name": "draftId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } },
+      "RunIdPath": { "name": "runId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+      "IdempotencyKeyHeader": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 255 } },
+      "IfMatchHeader": { "name": "If-Match", "in": "header", "required": true, "description": "Current resource version for optimistic concurrency.", "schema": { "type": "string", "pattern": "^[0-9]+$" } },
+      "RequestIdHeader": { "name": "X-Request-Id", "in": "header", "required": false, "schema": { "type": "string", "maxLength": 100 } }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Authentication missing or invalid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Forbidden": { "description": "Caller lacks required tenant/company/role permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "NotFound": { "description": "Resource not found in caller scope", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Conflict": { "description": "Idempotency key, version, or state conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "ValidationError": { "description": "Request schema validation failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "BusinessRuleError": { "description": "Valid request cannot proceed because of pipeline/state/delivery business rules", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+    },
+    "schemas": {
+      "Uuid": { "type": "string", "format": "uuid" },
+      "Timestamp": { "type": "string", "format": "date-time" },
+      "Period": { "type": "string", "enum": ["24jam", "7hari", "30hari"], "default": "24jam" },
+      "Relevance": { "type": "string", "enum": ["high", "medium", "low", "none"] },
+      "Priority": { "type": "string", "enum": ["tinggi", "sedang", "rendah"] },
+      "IssueStatus": { "type": "string", "enum": ["baru", "berkembang", "dipantau", "selesai"] },
+      "AlertChannel": { "type": "string", "enum": ["langsung", "ringkasan", "none"] },
+      "ReportType": { "type": "string", "enum": ["harian", "mingguan", "bulanan"] },
+      "ReportReviewStatus": { "type": "string", "enum": ["draft", "in-review", "approved", "shared", "needs-review"] },
+      "ClaimLabel": { "type": "string", "enum": ["fact", "analysis", "assumption"] },
+      "PipelineStageName": { "type": "string", "enum": ["ingest", "relevance", "issue_match", "issue_title", "issue_oneliner", "analysis", "claim_label", "priority", "alert_eligibility", "direct_blurb", "report_narrative", "delivery"] },
+      "PipelineStageState": { "type": "string", "enum": ["queued", "running", "succeeded", "failed", "retrying", "dead_letter", "waiting_review", "insufficient_data", "stale", "cancelled"] },
+      "ErrorCode": { "type": "string", "enum": ["VALIDATION_ERROR", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "VERSION_CONFLICT", "IDEMPOTENCY_CONFLICT", "BUSINESS_RULE_FAILED", "AI_OUTPUT_INVALID", "SOURCE_VALIDATION_FAILED", "PIPELINE_PENDING", "INTERNAL_ERROR"] },
+      "ApiMeta": {
+        "type": "object",
+        "required": ["request_id"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "trace_id": { "type": "string" },
+          "page": { "type": "integer", "minimum": 1 },
+          "limit": { "type": "integer", "minimum": 1 },
+          "total": { "type": "integer", "minimum": 0 },
+          "total_pages": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["success", "error", "meta"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": { "type": "object", "required": ["code", "message"], "properties": { "code": { "$ref": "#/components/schemas/ErrorCode" }, "message": { "type": "string" }, "fields": { "type": "array", "items": { "type": "object", "properties": { "field": { "type": "string" }, "code": { "type": "string" } } } } } },
+          "meta": { "$ref": "#/components/schemas/ApiMeta" }
+        }
+      },
+      "SourceCitation": {
+        "type": "object",
+        "required": ["source_article_id", "locale", "url", "published_at"],
+        "properties": {
+          "source_article_id": { "$ref": "#/components/schemas/Uuid" },
+          "locale": { "type": "string", "enum": ["id", "en", "uz"] },
+          "url": { "type": "string", "format": "uri", "description": "Backend-generated canonical public URL: /{locale}/articles/{id}." },
+          "title": { "type": "string", "maxLength": 255 },
+          "published_at": { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+      "Claim": {
+        "type": "object",
+        "required": ["id", "text", "label", "citations"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 100 },
+          "text": { "type": "string", "maxLength": 2000 },
+          "label": { "$ref": "#/components/schemas/ClaimLabel" },
+          "citations": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/components/schemas/SourceCitation" } }
+        }
+      },
+      "IssueAnalysis": {
+        "type": "object",
+        "required": ["status", "what_happened", "why_matters", "impacts", "risks", "watch", "claims", "analysis_version", "generated_at"],
+        "properties": {
+          "status": { "type": "string", "enum": ["valid", "pending", "stale", "insufficient_data", "needs_review"] },
+          "what_happened": { "type": "string", "maxLength": 4000 },
+          "why_matters": { "type": "string", "maxLength": 4000 },
+          "impacts": { "type": "array", "maxItems": 10, "items": { "$ref": "#/components/schemas/Claim" } },
+          "risks": { "type": "array", "maxItems": 10, "items": { "$ref": "#/components/schemas/Claim" } },
+          "watch": { "type": "array", "maxItems": 10, "items": { "$ref": "#/components/schemas/Claim" } },
+          "claims": { "type": "array", "maxItems": 30, "items": { "$ref": "#/components/schemas/Claim" } },
+          "analysis_version": { "type": "integer", "minimum": 1 },
+          "generated_at": { "$ref": "#/components/schemas/Timestamp" },
+          "stale_since": { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+      "PipelineStage": {
+        "type": "object",
+        "required": ["name", "state", "updated_at"],
+        "properties": {
+          "name": { "$ref": "#/components/schemas/PipelineStageName" },
+          "state": { "$ref": "#/components/schemas/PipelineStageState" },
+          "updated_at": { "$ref": "#/components/schemas/Timestamp" },
+          "failure_code": { "type": "string", "description": "Safe classification only; no raw provider/internal error." },
+          "next_retry_at": { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+      "IssueCard": {
+        "type": "object",
+        "required": ["id", "company_id", "title", "one_liner", "status", "priority", "last_developed_at", "pipeline"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "company_id": { "$ref": "#/components/schemas/Uuid" },
+          "title": { "type": "string", "maxLength": 255 },
+          "one_liner": { "type": "string", "maxLength": 500 },
+          "status": { "$ref": "#/components/schemas/IssueStatus" },
+          "priority": { "$ref": "#/components/schemas/Priority" },
+          "priority_reason": { "type": "string", "maxLength": 1000 },
+          "last_developed_at": { "$ref": "#/components/schemas/Timestamp" },
+          "is_saved": { "type": "boolean" },
+          "pipeline": { "type": "array", "items": { "$ref": "#/components/schemas/PipelineStage" } }
+        }
+      },
+      "IssueDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/IssueCard" },
+          { "type": "object", "required": ["developments", "citations"], "properties": {
+            "developments": { "type": "array", "items": { "$ref": "#/components/schemas/IssueDevelopment" } },
+            "analysis": { "$ref": "#/components/schemas/IssueAnalysis" },
+            "citations": { "type": "array", "items": { "$ref": "#/components/schemas/SourceCitation" } },
+            "version": { "type": "integer", "minimum": 1 }
+          } }
+        ]
+      },
+      "IssueDevelopment": {
+        "type": "object",
+        "required": ["id", "observed_at", "summary", "source"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "observed_at": { "$ref": "#/components/schemas/Timestamp" },
+          "summary": { "type": "string", "maxLength": 1000 },
+          "is_material": { "type": "boolean", "nullable": true, "description": "Null until product material-update rule is approved." },
+          "source": { "$ref": "#/components/schemas/SourceCitation" }
+        }
+      },
+      "ExecutiveSummary": {
+        "type": "object",
+        "required": ["company_id", "period", "generated_at", "issues"],
+        "properties": {
+          "company_id": { "$ref": "#/components/schemas/Uuid" },
+          "period": { "$ref": "#/components/schemas/Period" },
+          "generated_at": { "$ref": "#/components/schemas/Timestamp" },
+          "issues": { "type": "array", "maxItems": 5, "items": { "$ref": "#/components/schemas/IssueCard" } }
+        }
+      },
+      "EmailMessage": {
+        "type": "object",
+        "required": ["id", "company_id", "channel", "status", "subject", "sent_at", "is_read"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "company_id": { "$ref": "#/components/schemas/Uuid" },
+          "issue_id": { "$ref": "#/components/schemas/Uuid" },
+          "channel": { "$ref": "#/components/schemas/AlertChannel" },
+          "status": { "type": "string", "enum": ["queued", "sent", "delivered", "failed", "unknown", "suppressed"] },
+          "subject": { "type": "string", "maxLength": 255 },
+          "preview": { "type": "string", "maxLength": 1000 },
+          "sent_at": { "$ref": "#/components/schemas/Timestamp" },
+          "is_read": { "type": "boolean" },
+          "read_at": { "$ref": "#/components/schemas/Timestamp" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "required": ["id", "company_id", "type", "period_start", "period_end", "timezone", "review_status", "version", "updated_at"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "company_id": { "$ref": "#/components/schemas/Uuid" },
+          "type": { "$ref": "#/components/schemas/ReportType" },
+          "period_start": { "type": "string", "format": "date" },
+          "period_end": { "type": "string", "format": "date" },
+          "timezone": { "type": "string", "example": "Asia/Jakarta" },
+          "review_status": { "$ref": "#/components/schemas/ReportReviewStatus" },
+          "version": { "type": "integer", "minimum": 1 },
+          "updated_at": { "$ref": "#/components/schemas/Timestamp" },
+          "summary": { "type": "string", "maxLength": 2000 }
+        }
+      },
+      "ReportDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Report" },
+          { "type": "object", "required": ["content", "metrics", "items"], "properties": {
+            "content": { "type": "object", "additionalProperties": true, "description": "Validated report sections only." },
+            "metrics": { "type": "object", "additionalProperties": { "type": "number" }, "description": "Backend-calculated metrics." },
+            "items": { "type": "array", "items": { "$ref": "#/components/schemas/ReportItem" } },
+            "pipeline": { "type": "array", "items": { "$ref": "#/components/schemas/PipelineStage" } }
+          } }
+        ]
+      },
+      "ReportItem": { "type": "object", "required": ["issue_id", "section", "inclusion_reason"], "properties": { "issue_id": { "$ref": "#/components/schemas/Uuid" }, "section": { "type": "string", "maxLength": 100 }, "rank": { "type": "integer", "minimum": 1 }, "inclusion_reason": { "type": "string", "maxLength": 500 }, "citations": { "type": "array", "items": { "$ref": "#/components/schemas/SourceCitation" } } } },
+      "CompanyContext": {
+        "type": "object",
+        "required": ["company_id", "version", "status", "source", "updated_at", "fields"],
+        "properties": {
+          "company_id": { "$ref": "#/components/schemas/Uuid" },
+          "version": { "type": "integer", "minimum": 1 },
+          "status": { "type": "string", "enum": ["draft", "effective", "archived"] },
+          "source": { "type": "string", "enum": ["manual", "ai_draft", "import"] },
+          "updated_at": { "$ref": "#/components/schemas/Timestamp" },
+          "updated_by": { "type": "string", "maxLength": 255 },
+          "fields": { "$ref": "#/components/schemas/CompanyContextFields" }
+        }
+      },
+      "CompanyContextFields": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": ["string", "null"], "maxLength": 255 }, "industry": { "type": ["string", "null"], "maxLength": 255 }, "sub_industry": { "type": ["string", "null"], "maxLength": 255 }, "description": { "type": ["string", "null"], "maxLength": 4000 },
+          "products": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "customers": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "regions": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "competitors": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } },
+          "priorities": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "goals": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "risks": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "topics": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "dependencies": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }
+        }
+      },
+      "CompanyContextWriteRequest": { "type": "object", "required": ["version", "fields"], "additionalProperties": false, "properties": { "version": { "type": "integer", "minimum": 1 }, "fields": { "$ref": "#/components/schemas/CompanyContextFields" }, "change_reason": { "type": "string", "maxLength": 1000 } } },
+      "CompanyContextDraft": { "type": "object", "required": ["draft_id", "company_id", "status", "is_effective", "revision", "result", "review", "created_at", "updated_at"], "properties": { "draft_id": { "type": "string", "maxLength": 255 }, "company_id": { "$ref": "#/components/schemas/Uuid" }, "status": { "type": "string", "enum": ["draft", "in_review", "approved"] }, "is_effective": { "type": "boolean", "enum": [false] }, "revision": { "type": "integer", "minimum": 1 }, "result": { "type": "object", "required": ["status", "context", "field_sources", "missing_fields"], "properties": { "status": { "type": "string", "enum": ["complete", "insufficient_data"] }, "context": { "$ref": "#/components/schemas/CompanyContextFields" }, "field_sources": { "type": "array", "items": { "type": "object" } }, "missing_fields": { "type": "array", "items": { "type": "string" } } } }, "review": { "type": "object", "required": ["submitted_by", "submitted_at", "approved_by", "approved_at", "note"], "properties": { "submitted_by": { "type": ["string", "null"] }, "submitted_at": { "type": ["string", "null"], "format": "date-time" }, "approved_by": { "type": ["string", "null"] }, "approved_at": { "type": ["string", "null"], "format": "date-time" }, "note": { "type": ["string", "null"], "maxLength": 1000 } } }, "created_at": { "$ref": "#/components/schemas/Timestamp" }, "updated_at": { "$ref": "#/components/schemas/Timestamp" } } },
+      "CompanyContextDraftEditRequest": { "type": "object", "required": ["fields"], "additionalProperties": false, "properties": { "fields": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": ["string", "null"], "maxLength": 255 }, "industry": { "type": ["string", "null"], "maxLength": 255 }, "sub_industry": { "type": ["string", "null"], "maxLength": 255 }, "description": { "type": ["string", "null"], "maxLength": 4000 }, "products": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "customers": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "regions": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "competitors": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "priorities": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "goals": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "risks": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "topics": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } }, "dependencies": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 255 } } } }, "review_note": { "type": "string", "maxLength": 1000 } } },
+      "CompanyContextReviewRequest": { "type": "object", "additionalProperties": false, "properties": { "review_note": { "type": "string", "maxLength": 1000 }, "approval_note": { "type": "string", "maxLength": 1000 } } },
+      "CompanyContextDraftRequest": { "type": "object", "required": ["source"], "additionalProperties": false, "properties": { "source": { "oneOf": [{ "$ref": "#/components/schemas/ContextUrlSource" }, { "$ref": "#/components/schemas/ContextTextSource" }] } } },
+      "ContextUrlSource": { "type": "object", "required": ["type", "url"], "additionalProperties": false, "properties": { "type": { "type": "string", "enum": ["url"] }, "url": { "type": "string", "format": "uri", "maxLength": 2048 } } },
+      "ContextTextSource": { "type": "object", "required": ["type", "text"], "additionalProperties": false, "properties": { "type": { "type": "string", "enum": ["text"] }, "text": { "type": "string", "minLength": 1, "maxLength": 100000 } } },
+      "FeedbackRequest": { "type": "object", "required": ["target_type", "target_id", "type"], "additionalProperties": false, "properties": { "target_type": { "type": "string", "enum": ["issue", "report", "analysis"] }, "target_id": { "$ref": "#/components/schemas/Uuid" }, "type": { "type": "string", "enum": ["helpful", "not_helpful", "incorrect", "missing_context", "other"] }, "comment": { "type": "string", "maxLength": 2000 } } },
+      "ReadStateRequest": { "type": "object", "required": ["is_read"], "additionalProperties": false, "properties": { "is_read": { "type": "boolean" } } },
+      "ReportReviewRequest": { "type": "object", "required": ["action", "version"], "additionalProperties": false, "properties": { "action": { "type": "string", "enum": ["submit", "request_changes"] }, "version": { "type": "integer", "minimum": 1 }, "comment": { "type": "string", "maxLength": 4000 } } },
+      "ReportShareRequest": { "type": "object", "required": ["version", "recipient_refs"], "additionalProperties": false, "properties": { "version": { "type": "integer", "minimum": 1 }, "recipient_refs": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "type": "string", "maxLength": 255 } }, "message": { "type": "string", "maxLength": 1000 } } },
+      "IngestRunRequest": { "type": "object", "required": ["mode"], "additionalProperties": false, "properties": { "mode": { "type": "string", "enum": ["scheduled", "backfill", "reconcile"] }, "from": { "type": "string", "format": "date-time" }, "to": { "type": "string", "format": "date-time" }, "locale": { "type": "string", "enum": ["id", "en", "uz"] } } },
+      "ReplayRunRequest": { "type": "object", "required": ["from_stage", "reason"], "additionalProperties": false, "properties": { "from_stage": { "$ref": "#/components/schemas/PipelineStageName" }, "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }, "expected_input_fingerprint": { "type": "string", "maxLength": 255 } } },
+      "PipelineRun": { "type": "object", "required": ["id", "trigger", "state", "stages", "created_at", "trace_id"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "trigger": { "type": "string", "enum": ["scheduled", "manual", "backfill", "replay", "context_draft"] }, "state": { "$ref": "#/components/schemas/PipelineStageState" }, "tenant_id": { "$ref": "#/components/schemas/Uuid" }, "company_id": { "$ref": "#/components/schemas/Uuid" }, "stages": { "type": "array", "items": { "$ref": "#/components/schemas/PipelineStage" } }, "created_at": { "$ref": "#/components/schemas/Timestamp" }, "completed_at": { "$ref": "#/components/schemas/Timestamp" }, "trace_id": { "type": "string" } } },
+      "SavedItemResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["issue_id", "saved_at"], "properties": { "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "FeedbackResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "created_at"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "created_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "ShareIntentResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "state"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "state": { "type": "string", "enum": ["queued", "waiting_review", "suppressed"] } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "ExecutiveSummaryResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ExecutiveSummary" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "IssueListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/IssueCard" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "IssueDetailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/IssueDetail" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "EmailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/EmailMessage" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "EmailListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/EmailMessage" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "ReportResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/Report" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "ReportListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/Report" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "ReportDetailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ReportDetail" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "CompanyContextResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/CompanyContext" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "CompanyContextDraftResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/CompanyContextDraft" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "CompanyContextDraftApprovalResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["draft", "effective_context"], "properties": { "draft": { "$ref": "#/components/schemas/CompanyContextDraft" }, "effective_context": { "$ref": "#/components/schemas/CompanyContext" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "PipelineRunResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/PipelineRun" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } }
+    }
+  }
+}
