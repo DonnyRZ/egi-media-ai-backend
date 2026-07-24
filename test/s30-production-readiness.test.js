@@ -1,0 +1,11 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { validateProductionEnvironment } = require("../src/config/environment");
+const { createLogger, MetricsRegistry, safeValue, REDACTED } = require("../src/observability");
+const Server = require("../src/app/server");
+
+const baseEnv = { APP_ENV: "production", APP_HOST: "0.0.0.0", APP_PORT: "5003", CORS_ORIGINS: "https://portal.example.com", CMS_BASE_URL: "https://cms.example.com", PORTAL_BASE_URL: "https://portal.example.com", AUTH_ACCESS_TOKEN_SECRET: "x".repeat(40), OPENAI_API_KEY: "sk-test", OPENAI_MINI_MODEL: "mini", OPENAI_NANO_MODEL: "nano", SOURCE_DATABASE_URL: "postgresql://source:secret@db:5432/main", AI_DATABASE_URL: "postgresql://ai:secret@db:5432/ai", EMAIL_TRANSPORT: "smtp", EMAIL_SMTP_HOST: "smtp.gmail.com", EMAIL_SMTP_USER: "egi.egiholding@gmail.com", EMAIL_SMTP_APP_PASSWORD: "app-password", EMAIL_FROM_ADDRESS: "egi.egiholding@gmail.com" };
+
+test("S30 validates required production environment", () => { assert.equal(validateProductionEnvironment(baseEnv).APP_ENV, "production"); assert.throws(() => validateProductionEnvironment({ ...baseEnv, OPENAI_API_KEY: "" }), /Invalid production environment/); });
+test("S30 logger redacts secrets and metrics remain inspectable", () => { const output = []; const logger = createLogger({ stream: { log: (line) => output.push(line) } }); logger.info("test", { apiKey: "secret", authorization: "Bearer secret", safe: "ok" }); assert.match(output[0], /\[REDACTED\]/); assert.doesNotMatch(output[0], /Bearer secret|apiKey.*secret/); assert.equal(safeValue({ password: "p" }).password, REDACTED); const metrics = new MetricsRegistry(); metrics.increment("requests_total", { method: "GET" }); metrics.observe("duration_ms", {}, 12); assert.equal(metrics.snapshot().counters[0].value, 1); assert.match(metrics.toPrometheus(), /requests_total/); });
+test("S30 graceful shutdown is idempotent and closes the listener", async () => { const server = new Server(); server.host = "127.0.0.1"; server.port = 0; await server.listen(); await Promise.all([server.stop(), server.stop()]); assert.equal(server.httpServer, null); assert.equal(server.stopping, true); });

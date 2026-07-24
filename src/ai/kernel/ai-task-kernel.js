@@ -9,7 +9,7 @@ const {
 } = require("../provider/provider.errors");
 
 class AiTaskKernel {
-  constructor({ openaiClient, openaiConfig, defaultTimeoutMs, uuid = randomUUID }) {
+  constructor({ openaiClient, openaiConfig, defaultTimeoutMs, uuid = randomUUID, budgetGate = null, logger = null }) {
     if (!openaiClient?.responses?.create) {
       throw new AiConfigurationError("OpenAI client must expose responses.create");
     }
@@ -26,10 +26,12 @@ class AiTaskKernel {
     this.openaiConfig = openaiConfig;
     this.defaultTimeoutMs = defaultTimeoutMs;
     this.uuid = uuid;
+    this.budgetGate = budgetGate;
+    this.logger = logger || { debug() {}, info() {}, warn() {}, error() {}, fatal() {} };
     this.ajv = new Ajv({ allErrors: true, strict: false });
   }
 
-  async execute({ model, input, outputSchema, requestId, timeoutMs }) {
+  async execute({ model, input, outputSchema, requestId, timeoutMs, budgetScope = null }) {
     this._validateInput({ input, outputSchema, timeoutMs });
 
     const resolvedModel = resolveModel(model, this.openaiConfig);
@@ -37,9 +39,11 @@ class AiTaskKernel {
     const resolvedTimeoutMs = timeoutMs || this.defaultTimeoutMs;
     const validateOutput = this._compileSchema(outputSchema.schema);
     const startedAt = Date.now();
+    this.logger.info("ai_task_started", { requestId: correlationId, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, timeoutMs: resolvedTimeoutMs });
 
     let response;
     try {
+      this.budgetGate?.beforeRequest(budgetScope);
       response = await this.openaiClient.responses.create(
         {
           model: resolvedModel,
@@ -60,10 +64,21 @@ class AiTaskKernel {
         },
       );
     } catch (error) {
-      throw normalizeProviderError(error);
+      const normalized = normalizeProviderError(error);
+      this.logger.error("ai_task_failed", { requestId: correlationId, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, error: normalized });
+      throw normalized;
     }
 
-    const data = this._parseAndValidateOutput(response, validateOutput);
+    let data;
+    try {
+      data = this._parseAndValidateOutput(response, validateOutput);
+    } catch (error) {
+      this.logger.error("ai_output_rejected", { requestId: correlationId, providerRequestId: response?._request_id || null, providerResponseId: response?.id || null, modelAlias: model, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, error });
+      throw error;
+    }
+    this.budgetGate?.recordUsage(normalizeUsage(response.usage), budgetScope);
+
+    this.logger.info("ai_task_succeeded", { requestId: correlationId, providerRequestId: response._request_id || null, providerResponseId: response.id || null, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, usage: normalizeUsage(response.usage) });
 
     return {
       data,

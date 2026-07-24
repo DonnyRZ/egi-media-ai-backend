@@ -23,23 +23,24 @@ class ExecutiveSummaryService {
     if (!periodMs) throw new AiConfigurationError("Executive Summary period must be 24jam, 7hari, or 30hari");
     const end = this.now();
     const start = end - periodMs;
-    const items = this.issueStore.listActive({ tenantId, companyId })
-      .filter((issue) => this._isEligible({ issue, tenantId, companyId, start, end }))
+    const eligible = await Promise.all((await this.issueStore.listActive({ tenantId, companyId }))
+      .map(async (issue) => (await this._isEligible({ issue, tenantId, companyId, start, end })) ? issue : null));
+    const items = eligible.filter(Boolean)
       .sort(compareIssues)
       .slice(0, 5)
       .map(serializeIssue);
     return { period, startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(), items };
   }
 
-  _isEligible({ issue, tenantId, companyId, start, end }) {
+  async _isEligible({ issue, tenantId, companyId, start, end }) {
     if (!issue || issue.tenantId !== tenantId || issue.companyId !== companyId || !ACTIVE_STATUSES.has(issue.status)
       || !Object.hasOwn(PRIORITY_RANK, issue.currentPriority) || typeof issue.issueId !== "string") return false;
-    const latestDevelopment = this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId: issue.issueId });
+    const latestDevelopment = await this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId: issue.issueId });
     const developmentAt = Date.parse(latestDevelopment?.observedAt);
     if (!Number.isFinite(developmentAt) || developmentAt < start || developmentAt > end || issue.lastDevelopedAt !== latestDevelopment.observedAt) return false;
-    const analysis = this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
+    const analysis = await this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
     if (!analysis || analysis.analysisId !== issue.currentPriorityAnalysisId || analysis.status !== "current" || !analysis.gate) return false;
-    const priority = this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
+    const priority = await this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
     return priority?.priorityDecisionId === issue.currentPriorityDecisionId && priority.priority === issue.currentPriority;
   }
 

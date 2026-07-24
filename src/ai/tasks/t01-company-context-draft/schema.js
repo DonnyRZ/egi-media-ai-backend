@@ -42,7 +42,6 @@ function createT01OutputSchema(sourceLocators) {
         },
         missing_fields: {
           type: "array",
-          uniqueItems: true,
           maxItems: CONTEXT_FIELDS.length,
           items: { type: "string", enum: CONTEXT_FIELDS },
         },

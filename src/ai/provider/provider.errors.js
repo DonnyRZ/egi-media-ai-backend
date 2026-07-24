@@ -34,12 +34,14 @@ function normalizeProviderError(error) {
   const status = error?.status || error?.statusCode;
   const name = error?.name || "";
   const providerRequestId = error?.request_id || error?._request_id || null;
+  const providerError = error?.error || {};
+  const providerDetails = { status: status || null, providerRequestId, providerErrorType: providerDetailsValue(providerError.type), providerErrorCode: providerDetailsValue(providerError.code) };
 
-  if (name === "APIConnectionTimeoutError" || status === 408) {
+  if (name === "APIConnectionTimeoutError" || status === 408 || /timed out|timeout/i.test(error?.message || "")) {
     return new AiProviderError("OpenAI request timed out", {
       code: "AI_PROVIDER_TIMEOUT",
       retryable: true,
-      details: { status: status || null, providerRequestId },
+      details: providerDetails,
       cause: error,
     });
   }
@@ -48,7 +50,7 @@ function normalizeProviderError(error) {
     return new AiProviderError("OpenAI connection failed", {
       code: "AI_PROVIDER_UNAVAILABLE",
       retryable: true,
-      details: { status: status || null, providerRequestId },
+      details: providerDetails,
       cause: error,
     });
   }
@@ -57,7 +59,7 @@ function normalizeProviderError(error) {
     return new AiProviderError("OpenAI rate limit reached", {
       code: "AI_PROVIDER_RATE_LIMITED",
       retryable: true,
-      details: { status, providerRequestId },
+      details: providerDetails,
       cause: error,
     });
   }
@@ -66,7 +68,7 @@ function normalizeProviderError(error) {
     return new AiProviderError("OpenAI service is unavailable", {
       code: "AI_PROVIDER_UNAVAILABLE",
       retryable: true,
-      details: { status, providerRequestId },
+      details: providerDetails,
       cause: error,
     });
   }
@@ -75,7 +77,7 @@ function normalizeProviderError(error) {
     return new AiProviderError("OpenAI authentication was rejected", {
       code: "AI_PROVIDER_AUTHENTICATION_FAILED",
       retryable: false,
-      details: { status, providerRequestId },
+      details: providerDetails,
       cause: error,
     });
   }
@@ -83,9 +85,13 @@ function normalizeProviderError(error) {
   return new AiProviderError("OpenAI request failed", {
     code: "AI_PROVIDER_REJECTED",
     retryable: false,
-    details: { status: status || null, providerRequestId },
+    details: providerDetails,
     cause: error,
   });
+}
+
+function providerDetailsValue(value) {
+  return typeof value === "string" && value.length <= 120 ? value : null;
 }
 
 module.exports = {

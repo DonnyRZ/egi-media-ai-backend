@@ -5,6 +5,10 @@ class InMemoryAlertPreferenceStore {
     const value = this.preferencesByKey.get(this._key({ tenantId, companyId, recipientId }));
     return value ? cloneForRead(value) : null;
   }
+  getAny({ tenantId, companyId }) {
+    const value = [...this.preferencesByKey.values()].find((item) => item.tenantId === tenantId && item.companyId === companyId);
+    return value ? cloneForRead(value) : null;
+  }
 
   upsert({ tenantId, companyId, recipientId, directHighEnabled, dailyDigestEnabled, timezone, quietHours = null }) {
     const value = { tenantId, companyId, recipientId, directHighEnabled, dailyDigestEnabled, timezone, quietHours: structuredClone(quietHours) };

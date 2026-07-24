@@ -20,15 +20,15 @@ class RelevanceRationaleService {
     this.authorizeCompany = authorizeCompany;
   }
 
-  async generate({ companyId, decisionId }) {
+  async generate({ tenantId = null, companyId, decisionId }) {
     await this._authorizeCompany(companyId);
-    const decision = this.decisionStore.getById(decisionId);
+    const decision = await this.decisionStore.getById(decisionId);
     this._validateDecision(decision, companyId);
 
-    const existing = this.rationaleStore.get({ decisionId, promptVersion: T03_PROMPT_VERSION });
+    const existing = await this.rationaleStore.get({ decisionId, promptVersion: T03_PROMPT_VERSION });
     if (existing) return { rationale: existing, decision, reused: true };
 
-    const context = await this.getCompanyContextVersion(companyId, decision.contextVersion);
+    const context = await this.getCompanyContextVersion(companyId, decision.contextVersion, tenantId);
     this._validateHistoricalContext(context, companyId, decision.contextVersion);
     const source = await this.cmsSourceGate.requirePublishedArticle({
       articleId: decision.articleId,
@@ -44,9 +44,10 @@ class RelevanceRationaleService {
       model: "nano",
       input: buildT03Input({ companyId, context, decision, source }),
       outputSchema: T03_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT03Output,
     });
-    const rationale = this.rationaleStore.create({
+    const rationale = await this.rationaleStore.create({
       decisionId,
       companyId,
       promptVersion: T03_PROMPT_VERSION,

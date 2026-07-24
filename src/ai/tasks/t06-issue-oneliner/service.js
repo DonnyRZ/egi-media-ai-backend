@@ -21,18 +21,18 @@ class IssueOneLinerService {
 
   async generate({ tenantId, companyId, issueId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     this._validateIssue(issue);
-    const development = this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
+    const development = await this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
     if (!development) throw new AiConfigurationError("T06 requires a valid issue development");
-    const existing = this.issueStore.getGeneratedOneLiner({ issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION });
+    const existing = await this.issueStore.getGeneratedOneLiner({ issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION });
     if (existing) return { oneLiner: existing, issue, reused: true };
-    if (typeof issue.oneLiner === "string" && issue.oneLiner.trim()) throw new AiConfigurationError("T06 runs only for an issue that needs a one-liner");
-    const matchDecision = this.matchDecisionStore.getById(development.matchDecisionId);
+    if (typeof issue.oneLiner === "string" && issue.oneLiner.trim()) return { oneLiner: { oneLiner: issue.oneLiner, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION }, issue, reused: true };
+    const matchDecision = await this.matchDecisionStore.getById(development.matchDecisionId);
     if (!matchDecision || matchDecision.tenantId !== tenantId || matchDecision.companyId !== companyId) {
       throw new AiConfigurationError("T06 requires the scoped T04 decision that created the development");
     }
-    const relevanceDecision = this.relevanceDecisionStore.getById(development.relevanceDecisionId);
+    const relevanceDecision = await this.relevanceDecisionStore.getById(development.relevanceDecisionId);
     if (!relevanceDecision || relevanceDecision.companyId !== companyId || relevanceDecision.decisionId !== matchDecision.relevanceDecisionId
       || !["high", "medium", "low"].includes(relevanceDecision.relevance)) {
       throw new AiConfigurationError("T06 requires the continuing T02 decision linked by T04");
@@ -45,12 +45,13 @@ class IssueOneLinerService {
       promptId: T06_PROMPT_ID, promptVersion: T06_PROMPT_VERSION, model: "nano",
       input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source }),
       outputSchema: T06_OUTPUT_SCHEMA, validateResult: validateT06Output,
+      budgetScope: { tenantId, companyId },
     });
-    const applied = this.issueStore.applyGeneratedOneLiner({
+    const applied = await this.issueStore.applyGeneratedOneLiner({
       tenantId, companyId, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION,
       oneLiner: execution.data.oneLiner, provenance: execution.provenance,
     });
-    return { oneLiner: applied.oneLiner, issue: this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
+    return { oneLiner: applied.oneLiner, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }
 
   _validateIssue(issue) {

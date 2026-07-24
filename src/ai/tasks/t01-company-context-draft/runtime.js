@@ -23,6 +23,7 @@ function createT01CompanyContextDraftRuntime({ aiTaskKernel, openaiConfig, promp
       promptExecutionService,
       draftStore: companyContextDraftStore,
       authorizeCompany,
+      timeoutMs: openaiConfig.t01TimeoutMs,
     }),
     promptRegistry: registry,
     runStore: provenanceStore,

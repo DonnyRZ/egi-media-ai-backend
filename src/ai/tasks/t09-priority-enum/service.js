@@ -16,21 +16,21 @@ class IssuePriorityEnumService {
 
   async evaluate({ tenantId, companyId, issueId, analysisId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !["baru", "berkembang", "dipantau"].includes(issue.status)) throw new AiConfigurationError("T09 requires an active issue in the same tenant and company");
-    const analysis = this.analysisStore.getById(analysisId);
-    const currentAnalysis = this.analysisStore.getCurrent({ tenantId, companyId, issueId });
+    const analysis = await this.analysisStore.getById(analysisId);
+    const currentAnalysis = await this.analysisStore.getCurrent({ tenantId, companyId, issueId });
     if (!analysis || analysis.tenantId !== tenantId || analysis.companyId !== companyId || analysis.issueId !== issueId
       || analysis.status !== "current" || currentAnalysis?.analysisId !== analysisId || !analysis.gate) {
       throw new AiConfigurationError("T09 requires the current citation-gated analysis for the same issue, tenant, and company");
     }
-    const latestDevelopment = this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
+    const latestDevelopment = await this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
     if (!latestDevelopment) throw new AiConfigurationError("T09 requires a valid issue development");
-    const context = await this.getEffectiveContext(companyId);
+    const context = await this.getEffectiveContext(companyId, tenantId);
     if (!context || context.companyId !== companyId || context.status !== "effective" || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T09 requires an effective Company Context for the same company");
     }
-    const existing = this.priorityStore.get({ tenantId, companyId, issueId, analysisId, promptVersion: T09_PROMPT_VERSION });
+    const existing = await this.priorityStore.get({ tenantId, companyId, issueId, analysisId, promptVersion: T09_PROMPT_VERSION });
     if (existing) return { priority: existing, issue, analysis, reused: true };
     const execution = await this.promptExecutionService.executeActive({
       promptId: T09_PROMPT_ID,
@@ -38,13 +38,14 @@ class IssuePriorityEnumService {
       model: "nano",
       input: buildT09Input({ tenantId, companyId, issue, analysis, context, latestDevelopment }),
       outputSchema: T09_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT09Output,
     });
-    const priority = this.priorityStore.create({
+    const priority = await this.priorityStore.create({
       tenantId, companyId, issueId, analysisId, contextVersion: context.version,
       promptVersion: T09_PROMPT_VERSION, priority: execution.data.priority, provenance: execution.provenance,
     });
-    const applied = this.issueStore.applyCurrentPriority({
+    const applied = await this.issueStore.applyCurrentPriority({
       tenantId, companyId, issueId, analysisId, priorityDecisionId: priority.priorityDecisionId, priority: priority.priority,
     });
     return { priority, issue: applied.issue, analysis, reused: false };

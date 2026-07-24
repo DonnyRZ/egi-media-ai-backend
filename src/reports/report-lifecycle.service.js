@@ -25,7 +25,7 @@ class ReportLifecycleService {
   async share({ actor, tenantId, companyId, reportId, expectedVersion, shareTarget, note = null }) {
     const report = await this._loadAndAuthorize({ action: "share", actor, tenantId, companyId, reportId });
     this._assertTransition({ report, action: "share", expectedVersion });
-    const narrative = this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
+    const narrative = await this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
     if (!narrative || narrative.reviewStatus !== "draft") throw new AiConfigurationError("Report share requires a validated draft narrative");
     await this.sharePublisher.share({ report, narrative, actor, shareTarget });
     return this._persistTransition({ report, action: "share", actor, tenantId, companyId, expectedVersion, note, shareTarget });
@@ -35,7 +35,7 @@ class ReportLifecycleService {
     const report = await this._loadAndAuthorize({ action, actor, tenantId, companyId, reportId });
     this._assertTransition({ report, action, expectedVersion });
     if (action === "submit_review" || action === "approve") {
-      const narrative = this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
+      const narrative = await this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
       if (!narrative || narrative.reviewStatus !== "draft") throw new AiConfigurationError(`Report ${action} requires a validated draft narrative`);
     }
     return this._persistTransition({ report, action, actor, tenantId, companyId, expectedVersion, note });
@@ -46,7 +46,7 @@ class ReportLifecycleService {
     const rule = TRANSITIONS[action];
     const granted = await this.authorizeReportAction({ actor, tenantId, companyId, action: rule.authorization });
     if (granted !== true) throw new AiConfigurationError("Report lifecycle action was not authorized");
-    const report = this.reportDraftStore.get({ tenantId, companyId, reportId });
+    const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
     if (!report) throw new AiConfigurationError("Report was not found in the same tenant and company");
     return report;
   }
@@ -57,9 +57,9 @@ class ReportLifecycleService {
     if (!rule.from.has(report.reviewStatus)) throw new AiConfigurationError(`Report cannot ${action} from ${report.reviewStatus}`);
   }
 
-  _persistTransition({ report, action, actor, tenantId, companyId, expectedVersion, note, shareTarget }) {
+  async _persistTransition({ report, action, actor, tenantId, companyId, expectedVersion, note, shareTarget }) {
     const rule = TRANSITIONS[action];
-    const result = this.reportDraftStore.transition({ tenantId, companyId, reportId: report.reportId, expectedVersion, nextStatus: rule.to, actor, action, note, shareTarget });
+    const result = await this.reportDraftStore.transition({ tenantId, companyId, reportId: report.reportId, expectedVersion, nextStatus: rule.to, actor, action, note, shareTarget });
     if (!result?.report) throw new AiConfigurationError("Report version conflict");
     return result.report;
   }

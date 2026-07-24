@@ -8,8 +8,8 @@ class InMemoryRelevanceDecisionStore {
     this.decisionsById = new Map();
   }
 
-  get({ articleId, companyId, contextVersion, inputFingerprint }) {
-    const decision = this.decisionsByKey.get(this._key({ articleId, companyId, contextVersion, inputFingerprint }));
+  get({ tenantId = null, articleId, companyId, contextVersion, inputFingerprint }) {
+    const decision = this.decisionsByKey.get(this._key({ tenantId, articleId, companyId, contextVersion, inputFingerprint }));
     return decision ? cloneForRead(decision) : null;
   }
 
@@ -18,13 +18,14 @@ class InMemoryRelevanceDecisionStore {
     return decision ? cloneForRead(decision) : null;
   }
 
-  create({ articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
-    const key = this._key({ articleId, companyId, contextVersion, inputFingerprint });
+  create({ tenantId = null, articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
+    const key = this._key({ tenantId, articleId, companyId, contextVersion, inputFingerprint });
     const existing = this.decisionsByKey.get(key);
     if (existing) return cloneForRead(existing);
 
     const decision = {
       decisionId: this.uuid(),
+      tenantId,
       articleId,
       companyId,
       contextVersion,
@@ -52,8 +53,8 @@ class InMemoryRelevanceDecisionStore {
     return [...this.decisionsByKey.values()].map(cloneForRead);
   }
 
-  _key({ articleId, companyId, contextVersion, inputFingerprint }) {
-    return `${articleId}|${companyId}|${contextVersion}|${inputFingerprint}`;
+  _key({ tenantId = null, articleId, companyId, contextVersion, inputFingerprint }) {
+    return `${tenantId ? `${tenantId}|` : ""}${articleId}|${companyId}|${contextVersion}|${inputFingerprint}`;
   }
 }
 

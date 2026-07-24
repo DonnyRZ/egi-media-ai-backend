@@ -23,9 +23,9 @@ class IssueMatchService {
 
   async match({ tenantId, companyId, relevanceDecisionId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const relevanceDecision = this.decisionStore.getById(relevanceDecisionId);
+    const relevanceDecision = await this.decisionStore.getById(relevanceDecisionId);
     this._validateRelevanceDecision(relevanceDecision, companyId);
-    const existing = this.matchDecisionStore.get({ tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION });
+    const existing = await this.matchDecisionStore.get({ tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION });
     if (existing) return { match: existing, relevanceDecision, reused: true };
 
     const source = await this.cmsSourceGate.requirePublishedArticle({
@@ -36,7 +36,7 @@ class IssueMatchService {
       throw new AiConfigurationError("T04 refuses to match a stale T02 article snapshot");
     }
 
-    const candidates = this.issueCandidateStore.listActive({ tenantId, companyId });
+    const candidates = await this.issueCandidateStore.listActive({ tenantId, companyId });
     this._validateCandidates(candidates, { tenantId, companyId });
     const candidateIssueIds = new Set(candidates.map((candidate) => candidate.issueId));
     const execution = await this.promptExecutionService.executeActive({
@@ -45,9 +45,10 @@ class IssueMatchService {
       model: "nano",
       input: buildT04Input({ tenantId, companyId, decision: relevanceDecision, source, candidates }),
       outputSchema: T04_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT04Output(data, { candidateIssueIds }),
     });
-    const match = this.matchDecisionStore.create({
+    const match = await this.matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION,
       output: execution.data, provenance: execution.provenance,
     });

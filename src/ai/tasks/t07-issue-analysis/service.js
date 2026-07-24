@@ -19,25 +19,33 @@ class IssueAnalysisService {
 
   async analyze({ tenantId, companyId, issueId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !ACTIVE_STATUSES.has(issue.status)) throw new AiConfigurationError("T07 requires an active issue in the same tenant and company");
-    const context = await this.getEffectiveContext(companyId);
+    const context = await this.getEffectiveContext(companyId, tenantId);
     if (!context || context.companyId !== companyId || context.status !== "effective" || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T07 requires an effective Company Context for the same company");
     }
-    const linkedArticles = this.issueStore.listArticles({ issueId });
+    const linkedArticles = await this.issueStore.listArticles({ tenantId, companyId, issueId });
+    // The scoped read is authoritative for the prompt, while the unscoped
+    // integrity check detects a corrupted relation that silently disappeared
+    // from the requested tenant/company view.
+    const allLinkedArticles = await this.issueStore.listArticles({ issueId });
+    if (!Array.isArray(allLinkedArticles) || allLinkedArticles.length !== linkedArticles.length) {
+      throw new AiConfigurationError("T07 refuses incomplete or cross-scope linked issue evidence");
+    }
     this._validateLinkedArticles(linkedArticles, { tenantId, companyId, issueId });
     const evidence = await Promise.all(linkedArticles.map((linked) => this._loadEvidence(linked)));
     const inputFingerprint = fingerprint({ issue, context, evidence });
-    const existing = this.analysisStore.get({ tenantId, companyId, issueId, inputFingerprint, promptVersion: T07_PROMPT_VERSION });
+    const existing = await this.analysisStore.get({ tenantId, companyId, issueId, inputFingerprint, promptVersion: T07_PROMPT_VERSION });
     if (existing) return { analysis: existing, reused: true };
     const allowedArticleIds = new Set(evidence.map((item) => item.sourceArticleId));
     const execution = await this.promptExecutionService.executeActive({
       promptId: T07_PROMPT_ID, promptVersion: T07_PROMPT_VERSION, model: "mini",
       input: buildT07Input({ tenantId, companyId, issue, context, evidence }), outputSchema: T07_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT07Output(data, { allowedArticleIds }),
     });
-    const analysis = this.analysisStore.create({
+    const analysis = await this.analysisStore.create({
       tenantId, companyId, issueId, contextVersion: context.version, inputFingerprint, promptVersion: T07_PROMPT_VERSION,
       analysis: execution.data, evidence, provenance: execution.provenance,
     });

@@ -7,20 +7,20 @@ class InMemoryEffectiveCompanyContextStore {
     this.contextsByCompany = new Map();
   }
 
-  getEffective(companyId) {
-    const contexts = this.contextsByCompany.get(companyId) || [];
+  getEffective(companyId, tenantId = null) {
+    const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || this.contextsByCompany.get(scopeKey(null, companyId)) || (tenantId == null ? [...this.contextsByCompany.entries()].find(([key]) => key.endsWith(`:${companyId}`))?.[1] : null) || [];
     const effective = contexts.find((context) => context.status === "effective");
     return effective ? cloneForRead(effective) : null;
   }
 
-  getVersion(companyId, version) {
-    const contexts = this.contextsByCompany.get(companyId) || [];
+  getVersion(companyId, version, tenantId = null) {
+    const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || this.contextsByCompany.get(scopeKey(null, companyId)) || (tenantId == null ? [...this.contextsByCompany.entries()].find(([key]) => key.endsWith(`:${companyId}`))?.[1] : null) || [];
     const context = contexts.find((item) => item.version === version);
     return context ? cloneForRead(context) : null;
   }
 
-  activate({ companyId, fields, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
-    const contexts = this.contextsByCompany.get(companyId) || [];
+  activate({ tenantId = null, companyId, fields, fieldSources = [], missingFields = [], source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
+    const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || [];
     const nextVersion = contexts.length + 1;
     if (expectedNextVersion !== undefined && expectedNextVersion !== nextVersion) {
       return { conflict: { expectedNextVersion, actualNextVersion: nextVersion } };
@@ -35,19 +35,22 @@ class InMemoryEffectiveCompanyContextStore {
     const now = this._timestamp();
     const context = {
       contextId: this.uuid(),
+      tenantId,
       companyId,
       version: nextVersion,
       status: "effective",
       source,
       draftId,
       fields: structuredClone(fields),
+      fieldSources: structuredClone(fieldSources),
+      missingFields: structuredClone(missingFields),
       changeReason,
       updatedBy: actorId,
       createdAt: now,
       updatedAt: now,
     };
     contexts.push(context);
-    this.contextsByCompany.set(companyId, contexts);
+    this.contextsByCompany.set(scopeKey(tenantId, companyId), contexts);
     return { context: cloneForRead(context) };
   }
 
@@ -55,6 +58,8 @@ class InMemoryEffectiveCompanyContextStore {
     return new Date(this.now()).toISOString();
   }
 }
+
+function scopeKey(tenantId, companyId) { return `${tenantId || "*"}:${companyId}`; }
 
 function cloneForRead(value) {
   return deepFreeze(structuredClone(value));

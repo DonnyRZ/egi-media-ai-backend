@@ -46,6 +46,7 @@ function sanitizeSources({ sources, limits }) {
       sourceLocator: source.sourceLocator,
       sourceType: source.sourceType,
       text,
+      metadata: source.metadata && typeof source.metadata === "object" ? Object.freeze({ ...source.metadata }) : undefined,
       fingerprint: createHash("sha256").update(text).digest("hex"),
     });
   });

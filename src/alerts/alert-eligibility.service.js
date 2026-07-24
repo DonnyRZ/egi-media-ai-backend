@@ -15,25 +15,25 @@ class AlertEligibilityService {
 
   async evaluate({ tenantId, companyId, issueId, developmentId, recipientId }) {
     await this._authorizeCompany({ tenantId, companyId });
-    const issue = this.issueStore.getIssue({ tenantId, companyId, issueId });
-    const development = this.issueStore.getDevelopment({ tenantId, companyId, developmentId });
+    const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
+    const development = await this.issueStore.getDevelopment({ tenantId, companyId, developmentId });
     if (!issue || !development || development.issueId !== issueId || !ACTIVE_STATUSES.has(issue.status)) {
       throw new AlertEligibilityError("Alert eligibility requires an active issue and its scoped development");
     }
-    const preference = this.preferenceStore.get({ tenantId, companyId, recipientId });
+    const preference = await this.preferenceStore.get({ tenantId, companyId, recipientId });
     if (!isValidPreference(preference)) throw new AlertEligibilityError("Alert eligibility requires a valid recipient preference in the same tenant and company");
-    const base = this._validateCurrentPriority({ issue, tenantId, companyId });
+    const base = await this._validateCurrentPriority({ issue, tenantId, companyId });
     const candidate = this._selectChannel({ issue, development, preference, priorityDecision: base.priorityDecision });
     const dedupeKey = createDedupeKey({ tenantId, companyId, issueId, developmentId, recipientId, channel: candidate.channel });
-    if (candidate.channel !== CHANNELS.NONE && this.eventStore.findEligibleByDedupeKey(dedupeKey)) {
+    if (candidate.channel !== CHANNELS.NONE && await this.eventStore.findEligibleByDedupeKey(dedupeKey)) {
       return this._persist({ tenantId, companyId, issueId, developmentId, recipientId, channel: CHANNELS.NONE, status: "suppressed", reasonCode: "duplicate", dedupeKey });
     }
     if (candidate.channel !== CHANNELS.NONE && isWithinQuietHours({ now: this.now(), timezone: preference.timezone, quietHours: preference.quietHours })) {
       return this._persist({ tenantId, companyId, issueId, developmentId, recipientId, channel: CHANNELS.NONE, status: "suppressed", reasonCode: "quiet_hours", dedupeKey });
     }
     if (candidate.channel === CHANNELS.DIRECT) {
-      const readiness = this.issueStore.getAlertContentReadiness({ tenantId, companyId, issueId });
-      const reason = this.reasonStore.get({ priorityDecisionId: base.priorityDecision.priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
+      const readiness = await this.issueStore.getAlertContentReadiness({ tenantId, companyId, issueId });
+      const reason = await this.reasonStore.get({ priorityDecisionId: base.priorityDecision.priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
       if (!readiness?.contentReady || !reason) {
         return this._persist({ tenantId, companyId, issueId, developmentId, recipientId, channel: CHANNELS.NONE, status: "suppressed", reasonCode: "direct_content_incomplete", dedupeKey });
       }
@@ -41,12 +41,12 @@ class AlertEligibilityService {
     return this._persist({ tenantId, companyId, issueId, developmentId, recipientId, channel: candidate.channel, status: candidate.status, reasonCode: candidate.reasonCode, dedupeKey });
   }
 
-  _validateCurrentPriority({ issue, tenantId, companyId }) {
-    const analysis = this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
+  async _validateCurrentPriority({ issue, tenantId, companyId }) {
+    const analysis = await this.analysisStore.getCurrent({ tenantId, companyId, issueId: issue.issueId });
     if (!analysis || analysis.analysisId !== issue.currentPriorityAnalysisId || analysis.status !== "current" || !analysis.gate) {
       throw new AlertEligibilityError("Alert eligibility requires a current citation-gated analysis");
     }
-    const priorityDecision = this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
+    const priorityDecision = await this.priorityStore.get({ tenantId, companyId, issueId: issue.issueId, analysisId: analysis.analysisId, promptVersion: T09_PROMPT_VERSION });
     if (!priorityDecision || priorityDecision.priorityDecisionId !== issue.currentPriorityDecisionId || priorityDecision.priority !== issue.currentPriority) {
       throw new AlertEligibilityError("Alert eligibility requires the current validated T09 priority");
     }
@@ -69,7 +69,7 @@ class AlertEligibilityService {
     return suppressed("priority_not_alertable");
   }
 
-  _persist(event) { return { decision: this.eventStore.create(event) }; }
+  async _persist(event) { return { decision: await this.eventStore.create(event) }; }
 
   async _authorizeCompany({ tenantId, companyId }) {
     const granted = await this.authorizeCompany({ tenantId, companyId, action: "alert.eligibility.evaluate" });

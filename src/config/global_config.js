@@ -1,5 +1,6 @@
 require("dotenv").config();
 const confidence = require("confidence");
+const { readSchedulerConfig } = require("../automation/scheduler-config");
 
 const config = {
   host: process.env.APP_HOST || "localhost",
@@ -20,6 +21,13 @@ const config = {
     miniModel: process.env.OPENAI_MINI_MODEL,
     nanoModel: process.env.OPENAI_NANO_MODEL,
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+    t01TimeoutMs: Number(process.env.OPENAI_T01_TIMEOUT_MS || 120000),
+  },
+  auth: {
+    accessTokenSecret: process.env.AUTH_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET,
+    serviceAuthSecret: process.env.AI_SERVICE_AUTH_SECRET,
+    bootstrapAdminEmail: process.env.BOOTSTRAP_ADMIN_EMAIL,
+    bootstrapAdminPassword: process.env.BOOTSTRAP_ADMIN_PASSWORD,
   },
   email: {
     transport: process.env.EMAIL_TRANSPORT || "smtp",
@@ -33,8 +41,19 @@ const config = {
     from: { address: process.env.EMAIL_FROM_ADDRESS, name: process.env.EMAIL_FROM_NAME || "EGI Media" },
     retry: { maxAttempts: Number(process.env.EMAIL_RETRY_MAX_ATTEMPTS || 3), baseDelayMs: Number(process.env.EMAIL_RETRY_BASE_DELAY_MS || 1000) },
   },
+  database: {
+    sourceUrl: process.env.SOURCE_DATABASE_URL,
+    aiUrl: process.env.AI_DATABASE_URL,
+    sourcePoolMax: Number(process.env.SOURCE_DB_POOL_MAX || 5),
+    aiPoolMax: Number(process.env.AI_DB_POOL_MAX || 10),
+    connectionTimeoutMs: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
+    idleTimeoutMs: Number(process.env.DB_IDLE_TIMEOUT_MS || 10000),
+    ssl: process.env.DB_SSL === "true",
+  },
   postgresqlUrl: process.env.POSTGRESQL_URL,
   redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
+  automation: readSchedulerConfig(process.env),
+  aiBudget: { maxRequests: Number(process.env.AI_MAX_REQUESTS_PER_WINDOW || 0), maxTokens: Number(process.env.AI_MAX_TOKENS_PER_WINDOW || 0), windowMs: Number(process.env.AI_BUDGET_WINDOW_MS || 3600000), enforced: process.env.AI_BUDGET_ENFORCED === "true" },
 };
 
 const store = new confidence.Store(config);

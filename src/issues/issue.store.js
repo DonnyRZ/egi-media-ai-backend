@@ -14,11 +14,18 @@ class InMemoryIssueStore {
     this.titleGenerationsByKey = new Map();
     this.oneLinerGenerationsByKey = new Map();
     this.currentPriorityApplicationsByKey = new Map();
+    this.completionsByKey = new Map();
   }
 
   listActive({ tenantId, companyId }) {
     return [...this.issuesById.values()]
       .filter((issue) => issue.tenantId === tenantId && issue.companyId === companyId && ACTIVE_ISSUE_STATUSES.has(issue.status))
+      .map(cloneForRead);
+  }
+
+  listScoped({ tenantId, companyId }) {
+    return [...this.issuesById.values()]
+      .filter((issue) => issue.tenantId === tenantId && issue.companyId === companyId)
       .map(cloneForRead);
   }
 
@@ -42,12 +49,16 @@ class InMemoryIssueStore {
     return mutation ? cloneForRead(mutation) : null;
   }
 
-  listArticles({ issueId }) {
-    return [...this.issueArticlesByKey.values()].filter((article) => article.issueId === issueId).map(cloneForRead);
+  listArticles({ tenantId = null, companyId = null, issueId }) {
+    return [...this.issueArticlesByKey.values()].filter((article) => article.issueId === issueId
+      && (tenantId == null || article.tenantId === tenantId)
+      && (companyId == null || article.companyId === companyId)).map(cloneForRead);
   }
 
-  listDevelopments({ issueId }) {
-    return [...this.developmentsById.values()].filter((development) => development.issueId === issueId).map(cloneForRead);
+  listDevelopments({ tenantId = null, companyId = null, issueId }) {
+    return [...this.developmentsById.values()].filter((development) => development.issueId === issueId
+      && (tenantId == null || development.tenantId === tenantId)
+      && (companyId == null || development.companyId === companyId)).map(cloneForRead);
   }
 
   getLatestDevelopment({ tenantId, companyId, issueId }) {
@@ -145,6 +156,19 @@ class InMemoryIssueStore {
     return { issue: cloneForRead(issue), reused: false };
   }
 
+  complete({ tenantId, companyId, issueId, expectedVersion, idempotencyKey }) {
+    const key = `${tenantId}|${companyId}|${issueId}|${idempotencyKey}`;
+    const prior = this.completionsByKey.get(key);
+    if (prior) return { issue: cloneForRead(prior), reused: true };
+    const issue = this.issuesById.get(issueId);
+    if (!issue || issue.tenantId !== tenantId || issue.companyId !== companyId) throw Object.assign(new Error("Issue was not found"), { code: "NOT_FOUND", statusCode: 404 });
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== issue.version) throw Object.assign(new Error("Issue version is stale"), { code: "VERSION_CONFLICT", statusCode: 409 });
+    if (issue.status === "selesai") { this.completionsByKey.set(key, issue); return { issue: cloneForRead(issue), reused: true }; }
+    issue.status = "selesai"; issue.closedAt = new Date(this.now()).toISOString(); issue.updatedAt = issue.closedAt; issue.version += 1;
+    this.completionsByKey.set(key, issue);
+    return { issue: cloneForRead(issue), reused: false };
+  }
+
   apply({ tenantId, companyId, matchDecision, relevanceDecision }) {
     const existing = this.mutationsByMatchDecisionId.get(matchDecision.matchDecisionId);
     if (existing) return { mutation: cloneForRead(existing), reused: true };
@@ -169,7 +193,7 @@ class InMemoryIssueStore {
       issueArticleId: this.uuid(), tenantId, companyId, issueId: issue.issueId,
       sourceArticleId: relevanceDecision.source.sourceArticleId,
       locale: relevanceDecision.source.requestedLocale,
-      sourceUpdatedAt: relevanceDecision.source.updatedAt,
+      sourceUpdatedAt: relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt,
       canonicalUrl: relevanceDecision.source.canonicalUrl,
       attachedAt: now,
       relationStatus: "active",
@@ -243,7 +267,7 @@ class InMemoryIssueStore {
   }
 
   _articleKey({ issueId, relevanceDecision }) {
-    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${relevanceDecision.source.updatedAt || "unknown"}`;
+    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt || "unknown"}`;
   }
 
   _timestamp() {

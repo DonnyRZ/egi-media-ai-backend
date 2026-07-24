@@ -14,6 +14,7 @@ const t09PriorityEnum = require("./tasks/t09-priority-enum");
 const t10PriorityReason = require("./tasks/t10-priority-reason");
 const t12DirectBlurbs = require("./tasks/t12-direct-blurbs");
 const t13ReportNarrative = require("./tasks/t13-report-narrative");
+const t14ConstrainedRewrite = require("./tasks/t14-constrained-rewrite");
 const { createCmsSourceGate } = require("../cms");
 const issueMutation = require("../issues");
 const analysisGate = require("../analysis");
@@ -21,6 +22,10 @@ const dashboard = require("../dashboard");
 const alerts = require("../alerts");
 const delivery = require("../delivery");
 const reports = require("../reports");
+const { AiBudgetGate } = require("../automation/ai-budget");
+const { createLogger } = require("../observability");
+const sharedBudgetGate = new AiBudgetGate(config.get("/aiBudget"));
+const aiLogger = createLogger({ service: `${process.env.SERVICE_NAME || "egi-media-ai-backend"}.ai` });
 
 function createAiTaskKernel() {
   const openaiConfig = config.get("/openai");
@@ -30,15 +35,20 @@ function createAiTaskKernel() {
     openaiClient,
     openaiConfig,
     defaultTimeoutMs: openaiConfig.timeoutMs,
+    budgetGate: sharedBudgetGate,
+    logger: aiLogger,
   });
 }
 
-function createT01CompanyContextDraftRuntime({ authorizeCompany } = {}) {
+function createT01CompanyContextDraftRuntime({ authorizeCompany, draftStore, promptRegistry, runStore } = {}) {
   const openaiConfig = config.get("/openai");
   return t01CompanyContextDraft.createT01CompanyContextDraftRuntime({
     aiTaskKernel: createAiTaskKernel(),
     openaiConfig,
     authorizeCompany,
+    draftStore,
+    promptRegistry,
+    runStore,
   });
 }
 
@@ -60,6 +70,7 @@ module.exports = {
   t10PriorityReason,
   t12DirectBlurbs,
   t13ReportNarrative,
+  t14ConstrainedRewrite,
   createT01CompanyContextDraftRuntime,
   createCmsSourceGate,
   issueMutation,
