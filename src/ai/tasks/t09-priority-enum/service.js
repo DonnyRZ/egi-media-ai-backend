@@ -26,7 +26,7 @@ class IssuePriorityEnumService {
     }
     const latestDevelopment = await this.issueStore.getLatestDevelopment({ tenantId, companyId, issueId });
     if (!latestDevelopment) throw new AiConfigurationError("T09 requires a valid issue development");
-    const context = await this.getEffectiveContext(companyId);
+    const context = await this.getEffectiveContext(companyId, tenantId);
     if (!context || context.companyId !== companyId || context.status !== "effective" || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T09 requires an effective Company Context for the same company");
     }
@@ -38,6 +38,7 @@ class IssuePriorityEnumService {
       model: "nano",
       input: buildT09Input({ tenantId, companyId, issue, analysis, context, latestDevelopment }),
       outputSchema: T09_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT09Output,
     });
     const priority = await this.priorityStore.create({

@@ -18,11 +18,11 @@ class CitationAnalysisGate {
     }
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId: analysis.issueId });
     if (!issue) throw new AiConfigurationError("Analysis gate requires its scoped issue");
-    const linked = await this.issueStore.listArticles({ issueId: analysis.issueId });
+    const linked = await this.issueStore.listArticles({ tenantId, companyId, issueId: analysis.issueId });
     this._validateEvidenceSet({ linked, evidence: analysis.evidence, tenantId, companyId, issueId: analysis.issueId });
     await Promise.all(analysis.evidence.map((evidence) => this._validateFreshCanonicalEvidence(evidence)));
     this._validateCitations({ analysis, evidence: analysis.evidence });
-    const labels = this.labelStore.get({ analysisId, promptVersion: T08_PROMPT_VERSION });
+    const labels = await this.labelStore.get({ analysisId, promptVersion: T08_PROMPT_VERSION });
     this._validateLabels({ labels, analysis, tenantId, companyId });
     return this.analysisStore.promoteCurrent({
       tenantId, companyId, analysisId,
@@ -44,9 +44,11 @@ class CitationAnalysisGate {
   }
 
   async _validateFreshCanonicalEvidence(evidence) {
-    const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: evidence.sourceArticleId, locale: evidence.locale });
-    if (source.sourceArticleId !== evidence.sourceArticleId || source.requestedLocale !== evidence.locale
-      || source.canonicalUrl !== evidence.canonicalUrl || source.article.updatedAt !== evidence.updatedAt) {
+    const locale = evidence.locale || evidence.requestedLocale;
+    const updatedAt = evidence.updatedAt || evidence.sourceUpdatedAt || evidence.article?.updatedAt;
+    const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: evidence.sourceArticleId, locale });
+    if (source.sourceArticleId !== evidence.sourceArticleId || source.requestedLocale !== locale
+      || source.canonicalUrl !== evidence.canonicalUrl || source.article.updatedAt !== updatedAt) {
       throw new AiConfigurationError("Analysis gate rejected stale source or non-canonical citation evidence");
     }
   }
@@ -77,8 +79,8 @@ class CitationAnalysisGate {
 }
 
 function evidenceKey(item) {
-  const locale = item.locale;
-  const updatedAt = item.updatedAt || item.sourceUpdatedAt;
+  const locale = item.locale || item.requestedLocale;
+  const updatedAt = item.updatedAt || item.sourceUpdatedAt || item.article?.updatedAt;
   return `${item.sourceArticleId}|${locale}|${item.canonicalUrl}|${updatedAt || ""}`;
 }
 function denyByDefault() { throw new AiConfigurationError("Analysis gate requires a tenant/company authorization guard"); }

@@ -16,6 +16,14 @@ class PostgresIssueStore extends InMemoryIssueStore {
   async _hydrate() {
     const issues = await this.db.query("SELECT * FROM ai.issues");
     for (const row of issues.rows) this.seed(mapIssue(row));
+    const priorities = await this.db.query("SELECT DISTINCT ON (tenant_id,company_id,issue_id) tenant_id,company_id,issue_id,id,analysis_id,priority FROM ai.issue_priorities ORDER BY tenant_id,company_id,issue_id,effective_at DESC");
+    for (const row of priorities.rows) {
+      const issue = this.issuesById.get(row.issue_id);
+      if (!issue || issue.tenantId !== row.tenant_id || issue.companyId !== row.company_id) continue;
+      issue.currentPriority = issue.currentPriority || row.priority;
+      issue.currentPriorityAnalysisId = issue.currentPriorityAnalysisId || row.analysis_id;
+      issue.currentPriorityDecisionId = issue.currentPriorityDecisionId || row.id;
+    }
     const articles = await this.db.query("SELECT * FROM ai.issue_articles");
     for (const row of articles.rows) {
       const article = mapArticle(row);
@@ -35,7 +43,22 @@ class PostgresIssueStore extends InMemoryIssueStore {
   async getArticleForDevelopment(args) { await this.ready; return super.getArticleForDevelopment(args); }
   async getGeneratedTitle(args) { await this.ready; return super.getGeneratedTitle(args); }
   async getGeneratedOneLiner(args) { await this.ready; return super.getGeneratedOneLiner(args); }
-  async getAlertContentReadiness(args) { await this.ready; return super.getAlertContentReadiness(args); }
+  async getAlertContentReadiness({ tenantId, companyId, issueId }) {
+    await this.ready;
+    const issue = super.getIssue({ tenantId, companyId, issueId });
+    if (!issue) return null;
+    const missingFields = [];
+    if (!(typeof issue.title === "string" && issue.title.trim())) missingFields.push("title");
+    if (!(typeof issue.oneLiner === "string" && issue.oneLiner.trim())) missingFields.push("one_liner");
+    return { contentReady: missingFields.length === 0, missingFields };
+  }
+  async getArticleForDevelopment({ tenantId, companyId, developmentId }) {
+    await this.ready;
+    const development = super.getDevelopment({ tenantId, companyId, developmentId });
+    if (!development || typeof development.issueArticleId !== "string") return null;
+    const article = [...this.issueArticlesByKey.values()].find((item) => item.issueArticleId === development.issueArticleId);
+    return article && article.tenantId === tenantId && article.companyId === companyId ? structuredClone(article) : null;
+  }
   async getMutation(id) { await this.ready; return super.getMutation(id); }
 
   async apply(args) {

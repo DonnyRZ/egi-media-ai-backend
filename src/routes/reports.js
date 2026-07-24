@@ -6,7 +6,12 @@ const { validateReportPack } = require("../ai/tasks/t13-report-narrative/service
 
 function createReportRouter({ getReportRuntime } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "report.read" });
+  const pipelineScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
+  const submitScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "report.review.submit", humanOnly: true });
+  const approveScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "report.approve", humanOnly: true });
+  const shareScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "report.share", humanOnly: true });
+  const rewriteScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "report.rewrite", humanOnly: true });
   router.get("/api/v1/reports", scope, asyncHandler(async (req, res) => {
     const result = await getReportRuntime().draftStore.list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 20, 100), reportType: req.query.report_type || null, reviewStatus: req.query.review_status || null });
     return success(res, { items: result.items.map(serializeDraft), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
@@ -17,7 +22,7 @@ function createReportRouter({ getReportRuntime } = {}) {
     const narrative = await getReportRuntime().narrativeStore?.get({ reportId: report.reportId, promptVersion: "1.0.0" }) || null;
     return success(res, { report: serializeDraft(report), narrative: narrative ? serializeNarrative(narrative) : null, activity: report.activity || [] }, req);
   }));
-  router.post("/api/v1/internal/reports/drafts", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/reports/drafts", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const payload = normalizeDraftPayload(req.body);
     const draft = buildDraftCandidate(req.authContext, payload);
     validateReportPack(draft);
@@ -26,25 +31,25 @@ function createReportRouter({ getReportRuntime } = {}) {
       : await getReportRuntime().draftStore.createDraft(draft);
     return success(res, serializeDraft(stored), req);
   }));
-  router.post("/api/v1/internal/reports/:reportId/narrative", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/reports/:reportId/narrative", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getReportRuntime().narrativeService.generate({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, reportId: req.params.reportId });
     return success(res, { report: serializeDraft(result.report), narrative: serializeNarrative(result.narrative), reused: result.reused }, req);
   }));
-  router.post("/api/v1/reports/:reportId/review", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/reports/:reportId/review", submitScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.body?.action !== "submit") throw validationError("Only review submission is available in this lifecycle stage");
     const result = await getReportRuntime().lifecycleService.submitForReview({ ...actorScope(req), reportId: req.params.reportId, expectedVersion: readVersion(req), note: nullableNote(req.body?.comment) });
     return success(res, serializeDraft(result), req);
   }));
-  router.post("/api/v1/reports/:reportId/approve", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/reports/:reportId/approve", approveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getReportRuntime().lifecycleService.approve({ ...actorScope(req), reportId: req.params.reportId, expectedVersion: readVersion(req), note: nullableNote(req.body?.note) });
     return success(res, serializeDraft(result), req);
   }));
-  router.post("/api/v1/reports/:reportId/share", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/reports/:reportId/share", shareScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (!Array.isArray(req.body?.recipient_refs) || req.body.recipient_refs.length < 1 || req.body.recipient_refs.length > 100) throw validationError("recipient_refs must contain 1 to 100 references");
     const result = await getReportRuntime().lifecycleService.share({ ...actorScope(req), reportId: req.params.reportId, expectedVersion: readVersion(req), shareTarget: { recipientRefs: req.body.recipient_refs }, note: nullableNote(req.body?.message) });
     return success(res, serializeDraft(result), req, 202);
   }));
-  router.post("/api/v1/reports/:reportId/narrative/:reportNarrativeId/rewrite", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/reports/:reportId/narrative/:reportNarrativeId/rewrite", rewriteScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.authContext.actor?.actorType !== "human") throw Object.assign(new Error("Constrained rewrite requires a human actor"), { code: "FORBIDDEN", statusCode: 403 });
     if (typeof req.body?.allowed_span_id !== "string" || !req.body.allowed_span_id.trim() || typeof req.body?.instruction !== "string" || !req.body.instruction.trim() || req.body.instruction.length > 1000) throw validationError("A bounded human rewrite instruction and allowed span are required");
     const result = await getReportRuntime().rewriteService.rewrite({ ...actorScope(req), reportId: req.params.reportId, reportNarrativeId: req.params.reportNarrativeId, expectedVersion: readVersion(req), allowedSpanId: req.body.allowed_span_id, humanInstruction: req.body.instruction });

@@ -26,6 +26,7 @@ class ConstrainedRewriteService {
     const execution = await this.promptExecutionService.executeActive({
       promptId: T14_PROMPT_ID, promptVersion: T14_PROMPT_VERSION, model: "nano",
       input: buildT14Input({ tenantId, companyId, report, narrative, span, humanInstruction, sourceClaims }), outputSchema: T14_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT14Output,
     });
     const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: execution.provenance });

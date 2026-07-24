@@ -4,7 +4,9 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 
 function createAlertRouter({ getAlertRuntime, getT12Service, getEmailDeliveryService } = {}) {
-  const router = express.Router(); const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const router = express.Router(); const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "alert.read" });
+  const preferenceScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "alert.preference.manage", humanOnly: true });
+  const pipelineScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
   router.get("/api/v1/companies/:companyId/alert-preference", scope, asyncHandler(async (req, res) => {
     if (req.params.companyId !== req.authContext.companyId) throw scopeError();
     const recipientId = req.query.recipient_id || req.authContext.actor.actorId;
@@ -23,24 +25,24 @@ function createAlertRouter({ getAlertRuntime, getT12Service, getEmailDeliverySer
     if (!event) throw Object.assign(new Error("Inbox email was not found"), { code: "NOT_FOUND", statusCode: 404 });
     return success(res, serializeInboxItem(event), req);
   }));
-  router.put("/api/v1/companies/:companyId/alert-preference", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.put("/api/v1/companies/:companyId/alert-preference", preferenceScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.params.companyId !== req.authContext.companyId) throw scopeError();
     validatePreferencePayload(req.body);
     const runtime = getAlertRuntime();
     const preference = await runtime.preferenceStore.upsert({ tenantId: req.authContext.tenantId, companyId: req.params.companyId, recipientId: req.body?.recipient_id, directHighEnabled: req.body?.direct_high_enabled, dailyDigestEnabled: req.body?.daily_digest_enabled, timezone: req.body?.timezone, quietHours: req.body?.quiet_hours ?? null });
     return success(res, serializePreference(preference), req);
   }));
-  router.post("/api/v1/internal/alerts/eligibility", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/alerts/eligibility", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.body?.tenant_id !== req.authContext.tenantId || req.body?.company_id !== req.authContext.companyId) throw scopeError();
     const decision = await getAlertRuntime().service.evaluate({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: req.body?.issue_id, developmentId: req.body?.development_id, recipientId: req.body?.recipient_id });
     return success(res, { decision: serializeDecision(decision.decision), email_send: false }, req);
   }));
-  router.post("/api/v1/internal/alerts/:alertEventId/direct-blurb", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/alerts/:alertEventId/direct-blurb", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     rejectModelBoundaryFields(req.body);
     const result = await getT12Service().generate({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, alertEventId: req.params.alertEventId });
     return success(res, { blurb: serializeBlurb(result.blurb), reused: result.reused, email_send: false }, req);
   }));
-  router.post("/api/v1/internal/alerts/:alertEventId/deliver", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/alerts/:alertEventId/deliver", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     rejectModelBoundaryFields(req.body);
     const result = await getEmailDeliveryService().deliver({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, alertEventId: req.params.alertEventId });
     return success(res, { delivery: serializeDelivery(result.delivery), reused: result.reused, email_send: result.delivery.status === "sent" }, req);

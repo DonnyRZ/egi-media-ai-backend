@@ -2,6 +2,7 @@ const config = require("../config/global_config");
 const { validateEnvironment } = require("../config/environment");
 const { createPool } = require("./pool");
 const { withTransaction } = require("./transaction");
+const { createLogger } = require("../observability");
 
 const MUTATION_PATTERN = /\b(insert|update|delete|merge|truncate|alter|create|drop|grant|revoke|comment|copy|refresh)\b/i;
 
@@ -21,9 +22,10 @@ function createSourceDatabase(options = {}) {
     idleTimeoutMs: db.idleTimeoutMs, ssl: db.ssl,
     applicationName: "egi-media-ai-source-readonly",
   });
+  const logger = options.logger || createLogger({ service: "egi-media-ai-backend.source-database" });
   return {
     pool,
-    async query(sql, values = []) { assertReadOnlyQuery(sql); return pool.query(sql, values); },
+    async query(sql, values = []) { assertReadOnlyQuery(sql); try { return await pool.query(sql, values); } catch (error) { logger.error("database_query_failed", { database: "source", operation: operationName(sql), parameterCount: values.length, error }); throw error; } },
     async transaction(work) {
       return withTransaction(pool, async (client) => {
         const readOnlyClient = { query: (sql, values = []) => { assertReadOnlyQuery(sql); return client.query(sql, values); } };
@@ -34,5 +36,7 @@ function createSourceDatabase(options = {}) {
     async close() { await pool.end(); },
   };
 }
+
+function operationName(sql) { return String(sql || "").trim().split(/\s+/).slice(0, 2).join(" ").toUpperCase(); }
 
 module.exports = { createSourceDatabase, assertReadOnlyQuery };

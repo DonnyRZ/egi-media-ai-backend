@@ -3,15 +3,16 @@ const { T12_PROMPT_VERSION } = require("../ai/tasks/t12-direct-blurbs/definition
 const { renderDirectAlertTemplate } = require("./direct-alert.template");
 
 class EmailDeliveryService {
-  constructor({ eventStore, blurbStore, issueStore, analysisStore, recipientStore, deliveryStore, provider, emailConfig, authorizeCompany = denyByDefault, sleep = defaultSleep }) {
+  constructor({ eventStore, blurbStore, issueStore, analysisStore, recipientStore, deliveryStore, provider, emailConfig, authorizeCompany = denyByDefault, sleep = defaultSleep, logger = null }) {
     if (!eventStore?.get || !eventStore?.markDeliveryBlocked) throw configError("Email delivery requires alert event persistence");
     if (!blurbStore?.get || !issueStore?.getIssue || !issueStore?.getDevelopment || !issueStore?.getArticleForDevelopment || !analysisStore?.getCurrent) throw configError("Email delivery requires validated direct-alert content reads");
     if (!recipientStore?.get || !deliveryStore?.getByAlertEventId || !deliveryStore?.create || !deliveryStore?.recordAttempt || !deliveryStore?.markSent || !deliveryStore?.markFailed) throw configError("Email delivery requires recipient and delivery audit persistence");
     if (!provider?.send || !emailConfig?.retry) throw configError("Email delivery requires a provider and retry configuration");
-    Object.assign(this, { eventStore, blurbStore, issueStore, analysisStore, recipientStore, deliveryStore, provider, emailConfig, authorizeCompany, sleep });
+    Object.assign(this, { eventStore, blurbStore, issueStore, analysisStore, recipientStore, deliveryStore, provider, emailConfig, authorizeCompany, sleep, logger: logger || { info() {}, warn() {}, error() {} } });
   }
 
   async deliver({ tenantId, companyId, alertEventId }) {
+    this.logger.info("email_delivery_started", { tenantId, companyId, alertEventId });
     await this._authorizeCompany({ tenantId, companyId });
     const event = await this.eventStore.get({ tenantId, companyId, alertEventId });
     if (!event || event.channel !== "langsung" || event.status !== "eligible") throw configError("Email delivery requires an eligible direct alert event in the same tenant and company");
@@ -20,7 +21,7 @@ class EmailDeliveryService {
     catch (error) { await this.eventStore.markDeliveryBlocked({ tenantId, companyId, alertEventId, reasonCode: "delivery_required_field_missing" }); throw error; }
 
     let delivery = await this.deliveryStore.getByAlertEventId({ tenantId, companyId, alertEventId });
-    if (delivery?.status === "sent") return { delivery, reused: true };
+    if (delivery?.status === "sent") { this.logger.info("email_delivery_reused", { tenantId, companyId, alertEventId, deliveryId: delivery.deliveryId }); return { delivery, reused: true }; }
     if (!delivery) delivery = await this.deliveryStore.create({
       tenantId, companyId, alertEventId, recipientId: prepared.recipient.recipientId, recipientEmail: prepared.recipient.email,
       templateVersion: prepared.template.templateVersion, subject: prepared.template.subject, idempotencyKey: deliveryKey({ tenantId, companyId, alertEventId }),
@@ -34,14 +35,17 @@ class EmailDeliveryService {
         });
         await this.deliveryStore.recordAttempt({ tenantId, companyId, deliveryId: delivery.deliveryId, attempt, outcome: "sent", providerMessageId: result?.providerMessageId || null });
         delivery = await this.deliveryStore.markSent({ tenantId, companyId, deliveryId: delivery.deliveryId, providerMessageId: result?.providerMessageId || null });
+        this.logger.info("email_delivery_succeeded", { tenantId, companyId, alertEventId, deliveryId: delivery.deliveryId, attempt });
         return { delivery, reused: false };
       } catch (error) {
         const retryable = isRetryableProviderError(error);
         await this.deliveryStore.recordAttempt({ tenantId, companyId, deliveryId: delivery.deliveryId, attempt, outcome: retryable && attempt < maxAttempts ? "retrying" : "failed", errorCode: providerErrorCode(error) });
         if (!retryable || attempt === maxAttempts) {
           delivery = await this.deliveryStore.markFailed({ tenantId, companyId, deliveryId: delivery.deliveryId, errorCode: providerErrorCode(error) });
+          this.logger.error("email_delivery_failed", { tenantId, companyId, alertEventId, deliveryId: delivery.deliveryId, attempt, errorCode: providerErrorCode(error), retryable: false, error });
           return { delivery, reused: false };
         }
+        this.logger.warn("email_delivery_retry_scheduled", { tenantId, companyId, alertEventId, deliveryId: delivery.deliveryId, attempt, errorCode: providerErrorCode(error), retryable: true, backoffMs: backoffMs({ baseDelayMs: this.emailConfig.retry.baseDelayMs, attempt }) });
         await this.sleep(backoffMs({ baseDelayMs: this.emailConfig.retry.baseDelayMs, attempt }));
       }
     }

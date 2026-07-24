@@ -27,7 +27,7 @@ class IssueOneLinerService {
     if (!development) throw new AiConfigurationError("T06 requires a valid issue development");
     const existing = await this.issueStore.getGeneratedOneLiner({ issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION });
     if (existing) return { oneLiner: existing, issue, reused: true };
-    if (typeof issue.oneLiner === "string" && issue.oneLiner.trim()) throw new AiConfigurationError("T06 runs only for an issue that needs a one-liner");
+    if (typeof issue.oneLiner === "string" && issue.oneLiner.trim()) return { oneLiner: { oneLiner: issue.oneLiner, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION }, issue, reused: true };
     const matchDecision = await this.matchDecisionStore.getById(development.matchDecisionId);
     if (!matchDecision || matchDecision.tenantId !== tenantId || matchDecision.companyId !== companyId) {
       throw new AiConfigurationError("T06 requires the scoped T04 decision that created the development");
@@ -45,6 +45,7 @@ class IssueOneLinerService {
       promptId: T06_PROMPT_ID, promptVersion: T06_PROMPT_VERSION, model: "nano",
       input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source }),
       outputSchema: T06_OUTPUT_SCHEMA, validateResult: validateT06Output,
+      budgetScope: { tenantId, companyId },
     });
     const applied = await this.issueStore.applyGeneratedOneLiner({
       tenantId, companyId, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION,

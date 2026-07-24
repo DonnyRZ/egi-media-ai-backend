@@ -25,7 +25,7 @@ class IssueMatchService {
     await this._authorizeCompany({ tenantId, companyId });
     const relevanceDecision = await this.decisionStore.getById(relevanceDecisionId);
     this._validateRelevanceDecision(relevanceDecision, companyId);
-    const existing = this.matchDecisionStore.get({ tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION });
+    const existing = await this.matchDecisionStore.get({ tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION });
     if (existing) return { match: existing, relevanceDecision, reused: true };
 
     const source = await this.cmsSourceGate.requirePublishedArticle({
@@ -45,9 +45,10 @@ class IssueMatchService {
       model: "nano",
       input: buildT04Input({ tenantId, companyId, decision: relevanceDecision, source, candidates }),
       outputSchema: T04_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT04Output(data, { candidateIssueIds }),
     });
-    const match = this.matchDecisionStore.create({
+    const match = await this.matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION,
       output: execution.data, provenance: execution.provenance,
     });

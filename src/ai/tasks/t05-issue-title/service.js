@@ -33,7 +33,7 @@ class IssueTitleService {
     const existing = await this.issueStore.getGeneratedTitle({ issueId, developmentId: development.developmentId, promptVersion: T05_PROMPT_VERSION });
     if (existing) return { title: existing, issue, reused: true };
     if (typeof issue.title === "string" && issue.title.trim()) {
-      throw new AiConfigurationError("T05 runs only for an issue that needs a title");
+      return { title: { title: issue.title, issueId, developmentId: development.developmentId, promptVersion: T05_PROMPT_VERSION }, issue, reused: true };
     }
     const matchDecision = await this.matchDecisionStore.getById(development.matchDecisionId);
     this._validateMatchDecision(matchDecision, { tenantId, companyId, development });
@@ -51,6 +51,7 @@ class IssueTitleService {
       model: "nano",
       input: buildT05Input({ tenantId, companyId, issue, development, matchDecision, source }),
       outputSchema: T05_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT05Output,
     });
     const applied = await this.issueStore.applyGeneratedTitle({

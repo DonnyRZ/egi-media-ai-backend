@@ -24,6 +24,7 @@ class ClaimLabelService {
     const execution = await this.promptExecutionService.executeActive({
       promptId: T08_PROMPT_ID, promptVersion: T08_PROMPT_VERSION, model: "nano",
       input: buildT08Input({ tenantId, companyId, analysis }), outputSchema: T08_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT08Output(data, { claimIds }),
     });
     const labels = await this.labelStore.create({ tenantId, companyId, analysisId, issueId: analysis.issueId, promptVersion: T08_PROMPT_VERSION, labels: execution.data.labels, provenance: execution.provenance });

@@ -1,5 +1,6 @@
 require("dotenv").config();
 const confidence = require("confidence");
+const { readSchedulerConfig } = require("../automation/scheduler-config");
 
 const config = {
   host: process.env.APP_HOST || "localhost",
@@ -20,9 +21,13 @@ const config = {
     miniModel: process.env.OPENAI_MINI_MODEL,
     nanoModel: process.env.OPENAI_NANO_MODEL,
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+    t01TimeoutMs: Number(process.env.OPENAI_T01_TIMEOUT_MS || 120000),
   },
   auth: {
     accessTokenSecret: process.env.AUTH_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET,
+    serviceAuthSecret: process.env.AI_SERVICE_AUTH_SECRET,
+    bootstrapAdminEmail: process.env.BOOTSTRAP_ADMIN_EMAIL,
+    bootstrapAdminPassword: process.env.BOOTSTRAP_ADMIN_PASSWORD,
   },
   email: {
     transport: process.env.EMAIL_TRANSPORT || "smtp",
@@ -47,6 +52,8 @@ const config = {
   },
   postgresqlUrl: process.env.POSTGRESQL_URL,
   redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
+  automation: readSchedulerConfig(process.env),
+  aiBudget: { maxRequests: Number(process.env.AI_MAX_REQUESTS_PER_WINDOW || 0), maxTokens: Number(process.env.AI_MAX_TOKENS_PER_WINDOW || 0), windowMs: Number(process.env.AI_BUDGET_WINDOW_MS || 3600000), enforced: process.env.AI_BUDGET_ENFORCED === "true" },
 };
 
 const store = new confidence.Store(config);

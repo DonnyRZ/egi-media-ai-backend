@@ -14,13 +14,13 @@ class CompanyContextService {
 
   async getDraft({ actor, draftId }) {
     const draft = await this._requireDraft(draftId);
-    await this._authorize(actor, draft.companyId, "company_context.read");
+    await this._authorize(actor, draft.tenantId, draft.companyId, "company_context.read");
     return draft;
   }
 
   async editDraft({ actor, draftId, fields, reviewNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
-    await this._authorize(actor, current.companyId, "company_context.edit");
+    await this._authorize(actor, current.tenantId, current.companyId, "company_context.edit");
     this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
     const mergedFields = mergeAndValidateFields(current.result.context, fields);
@@ -35,7 +35,7 @@ class CompanyContextService {
 
   async submitForReview({ actor, draftId, reviewNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
-    await this._authorize(actor, current.companyId, "company_context.review");
+    await this._authorize(actor, current.tenantId, current.companyId, "company_context.review");
     this._assertRevision(current, expectedRevision);
     if (current.status !== "draft") {
       throw new CompanyContextConflictError("Only draft Company Context can be submitted for review", {
@@ -48,7 +48,7 @@ class CompanyContextService {
       status: "in_review",
       review: {
         ...draft.review,
-        submittedBy: actor.id,
+        submittedBy: actorId(actor),
         submittedAt: new Date().toISOString(),
         note: normalizeOptionalText(reviewNote, 1000),
       },
@@ -57,7 +57,7 @@ class CompanyContextService {
 
   async approveDraft({ actor, draftId, approvalNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
-    await this._authorize(actor, current.companyId, "company_context.approve");
+    await this._authorize(actor, current.tenantId, current.companyId, "company_context.approve");
     this._assertRevision(current, expectedRevision);
     if (current.status !== "in_review") {
       throw new CompanyContextConflictError("Only Company Context in review can be approved", {
@@ -66,10 +66,13 @@ class CompanyContextService {
     }
 
     const activation = await this.effectiveContextStore.activate({
+      tenantId: current.tenantId,
       companyId: current.companyId,
       fields: current.result.context,
+      fieldSources: current.result.field_sources || [],
+      missingFields: current.result.missing_fields || [],
       source: "ai_draft",
-      actorId: actor.id,
+      actorId: actorId(actor),
       draftId: current.draftId,
       changeReason: normalizeOptionalText(approvalNote, 1000),
     });
@@ -84,7 +87,7 @@ class CompanyContextService {
       status: "approved",
       review: {
         ...item.review,
-        approvedBy: actor.id,
+        approvedBy: actorId(actor),
         approvedAt: new Date().toISOString(),
         note: normalizeOptionalText(approvalNote, 1000) || item.review.note,
       },
@@ -93,21 +96,24 @@ class CompanyContextService {
     return { draft, effectiveContext: activation.context };
   }
 
-  async getEffectiveContext({ actor, companyId }) {
-    await this._authorize(actor, companyId, "company_context.read");
-    const context = await this.effectiveContextStore.getEffective(companyId);
+  async getEffectiveContext({ actor, tenantId = null, companyId }) {
+    await this._authorize(actor, tenantId, companyId, "company_context.read");
+    const context = await this.effectiveContextStore.getEffective(companyId, tenantId);
     if (!context) {
       throw new CompanyContextNotFoundError("No approved effective Company Context exists", { details: { companyId } });
     }
     return context;
   }
 
-  async replaceEffectiveContext({ actor, companyId, version, fields, changeReason = null }) {
-    await this._authorize(actor, companyId, "company_context.write");
+  async replaceEffectiveContext({ actor, tenantId = null, companyId, version, fields, changeReason = null }) {
+    await this._authorize(actor, tenantId, companyId, "company_context.write");
     const validatedFields = validateFullFields(fields);
     const activation = await this.effectiveContextStore.activate({
+      tenantId,
       companyId,
       fields: validatedFields,
+      fieldSources: [],
+      missingFields: [],
       source: "manual",
       actorId: actor.id,
       changeReason: normalizeOptionalText(changeReason, 1000),
@@ -146,15 +152,19 @@ class CompanyContextService {
     }
   }
 
-  async _authorize(actor, companyId, action) {
-    if (!actor?.id) {
+  async _authorize(actor, tenantId, companyId, action) {
+    if (!actorId(actor)) {
       throw new CompanyContextError("Authenticated actor is required", { code: "UNAUTHORIZED", statusCode: 401 });
     }
-    const granted = await this.authorize({ actor, companyId, action });
+    const granted = await this.authorize({ actor, tenantId, companyId, action });
     if (granted !== true) {
       throw new CompanyContextError("Company Context action was not authorized", { code: "FORBIDDEN", statusCode: 403 });
     }
   }
+}
+
+function actorId(actor) {
+  return actor?.actorId || actor?.id || actor?.sub || null;
 }
 
 function mergeAndValidateFields(currentFields, patch) {

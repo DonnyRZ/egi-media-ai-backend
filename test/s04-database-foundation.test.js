@@ -58,5 +58,12 @@ test("S04 migration file discovery is deterministic", () => {
     "0005_create_pipeline_states.sql",
     "0006_create_user_read_models.sql",
     "0007_create_company_context_drafts.sql",
+    "0008_create_saas_access_control.sql",
+    "0009_multi_tenant_lifecycle.sql",
+    "0010_multi_tenant_operability.sql",
+    "0011_scope_unique_keys.sql",
+    "0012_persistent_auth_accounts.sql",
+    "0013_company_scope_primary_key.sql",
+    "0014_company_context_upload_requests.sql",
   ]);
 });

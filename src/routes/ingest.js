@@ -4,7 +4,7 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 
 function createIngestRouter({ getIngestRuntime } = {}) {
-  const router = express.Router(); const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const router = express.Router(); const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
   router.post("/api/v1/internal/pipeline/ingest", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const mode = req.body?.mode || "poll"; const locale = req.body?.locale || "id"; const limit = req.body?.limit || 50;
     if (["content", "title", "summary", "article"].some((field) => Object.hasOwn(req.body || {}, field))) throw validationError("Ingest trigger does not accept article content; worker reads CMS");

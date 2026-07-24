@@ -6,15 +6,17 @@ const payload = (row) => row.payload_jsonb || {};
 
 class PostgresRelevanceDecisionStore extends PostgresRecordStore {
   constructor(options) { super({ ...options, table: "ai.article_relevance", mapRow: mapRelevance }); }
-  async get({ articleId, companyId, contextVersion, inputFingerprint }) {
-    const result = await this.db.query("SELECT * FROM ai.article_relevance WHERE company_id=$1 AND article_snapshot_id=$2 AND context_id=$3 AND payload_jsonb->>'inputFingerprint'=$4 LIMIT 1", [companyId, articleId, contextVersion, inputFingerprint]);
+  async get({ tenantId, articleId, companyId, contextVersion, inputFingerprint }) {
+    const result = tenantId
+      ? await this.db.query("SELECT * FROM ai.article_relevance WHERE tenant_id=$1 AND company_id=$2 AND article_snapshot_id=$3 AND context_id=$4 AND payload_jsonb->>'inputFingerprint'=$5 LIMIT 1", [tenantId, companyId, articleId, contextVersion, inputFingerprint])
+      : await this.db.query("SELECT * FROM ai.article_relevance WHERE company_id=$1 AND article_snapshot_id=$2 AND context_id=$3 AND payload_jsonb->>'inputFingerprint'=$4 LIMIT 1", [companyId, articleId, contextVersion, inputFingerprint]);
     return result.rows[0] ? mapRelevance(result.rows[0]) : null;
   }
   async getById(decisionId) { return this.findOne({ id: decisionId }); }
-  async create({ articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
-    const id = this.uuid(); const value = { decisionId:id, articleId, companyId, contextVersion, inputFingerprint, source, relevance:output.relevance, confidence:output.confidence, branch:output.relevance === "none" ? "stop" : "continue", provenance, createdAt:new Date().toISOString() };
-    const result = await this.db.query("INSERT INTO ai.article_relevance (id,tenant_id,company_id,article_snapshot_id,context_id,relevance,confidence,payload_jsonb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (company_id,article_snapshot_id,context_id) DO NOTHING RETURNING *", [id, source.tenantId || "unknown", companyId, articleId, contextVersion, output.relevance, output.confidence ?? null, json({...value, source, inputFingerprint})]);
-    return result.rows[0] ? mapRelevance(result.rows[0]) : this.get({ articleId, companyId, contextVersion, inputFingerprint });
+  async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
+    const id = this.uuid(); const value = { decisionId:id, tenantId, articleId, companyId, contextVersion, inputFingerprint, source, relevance:output.relevance, confidence:output.confidence, branch:output.relevance === "none" ? "stop" : "continue", provenance, createdAt:new Date().toISOString() };
+    const result = await this.db.query("INSERT INTO ai.article_relevance (id,tenant_id,company_id,article_snapshot_id,context_id,relevance,confidence,payload_jsonb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (tenant_id,company_id,article_snapshot_id,context_id) DO NOTHING RETURNING *", [id, tenantId, companyId, articleId, contextVersion, output.relevance, output.confidence ?? null, json({...value, source, inputFingerprint})]);
+    return result.rows[0] ? mapRelevance(result.rows[0]) : this.get({ tenantId: source.tenantId || "unknown", articleId, companyId, contextVersion, inputFingerprint });
   }
 }
 
@@ -31,6 +33,16 @@ class PostgresIssueAnalysisStore extends PostgresRecordStore {
   async getById(id) { return this.findOne({id}); }
   async getCurrent({tenantId,companyId,issueId}) { const r=await this.db.query("SELECT * FROM ai.issue_analyses WHERE tenant_id=$1 AND company_id=$2 AND issue_id=$3 AND status='current' ORDER BY valid_at DESC NULLS LAST LIMIT 1",[tenantId,companyId,issueId]); return r.rows[0]?mapAnalysis(r.rows[0]):null; }
   async create(value) { const id=this.uuid(); await this.db.query("INSERT INTO ai.issue_analyses (id,tenant_id,company_id,issue_id,input_fingerprint,prompt_version,status,analysis_jsonb,evidence_jsonb,provenance_jsonb) VALUES ($1,$2,$3,$4,$5,$6,'validated',$7::jsonb,$8::jsonb,$9::jsonb)",[id,value.tenantId,value.companyId,value.issueId,value.inputFingerprint,value.promptVersion,json(value.analysis),json(value.evidence),json(value.provenance)]); return {analysisId:id,...value,status:"validated"}; }
+  async promoteCurrent({ tenantId, companyId, analysisId, gate }) {
+    const current = await this.getById(analysisId);
+    if (!current || current.tenantId !== tenantId || current.companyId !== companyId || current.status !== "validated") {
+      throw new Error("Analysis cannot be promoted as current");
+    }
+    const validAt = gate?.checkedAt || new Date().toISOString();
+    await this.db.query("UPDATE ai.issue_analyses SET status='superseded' WHERE tenant_id=$1 AND company_id=$2 AND issue_id=$3 AND status='current' AND id<>$4", [tenantId, companyId, current.issueId, analysisId]);
+    const result = await this.db.query("UPDATE ai.issue_analyses SET status='current',valid_at=$1,provenance_jsonb=jsonb_set(COALESCE(provenance_jsonb,'{}'::jsonb),'{gate}',$2::jsonb,true) WHERE id=$3 AND tenant_id=$4 AND company_id=$5 AND status='validated' RETURNING *", [validAt, json(gate || {}), analysisId, tenantId, companyId]);
+    return result.rows[0] ? mapAnalysis(result.rows[0]) : this.getCurrent({ tenantId, companyId, issueId: current.issueId });
+  }
 }
 
 class PostgresIssuePriorityStore extends PostgresRecordStore {
@@ -68,7 +80,7 @@ class PostgresAlertPreferenceStore {
   constructor({ db }) { this.db=db; }
   async get({ tenantId, companyId, recipientId }) { const r=await this.db.query("SELECT * FROM ai.alert_preferences WHERE tenant_id=$1 AND company_id=$2 AND user_ref=$3 LIMIT 1",[tenantId,companyId,recipientId]); return r.rows[0]?mapPreference(r.rows[0]):null; }
   async getAny({ tenantId, companyId }) { const r=await this.db.query("SELECT * FROM ai.alert_preferences WHERE tenant_id=$1 AND company_id=$2 ORDER BY updated_at DESC LIMIT 1",[tenantId,companyId]); return r.rows[0]?mapPreference(r.rows[0]):null; }
-  async upsert({ tenantId, companyId, recipientId, directHighEnabled, dailyDigestEnabled, timezone, quietHours }) { const id=randomUUID(); const r=await this.db.query("INSERT INTO ai.alert_preferences (id,tenant_id,company_id,user_ref,direct_high_enabled,daily_digest_enabled,timezone,quiet_hours_jsonb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (company_id,user_ref) DO UPDATE SET direct_high_enabled=EXCLUDED.direct_high_enabled,daily_digest_enabled=EXCLUDED.daily_digest_enabled,timezone=EXCLUDED.timezone,quiet_hours_jsonb=EXCLUDED.quiet_hours_jsonb,updated_at=now() RETURNING *",[id,tenantId,companyId,recipientId,directHighEnabled,dailyDigestEnabled,timezone,JSON.stringify(quietHours)]); return mapPreference(r.rows[0]); }
+  async upsert({ tenantId, companyId, recipientId, directHighEnabled, dailyDigestEnabled, timezone, quietHours }) { const id=randomUUID(); const r=await this.db.query("INSERT INTO ai.alert_preferences (id,tenant_id,company_id,user_ref,direct_high_enabled,daily_digest_enabled,timezone,quiet_hours_jsonb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (tenant_id,company_id,user_ref) DO UPDATE SET direct_high_enabled=EXCLUDED.direct_high_enabled,daily_digest_enabled=EXCLUDED.daily_digest_enabled,timezone=EXCLUDED.timezone,quiet_hours_jsonb=EXCLUDED.quiet_hours_jsonb,updated_at=now() RETURNING *",[id,tenantId,companyId,recipientId,directHighEnabled,dailyDigestEnabled,timezone,JSON.stringify(quietHours)]); return mapPreference(r.rows[0]); }
 }
 
 class PostgresReportDraftStore {
@@ -87,12 +99,12 @@ class PostgresReportNarrativeStore {
   async applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText, actor, humanInstruction, provenance }) { const current=await this.getById({tenantId,companyId,reportNarrativeId}); if(!current || current.version!==expectedVersion)return {conflict:{expectedVersion,actualVersion:current?.version}}; const span=resolveConstrainedSpan(current.narrative,allowedSpanId); const narrative=span?replaceConstrainedSpan(current.narrative,span,replacementText):null; if(!narrative)return null; const next={...current.narrative,rewrites:[...(current.narrative.rewrites||[]),{rewriteId:this.uuid(),allowedSpanId,sourceClaimIds:span.sourceClaimIds,actorId:actor.actorId,actorType:actor.actorType,instructionHash:require("crypto").createHash("sha256").update(humanInstruction).digest("hex"),provenance,createdAt:new Date().toISOString(),version:current.version+1}]}; const id=this.uuid(); const r=await this.db.query("INSERT INTO ai.report_versions (id,report_id,version,content_jsonb,metrics_jsonb,provenance_jsonb,review_status,author_ref) VALUES ($1,$2,$3,$4::jsonb,'{}'::jsonb,$5::jsonb,'draft',$6) RETURNING *",[id,current.reportId,current.version+1,JSON.stringify({...next,promptVersion:current.promptVersion}),JSON.stringify(provenance),actor.actorId]); return {narrative:mapNarrative({...r.rows[0],tenant_id:tenantId,company_id:companyId})}; }
 }
 function mapRelevance(row) { return {...payload(row),decisionId:row.id,relevance:row.relevance,confidence:row.confidence===null?null:Number(row.confidence),createdAt:row.created_at?.toISOString?.()||row.created_at}; }
-function mapAnalysis(row) { return {...payload(row),analysisId:row.id,analysis:row.analysis_jsonb,evidence:row.evidence_jsonb,provenance:row.provenance_jsonb,status:row.status}; }
-function mapPriority(row) { return {...payload(row),priorityDecisionId:row.id,priority:row.priority,effectiveAt:row.effective_at?.toISOString?.()||row.effective_at}; }
+function mapAnalysis(row) { return {...payload(row),analysisId:row.id,tenantId:row.tenant_id,companyId:row.company_id,issueId:row.issue_id,inputFingerprint:row.input_fingerprint,promptVersion:row.prompt_version,analysis:row.analysis_jsonb,evidence:row.evidence_jsonb,provenance:row.provenance_jsonb,gate:row.provenance_jsonb?.gate || null,status:row.status}; }
+function mapPriority(row) { return {...payload(row),priorityDecisionId:row.id,tenantId:row.tenant_id,companyId:row.company_id,issueId:row.issue_id,analysisId:row.analysis_id,priority:row.priority,effectiveAt:row.effective_at?.toISOString?.()||row.effective_at}; }
 function mapSaved(row) { return { savedId: row.id, tenantId: row.tenant_id, companyId: row.company_id, actorId: row.actor_id, issueId: row.issue_id, savedAt: row.created_at?.toISOString?.() || row.created_at }; }
 function mapFeedback(row) { return { id: row.id, tenantId: row.tenant_id, companyId: row.company_id, actorId: row.actor_id, targetType: row.target_type, targetId: row.target_id, type: row.feedback_type, comment: row.comment, createdAt: row.created_at?.toISOString?.() || row.created_at }; }
 function mapAlertEvent(row) { const payload=row.payload_jsonb||{}; return { alertEventId:row.id, tenantId:row.tenant_id, companyId:row.company_id, issueId:row.issue_id, developmentId:row.development_id, recipientId:row.recipient_ref, channel:row.channel, status:row.status, reasonCode:row.reason_code, dedupeKey:row.dedupe_key, read:Boolean(row.read_at), readAt:row.read_at, createdAt:row.created_at?.toISOString?.()||row.created_at, ...payload }; }
-function mapReport(row) { return { ...(row.payload_jsonb||{}), reportId:row.id, tenantId:row.tenant_id, companyId:row.company_id, reportType:row.report_type, periodStart:dateText(row.period_start), periodEnd:dateText(row.period_end), timezone:row.timezone, reviewStatus:row.review_status, updatedAt:row.updated_at?.toISOString?.()||row.updated_at, createdAt:row.created_at?.toISOString?.()||row.created_at }; }
+function mapReport(row) { const payload = row.payload_jsonb || {}; return { ...payload, reportId:row.id, tenantId:row.tenant_id, companyId:row.company_id, reportType:row.report_type, periodStart:payload.periodStart || dateText(row.period_start), periodEnd:payload.periodEnd || dateText(row.period_end), timezone:row.timezone, reviewStatus:row.review_status, updatedAt:row.updated_at?.toISOString?.()||row.updated_at, createdAt:row.created_at?.toISOString?.()||row.created_at }; }
 function dateText(value) { return value?.toISOString ? value.toISOString().slice(0,10) : String(value).slice(0,10); }
 function mapPreference(row) { return { tenantId:row.tenant_id, companyId:row.company_id, recipientId:row.user_ref, directHighEnabled:row.direct_high_enabled, dailyDigestEnabled:row.daily_digest_enabled, timezone:row.timezone, quietHours:row.quiet_hours_jsonb || null, createdAt:row.created_at?.toISOString?.()||row.created_at, updatedAt:row.updated_at?.toISOString?.()||row.updated_at }; }
 function mapNarrative(row) { const payload=row.content_jsonb||{}; return { reportNarrativeId:row.id, tenantId:row.tenant_id, companyId:row.company_id, reportId:row.report_id, promptVersion:payload.promptVersion, narrative:payload.narrative, provenance:row.provenance_jsonb||{}, reviewStatus:row.review_status, version:row.version, rewrites:payload.rewrites||[], createdAt:row.created_at?.toISOString?.()||row.created_at, updatedAt:row.created_at?.toISOString?.()||row.created_at }; }

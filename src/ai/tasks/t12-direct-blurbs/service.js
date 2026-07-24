@@ -28,6 +28,7 @@ class DirectAlertBlurbService {
       const execution = await this.promptExecutionService.executeActive({
         promptId: T12_PROMPT_ID, promptVersion: T12_PROMPT_VERSION, model: "nano",
         input: buildT12Input({ tenantId, companyId, ...input }), outputSchema: T12_OUTPUT_SCHEMA,
+        budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT12Output(data, { claimIds: new Set(input.sourceClaims.map((claim) => claim.claimId)) }),
       });
       const blurb = await this.blurbStore.create({

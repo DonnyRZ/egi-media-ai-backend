@@ -22,6 +22,10 @@ const dashboard = require("../dashboard");
 const alerts = require("../alerts");
 const delivery = require("../delivery");
 const reports = require("../reports");
+const { AiBudgetGate } = require("../automation/ai-budget");
+const { createLogger } = require("../observability");
+const sharedBudgetGate = new AiBudgetGate(config.get("/aiBudget"));
+const aiLogger = createLogger({ service: `${process.env.SERVICE_NAME || "egi-media-ai-backend"}.ai` });
 
 function createAiTaskKernel() {
   const openaiConfig = config.get("/openai");
@@ -31,15 +35,20 @@ function createAiTaskKernel() {
     openaiClient,
     openaiConfig,
     defaultTimeoutMs: openaiConfig.timeoutMs,
+    budgetGate: sharedBudgetGate,
+    logger: aiLogger,
   });
 }
 
-function createT01CompanyContextDraftRuntime({ authorizeCompany } = {}) {
+function createT01CompanyContextDraftRuntime({ authorizeCompany, draftStore, promptRegistry, runStore } = {}) {
   const openaiConfig = config.get("/openai");
   return t01CompanyContextDraft.createT01CompanyContextDraftRuntime({
     aiTaskKernel: createAiTaskKernel(),
     openaiConfig,
     authorizeCompany,
+    draftStore,
+    promptRegistry,
+    runStore,
   });
 }
 

@@ -6,7 +6,7 @@ const { validateT01Output } = require("./output-validator");
 const { T01_PROMPT_ID, T01_PROMPT_VERSION } = require("./definition");
 
 class CompanyContextDraftService {
-  constructor({ promptExecutionService, draftStore, authorizeCompany = denyByDefault }) {
+  constructor({ promptExecutionService, draftStore, authorizeCompany = denyByDefault, timeoutMs = null }) {
     if (!promptExecutionService?.executeActive) {
       throw new AiConfigurationError("T01 requires a prompt execution service");
     }
@@ -16,12 +16,13 @@ class CompanyContextDraftService {
     this.promptExecutionService = promptExecutionService;
     this.draftStore = draftStore;
     this.authorizeCompany = authorizeCompany;
+    this.timeoutMs = timeoutMs;
   }
 
-  async createDraft({ trustedContext, sources }) {
+  async createDraft({ trustedContext, sources, tenantId = null }) {
     validateTrustedInput(trustedContext);
     const { companyId, extractionLanguage, limits } = trustedContext;
-    const authorized = await this.authorizeCompany({ companyId });
+    const authorized = await this.authorizeCompany({ tenantId, companyId, actor: trustedContext.actor, scopeTrusted: trustedContext.scopeTrusted });
     if (authorized !== true) {
       throw new AiConfigurationError("T01 company authorization was not granted");
     }
@@ -42,15 +43,19 @@ class CompanyContextDraftService {
       model: "mini",
       input,
       outputSchema,
+      timeoutMs: this.timeoutMs,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT01Output(data, { sourceLocators }),
     });
 
     const draft = await this.draftStore.create({
+      tenantId,
       companyId,
       result: execution.data,
       sourceFingerprints: sanitizedSources.map((source) => ({
         sourceLocator: source.sourceLocator,
         fingerprint: source.fingerprint,
+        metadata: source.metadata || null,
       })),
       provenance: execution.provenance,
     });

@@ -1,4 +1,5 @@
 const { getRequestId, getCorrelationId } = require("./request-context");
+const { safeError } = require("../observability");
 
 const STATUS_BY_CODE = Object.freeze({
   VALIDATION_ERROR: 400,
@@ -61,7 +62,19 @@ function mapError(error) {
     return { status: error.statusCode, code: error.code, message: error.statusCode >= 500 ? "Internal server error" : error.message, retryable: false };
   }
 
-  return { status: 500, code: "INTERNAL_ERROR", message: "Internal server error", retryable: false };
+  return { status: 500, code: "UNKNOWN_INTERNAL_ERROR", message: "Internal server error", retryable: false };
+}
+
+function categoryForCode(code = "") {
+  if (code.startsWith("AI_PROVIDER") || code.startsWith("AI_OUTPUT") || code.startsWith("AI_")) return "ai";
+  if (code.startsWith("DATABASE") || ["23505", "23503", "23514", "23502"].includes(code)) return "database";
+  if (code.startsWith("CMS_SOURCE")) return "cms";
+  if (code.startsWith("PDF_")) return "pdf";
+  if (code.startsWith("EMAIL_")) return "email";
+  if (code.includes("AUTH") || code === "FORBIDDEN" || code.includes("SCOPE")) return "security";
+  if (code.includes("QUEUE") || code.includes("JOB") || code.includes("PIPELINE")) return "queue";
+  if (code.includes("REPORT") || code.includes("REVIEW")) return "report";
+  return "application";
 }
 
 function defaultRetryable(code) {
@@ -120,6 +133,19 @@ function isDatabaseConstraint(error) {
 
 function sendError(res, req, error, extraMeta = {}) {
   const mapped = mapError(error);
+  if (res.locals) res.locals.errorCode = mapped.code;
+  const logger = req.app?.locals?.logger;
+  logger?.[mapped.status >= 500 ? "error" : "warn"]?.("http_error_envelope", {
+    requestId: getRequestId(req),
+    correlationId: getCorrelationId(req),
+    method: req.method,
+    path: req.path,
+    status: mapped.status,
+    errorCode: mapped.code,
+    category: categoryForCode(mapped.code),
+    retryable: mapped.retryable,
+    error: safeError(error, { includeMessage: false }),
+  });
   return res.status(mapped.status).json({
     success: false,
     error: { code: mapped.code, message: mapped.message },
@@ -135,7 +161,16 @@ function sendError(res, req, error, extraMeta = {}) {
 function errorMiddleware(error, req, res, _next) {
   if (error?.type === "entity.too.large") return sendError(res, req, Object.assign(error, { code: "PAYLOAD_TOO_LARGE", statusCode: 413 }));
   if (error instanceof SyntaxError && error.status === 400) return sendError(res, req, Object.assign(error, { code: "VALIDATION_ERROR", statusCode: 400 }));
-  if (error?.statusCode >= 500 || !error?.statusCode) console.error("Unhandled HTTP error:", { code: error?.code, name: error?.name, requestId: getRequestId(req) });
+  if (error?.statusCode >= 500 || !error?.statusCode) {
+    const logger = req.app?.locals?.logger;
+    logger?.error?.("http_request_failed", {
+      requestId: getRequestId(req),
+      correlationId: getCorrelationId(req),
+      method: req.method,
+      path: req.path,
+      error: safeError(error, { includeMessage: false }),
+    });
+  }
   return sendError(res, req, error);
 }
 

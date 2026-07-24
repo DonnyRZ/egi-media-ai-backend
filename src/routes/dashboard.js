@@ -5,7 +5,7 @@ const { sendError } = require("../app/error-contract");
 
 function createDashboardRouter({ getExecutiveSummaryService, getIssueReadService } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "dashboard.read" });
   router.get("/api/v1/dashboard/executive-summary", scope, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.query.company_id || req.authContext.companyId);
     const result = await getExecutiveSummaryService().getExecutiveSummary({ tenantId: req.authContext.tenantId, companyId, period: req.query.period || "24jam" });

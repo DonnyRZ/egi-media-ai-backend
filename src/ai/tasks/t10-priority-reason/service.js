@@ -35,7 +35,7 @@ class PriorityReasonService {
     }
     const labels = await this.labelStore.get({ analysisId, promptVersion: T08_PROMPT_VERSION });
     const labeledClaims = buildLabeledClaims({ analysis, labels });
-    const context = await this.getEffectiveContext(companyId);
+    const context = await this.getEffectiveContext(companyId, tenantId);
     if (!context || context.companyId !== companyId || context.status !== "effective" || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T10 requires an effective Company Context for the same company");
     }
@@ -48,6 +48,7 @@ class PriorityReasonService {
       model: "mini",
       input: buildT10Input({ tenantId, companyId, issue, analysis, context, priorityDecision, labeledClaims }),
       outputSchema: T10_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT10Output(data, { claimIds }),
     });
     const reason = await this.reasonStore.create({

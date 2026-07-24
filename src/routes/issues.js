@@ -5,7 +5,10 @@ const { sendError } = require("../app/error-contract");
 
 function createIssueFormationRouter({ getT04Service, getIssueMutationService, getT05Service, getT06Service, getSavedIssueStore, getIssueReadService, getIssueStore } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "issue.read" });
+  const saveScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "issue.save", humanOnly: true });
+  const completeScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "issue.complete", humanOnly: true });
+  const pipelineScope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
 
   router.get("/api/v1/saved/issues", scope, asyncHandler(async (req, res) => {
     const page = positiveInt(req.query.page, 1); const limit = boundedInt(req.query.limit, 20, 100);
@@ -14,42 +17,42 @@ function createIssueFormationRouter({ getT04Service, getIssueMutationService, ge
     return success(res, { items, meta: { page: saved.page, limit: saved.limit, total: saved.total } }, req);
   }));
 
-  router.post("/api/v1/issues/:issueId/saved", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/issues/:issueId/saved", saveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
     const result = await getSavedIssueStore().save({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });
     return success(res, { saved: serializeSaved(result.saved), issue, reused: result.reused }, req, result.reused ? 200 : 201);
   }));
 
-  router.delete("/api/v1/issues/:issueId/saved", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.delete("/api/v1/issues/:issueId/saved", saveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
     const result = await getSavedIssueStore().remove({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });
     return success(res, { removed: result.removed, issue_id: issue.issue_id }, req);
   }));
 
-  router.post("/api/v1/issues/:issueId/complete", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/issues/:issueId/complete", completeScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.authContext.actor?.actorType !== "human") throw Object.assign(new Error("Completing an issue requires a human actor"), { code: "FORBIDDEN", statusCode: 403 });
     const result = getIssueStore().complete({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: req.params.issueId, expectedVersion: req.body?.version, idempotencyKey: req.get("Idempotency-Key") });
     return success(res, { issue: serializeIssue(result.issue), reused: result.reused }, req);
   }));
 
-  router.post("/api/v1/internal/issues/match", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/issues/match", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const context = bodyScope(req);
     const result = await getT04Service().match({ ...context, relevanceDecisionId: req.body?.relevance_decision_id });
     return success(res, { match: result.match, relevance_decision_id: result.relevanceDecision.decisionId, reused: result.reused }, req);
   }));
 
-  router.post("/api/v1/internal/issues/form", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/issues/form", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const context = bodyScope(req);
     const result = await getIssueMutationService().apply({ ...context, matchDecisionId: req.body?.match_decision_id });
     return success(res, { mutation: result.mutation, reused: result.reused }, req);
   }));
 
-  router.post("/api/v1/internal/issues/:issueId/title", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/issues/:issueId/title", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getT05Service().generate({ ...authScope(req), issueId: req.params.issueId });
     return success(res, { title: result.title, issue: result.issue, reused: result.reused }, req);
   }));
 
-  router.post("/api/v1/internal/issues/:issueId/one-liner", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/internal/issues/:issueId/one-liner", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getT06Service().generate({ ...authScope(req), issueId: req.params.issueId });
     return success(res, { one_liner: result.oneLiner, issue: result.issue, reused: result.reused }, req);
   }));

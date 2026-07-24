@@ -5,17 +5,17 @@ const { sendError } = require("../app/error-contract");
 
 function createRelevanceRouter({ getT02Service, getT03Service } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
 
   router.post("/api/v1/internal/relevance/classify", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.body?.company_id);
-    const result = await getT02Service().classify({ companyId, articleId: req.body?.article_id, locale: req.body?.locale || "id" });
+    const result = await getT02Service().classify({ tenantId: req.authContext.tenantId, companyId, articleId: req.body?.article_id, locale: req.body?.locale || "id" });
     return success(res, { decision: serializeDecision(result.decision), reused: result.reused, should_continue: result.shouldContinue }, req);
   }));
 
   router.post("/api/v1/internal/relevance/rationale", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.body?.company_id);
-    const result = await getT03Service().generate({ companyId, decisionId: req.body?.decision_id });
+    const result = await getT03Service().generate({ tenantId: req.authContext.tenantId, companyId, decisionId: req.body?.decision_id });
     return success(res, { decision: serializeDecision(result.decision), rationale: serializeRationale(result.rationale), reused: result.reused }, req);
   }));
 

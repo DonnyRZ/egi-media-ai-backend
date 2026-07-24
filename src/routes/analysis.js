@@ -5,7 +5,7 @@ const { sendError } = require("../app/error-contract");
 
 function createAnalysisRouter({ getT07Service, getT08Service, getCitationGate } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
 
   router.post("/api/v1/internal/issues/:issueId/analyze", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getT07Service().analyze({ ...authScope(req), issueId: req.params.issueId });

@@ -23,7 +23,12 @@ class IssueReadService {
     if (!issue) throw Object.assign(new Error("Issue was not found"), { code: "NOT_FOUND", statusCode: 404 });
     const analysis = await this.analysisStore?.getCurrent?.({ tenantId, companyId, issueId }) || null;
     const priority = analysis && await this.priorityStore?.get?.({ tenantId, companyId, issueId, analysisId: analysis.analysisId, promptVersion: "1.0.0" }) || null;
-    return { ...this._card(issue), articles: await this.issueStore.listArticles({ issueId }), developments: await this.issueStore.listDevelopments({ issueId }), analysis, priority };
+    return {
+      ...this._card(issue),
+      articles: await this.issueStore.listArticles({ tenantId, companyId, issueId }),
+      developments: await this.issueStore.listDevelopments({ tenantId, companyId, issueId }),
+      analysis, priority,
+    };
   }
   _card(issue) { return { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, status: issue.status, priority: issue.currentPriority, first_seen_at: issue.firstSeenAt, last_developed_at: issue.lastDevelopedAt, version: issue.version }; }
   async _authorize(tenantId, companyId) { if (await this.authorizeCompany({ tenantId, companyId, action: "issues.read" }) !== true) throw Object.assign(new Error("Issue read was not authorized"), { code: "FORBIDDEN", statusCode: 403 }); }

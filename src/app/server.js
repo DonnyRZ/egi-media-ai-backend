@@ -25,9 +25,25 @@ const reports = require("../reports");
 const { InMemoryReportDraftStore } = reports;
 const { InMemoryJobStore, JobQueueService } = require("../queue");
 const { InMemorySourceSnapshotStore, InMemoryWatermarkStore, IngestWorker } = require("../ingest");
+const { SchedulerStateStore } = require("../automation/scheduler-state");
+const { PollEnqueueService } = require("../automation/poll-enqueue.service");
+const { MultiTenantIngestScheduler } = require("../automation/scheduler");
+const { QueueWorkerRunner } = require("../automation/worker-runner");
+const { InMemoryPipelineCompanyStore, PostgresPipelineCompanyStore } = require("../automation/company-scope");
+const { PipelineStageDispatcher } = require("../automation/pipeline-stage-dispatcher");
+const { AiTaskRegistry, AiPipelineWorker, InMemoryPipelineStateStore } = require("../pipeline");
+const { AutomationDownstreamBoundary } = require("../automation/downstream-boundary");
 const { createLogger, MetricsRegistry, observabilityMiddleware } = require("../observability");
 const { InMemoryFeedbackStore } = require("../feedback");
 const { createPostgresPersistence } = require("../persistence");
+const { AuthorizationService } = require("../auth/authorization");
+const { InMemoryMembershipStore } = require("../auth/membership.store");
+const { InMemoryAccessAuditStore } = require("../auth/audit.store");
+const { InMemoryTenantStore, PostgresTenantStore } = require("../auth/tenant.store");
+const { InMemoryCompanyStore, PostgresCompanyStore } = require("../auth/provisioning.store");
+const { InMemoryPlatformOperatorStore, PostgresPlatformOperatorStore } = require("../auth/platform.store");
+const { LocalAuthService } = require("../auth/local-auth");
+const { InMemoryCompanyContextUploadRequestStore } = require("../company-context/upload-request.store");
 
 class Server {
   constructor() {
@@ -52,8 +68,56 @@ class Server {
     this.emailDeliveryRuntime = null;
     this.reportRuntime = null;
     this.ingestRuntime = null;
+    this.schedulerStateStore = new SchedulerStateStore();
+    this.scheduler = null;
+    this.workerRunner = null;
+    this.pipelineRuntime = null;
     this.logger = createLogger({ service: process.env.SERVICE_NAME });
+    this.app.locals.logger = this.logger;
     this.metrics = new MetricsRegistry();
+    this.membershipStore = process.env.AI_PERSISTENCE_MODE === "postgres" && process.env.AI_LOCAL_PREVIEW_AUTH !== "true"
+      ? {
+        resolve: (args) => this._getPersistenceRuntime().membershipStore.resolve(args),
+        list: (args) => this._getPersistenceRuntime().membershipStore.list(args),
+        listForUser: (args) => this._getPersistenceRuntime().membershipStore.listForUser(args),
+        invite: (args) => this._getPersistenceRuntime().membershipStore.invite(args),
+        activateByUser: (args) => this._getPersistenceRuntime().membershipStore.activateByUser(args),
+        update: (args) => this._getPersistenceRuntime().membershipStore.update(args),
+        revoke: (args) => this._getPersistenceRuntime().membershipStore.revoke(args),
+      }
+      : new InMemoryMembershipStore({ memberships: process.env.AI_LOCAL_PREVIEW_AUTH === "true" ? [
+        { userId: "dummy-actor", tenantId: "dummy-tenant", companyId: null, role: "tenant_admin" },
+        { userId: "ai-worker-local", tenantId: "dummy-tenant", companyId: null, role: "ai_worker" },
+        { userId: "ai-worker-local", tenantId: "system", companyId: "source-ingest", role: "ai_worker" },
+      ] : [] });
+    this.accessAuditStore = process.env.AI_PERSISTENCE_MODE === "postgres"
+      ? { record: (input) => this._getPersistenceRuntime().accessAuditStore.record(input) }
+      : new InMemoryAccessAuditStore();
+    this.app.locals.accessAuditStore = this.accessAuditStore;
+    this.tenantStore = process.env.AI_PERSISTENCE_MODE === "postgres"
+      ? { get: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).get(args), list: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).list(args), create: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).create(args), update: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).update(args) }
+      : new InMemoryTenantStore();
+    this.companyStore = process.env.AI_PERSISTENCE_MODE === "postgres"
+      ? { get: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).get(args), list: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).list(args), create: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).create(args), update: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).update(args) }
+      : new InMemoryCompanyStore();
+    this.tenantStore.update = this.tenantStore.update?.bind(this.tenantStore);
+    this.platformStore = process.env.AI_PERSISTENCE_MODE === "postgres"
+      ? {
+        resolve: (args) => new PostgresPlatformOperatorStore({ db: this.getDatabaseRuntime().ai }).resolve(args),
+        upsert: (args) => new PostgresPlatformOperatorStore({ db: this.getDatabaseRuntime().ai }).upsert(args),
+      }
+      : new InMemoryPlatformOperatorStore();
+    const accountStore = process.env.AI_PERSISTENCE_MODE === "postgres" ? {
+      find: async (email) => { const result = await this.getDatabaseRuntime().ai.query("SELECT id,email,full_name,status,password_hash FROM ai.users WHERE email=$1 AND status='active'", [email]); const row = result.rows[0]; return row ? { email: row.email, fullName: row.full_name, role: null, actorType: "human", passwordHash: row.password_hash } : null; },
+      save: async ({ userId, email, fullName, passwordHash }) => { await this.getDatabaseRuntime().ai.query("INSERT INTO ai.users (id,email,full_name,status,password_hash) VALUES ($1,$2,$3,'active',$4) ON CONFLICT (email) DO UPDATE SET full_name=EXCLUDED.full_name,password_hash=EXCLUDED.password_hash,status='active',updated_at=now()", [userId, email, fullName, passwordHash]); },
+    } : null;
+    this.localAuthService = new LocalAuthService({ email: config.get("/auth/bootstrapAdminEmail"), password: config.get("/auth/bootstrapAdminPassword"), secret: config.get("/auth/accessTokenSecret"), accountStore });
+    this.platformBootstrapPromise = this.platformStore.upsert?.({ userId: `user:${String(config.get("/auth/bootstrapAdminEmail")).toLowerCase()}`, role: "platform_superadmin" }) || Promise.resolve();
+    this.authorizationService = new AuthorizationService({ membershipStore: this.membershipStore, platformStore: this.platformStore, auditStore: this.accessAuditStore, logger: this.logger, strictMembership: config.get("/env") === "production" || process.env.AI_PERSISTENCE_MODE === "postgres" });
+    this.app.locals.authorizationService = this.authorizationService;
+    this.app.locals.membershipStore = this.membershipStore;
+    this.app.locals.platformStore = this.platformStore;
+    this.app.locals.localAuthService = this.localAuthService;
     this.stopping = false;
     this.stopPromise = null;
 
@@ -99,6 +163,7 @@ class Server {
     registerRoutes(this.app, {
       companyContextService: this._getCompanyContextRuntime().service,
       getCompanyContextDraftService: () => this._getCompanyContextDraftService(),
+      getCompanyContextUploadStore: () => this._getPersistenceRuntime()?.uploadRequestStore || (this.companyContextUploadStore ||= new InMemoryCompanyContextUploadRequestStore()),
       cmsSourceGate: this.cmsSourceGate,
       getT02Service: () => this._getT02Service(),
       getT03Service: () => this._getT03Service(),
@@ -121,6 +186,11 @@ class Server {
       getReportRuntime: () => this._getReportRuntime(),
       getIngestRuntime: () => this._getIngestRuntime(),
       getFeedbackStore: () => this._getFeedbackStore(),
+      getMembershipStore: () => this._getMembershipStore(),
+      getTenantStore: () => this.tenantStore,
+      getCompanyStore: () => this.companyStore,
+      getAutomationStatus: () => ({ scheduler: this.scheduler?.status() || { running: false, enabled: false }, worker: this.workerRunner?.status() || { running: false }, pipeline: { configured: Boolean(this.pipelineRuntime) } }),
+      getAutomationJobs: async (req) => this._getIngestRuntime().jobStore.list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, status: req.query.status || undefined }),
     });
 
     this.app.use((_req, res) => {
@@ -151,18 +221,24 @@ class Server {
       if (config.get("/env") === "production") validateProductionEnvironment(process.env);
       else validateEnvironment(process.env);
     }
-    return this.listen();
+    await this.platformBootstrapPromise;
+    const result = await this.listen();
+    this._startAutomation();
+    return result;
   }
 
   async stop() {
     if (this.stopPromise) return this.stopPromise;
     this.stopping = true;
     this.stopPromise = (async () => {
+      this.scheduler?.stop();
+      this.workerRunner?.stop();
       const activeServer = this.httpServer;
       if (activeServer) {
         await new Promise((resolve, reject) => activeServer.close((error) => error && error.code !== "ERR_SERVER_NOT_RUNNING" ? reject(error) : resolve()));
         this.httpServer = null;
       }
+      if (this.persistenceRuntime?.issueStore?.ready) await this.persistenceRuntime.issueStore.ready.catch(() => undefined);
       if (this.databaseRuntime) await this.databaseRuntime.close();
       this.logger.info("server_stopped");
     })();
@@ -177,7 +253,18 @@ class Server {
   _getCompanyContextRuntime() {
     if (!this.companyContextRuntime) {
       const persistence = this._getPersistenceRuntime();
-      this.companyContextRuntime = createCompanyContextRuntime({ draftStore: persistence?.contextDraftStore, effectiveContextStore: persistence?.effectiveContextStore });
+      this.companyContextRuntime = createCompanyContextRuntime({
+        draftStore: persistence?.contextDraftStore,
+        effectiveContextStore: persistence?.effectiveContextStore,
+        authorize: async ({ actor, tenantId, companyId, action }) => {
+          try {
+            await this.authorizationService.authorize({ actor, tenantId, companyId }, action);
+            return true;
+          } catch (_error) {
+            return false;
+          }
+        },
+      });
     }
     return this.companyContextRuntime;
   }
@@ -201,7 +288,7 @@ class Server {
         openaiConfig: config.get("/openai"),
         cmsSourceGate: this.cmsSourceGate,
         decisionStore: this._getPersistenceRuntime()?.relevanceDecisionStore,
-        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
+        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -217,7 +304,7 @@ class Server {
         cmsSourceGate: this.cmsSourceGate,
         decisionStore: this.relevanceRuntime.decisionStore,
         rationaleStore: this._getPersistenceRuntime()?.rationaleStore,
-        getCompanyContextVersion: async (companyId, version) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(companyId, version),
+        getCompanyContextVersion: async (companyId, version, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(companyId, version, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -262,6 +349,7 @@ class Server {
   }
   _getSavedIssueStore() { return this._getPersistenceRuntime()?.savedIssueStore || this.savedIssueStore; }
   _getFeedbackStore() { return this._getPersistenceRuntime()?.feedbackStore || this.feedbackStore; }
+  _getMembershipStore() { return this.membershipStore; }
   _getT04Service() { return this._getIssueFormationRuntime().t04.service; }
   _getIssueMutationService() { return this._getIssueFormationRuntime().mutation.service; }
   _getT05Service() { return this._getIssueFormationRuntime().t05.service; }
@@ -273,7 +361,7 @@ class Server {
       const t07 = t07IssueAnalysis.createT07IssueAnalysisRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
         issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
-        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
+        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t08 = t08ClaimLabels.createT08ClaimLabelsRuntime({
@@ -300,13 +388,13 @@ class Server {
       const t09 = t09PriorityEnum.createT09PriorityEnumRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, priorityStore: this._getPersistenceRuntime()?.priorityStore,
-        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
+        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t10 = t10PriorityReason.createT10PriorityReasonRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, priorityStore: t09.priorityStore, labelStore: analysisRuntime.t08.labelStore, reasonStore: this._getPersistenceRuntime()?.reasonStore,
-        getEffectiveContext: async (companyId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId),
+        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       this.priorityRuntime = { t09, t10 };
@@ -358,6 +446,7 @@ class Server {
         eventStore: alertRuntime.eventStore, blurbStore: t12Runtime.blurbStore, issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, recipientStore: new InMemoryRecipientStore(), deliveryStore: this._getPersistenceRuntime()?.deliveryStore || new InMemoryEmailDeliveryStore(),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
+        logger: this.logger,
       });
     }
     return this.emailDeliveryRuntime.service;
@@ -389,12 +478,57 @@ class Server {
   }
   _getIngestRuntime() {
     if (!this.ingestRuntime) {
-      const persistence = this._getPersistenceRuntime(); const jobStore = persistence?.jobStore || new InMemoryJobStore(); const queue = new JobQueueService({ jobStore, workerId: "ingest-worker" }); const snapshotStore = persistence?.snapshotStore || new InMemorySourceSnapshotStore(); const watermarkStore = persistence?.watermarkStore || new InMemoryWatermarkStore();
+      const persistence = this._getPersistenceRuntime(); const jobStore = persistence?.jobStore || new InMemoryJobStore(); const queue = new JobQueueService({ jobStore, workerId: "ingest-worker", logger: this.logger }); const snapshotStore = persistence?.snapshotStore || new InMemorySourceSnapshotStore(); const watermarkStore = persistence?.watermarkStore || new InMemoryWatermarkStore();
       const worker = new IngestWorker({ sourceGate: this.cmsSourceGate, articleListClient: this.cmsSourceGate.cmsArticleClient, snapshotStore, watermarkStore, enqueueStageJob: async ({ tenantId, companyId, stage, sourceSnapshotId, sourceArticleId, locale }) => queue.enqueue({ tenantId, companyId, queueName: "pipeline-stage", jobType: `${stage}.dispatch`, idempotencyKey: `stage-${sourceSnapshotId}-${companyId}`.slice(0, 255), payload: { stage, source_snapshot_id: sourceSnapshotId, source_article_id: sourceArticleId, locale }, maxAttempts: 3 }) });
       const runNext = () => queue.processNext({ queueName: "ingest", handler: (job) => job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
       this.ingestRuntime = { queue, jobStore, worker, snapshotStore, watermarkStore, runNext };
     }
     return this.ingestRuntime;
+  }
+
+  _startAutomation() {
+    const automation = config.get("/automation");
+    const ingest = this._getIngestRuntime();
+    const pipeline = this._getPipelineRuntime();
+    const pollEnqueue = new PollEnqueueService({ queue: ingest.queue, maxAttempts: automation.maxAttempts });
+    this.scheduler = new MultiTenantIngestScheduler({ config: automation, listEligible: () => this._getPipelineRuntime().companyStore.listEligible(), enqueuePoll: (input) => pollEnqueue.enqueuePoll(input), stateStore: this.schedulerStateStore, logger: this.logger });
+    const taskQueues = ["T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T12", "T13", "T14"].map((taskId) => `ai-task-${taskId}`);
+    this.workerRunner = new QueueWorkerRunner({ queueNames: ["ingest", "pipeline-stage", ...taskQueues], concurrency: Math.max(automation.ingestConcurrency, automation.pipelineConcurrency), recoverStale: () => ingest.jobStore.recoverStale?.({ olderThanMs: automation.timeoutMs * 2 }), processNext: (queueName) => {
+      if (queueName === "ingest") return ingest.runNext();
+      if (queueName === "pipeline-stage") return ingest.queue.processNext({ queueName, workerId: "pipeline-stage-worker", handler: (job) => pipeline.dispatcher.dispatch(job.payload) });
+      if (queueName.startsWith("ai-task-")) return pipeline.worker.processNext({ taskId: queueName.replace("ai-task-", "") });
+      return null;
+    }, logger: this.logger });
+    if (automation.enabled) { this.scheduler.start(); this.workerRunner.start(); }
+  }
+
+  _getPipelineRuntime() {
+    if (this.pipelineRuntime) return this.pipelineRuntime;
+    const persistence = this._getPersistenceRuntime();
+    const queue = this._getIngestRuntime().queue;
+    const stateStore = persistence?.pipelineStateStore || new InMemoryPipelineStateStore();
+    const companyStore = process.env.AI_PERSISTENCE_MODE === "postgres"
+      ? new PostgresPipelineCompanyStore({ db: this.getDatabaseRuntime().ai })
+      : { listEligible: () => this.companyStore.listEligible({ effectiveContextStore: this._getCompanyContextRuntime().effectiveContextStore }) };
+    const authorize = async ({ tenantId, companyId }) => Boolean(tenantId && companyId);
+    const registry = new AiTaskRegistry();
+    registry.register("T02", async ({ tenantId, companyId, input }) => { const result = await this._getT02Service().classify({ tenantId, companyId, articleId: input.article_id, locale: input.locale }); return { nextInput: { decision_id: result.decision?.decisionId }, nextTaskId: result.shouldContinue ? "T03" : null, afterNextTaskId: result.shouldContinue ? "T04" : null, result }; });
+    registry.register("T03", async ({ tenantId, companyId, input }) => { const result = await this._getT03Service().generate({ tenantId, companyId, decisionId: input.decision_id }); return { nextInput: { decision_id: result.decision?.decisionId }, nextTaskId: "T04", afterNextTaskId: "T05", result }; });
+    registry.register("T04", async ({ tenantId, companyId, input }) => { const result = await this._getT04Service().match({ tenantId, companyId, relevanceDecisionId: input.decision_id }); const mutation = await this._getIssueMutationService().apply({ tenantId, companyId, matchDecisionId: result.match.matchDecisionId }); return { nextInput: { issue_id: mutation.mutation?.issueId || mutation.issueId }, nextTaskId: "T05", afterNextTaskId: "T06", result: { match: result, mutation } }; });
+    registry.register("T05", async ({ tenantId, companyId, input }) => { const result = await this._getT05Service().generate({ tenantId, companyId, issueId: input.issue_id }); return { nextInput: { issue_id: result.issue?.issueId || input.issue_id }, nextTaskId: "T06", afterNextTaskId: "T07", result }; });
+    registry.register("T06", async ({ tenantId, companyId, input }) => { const result = await this._getT06Service().generate({ tenantId, companyId, issueId: input.issue_id }); return { nextInput: { issue_id: result.issue?.issueId || input.issue_id }, nextTaskId: "T07", afterNextTaskId: "T08", result }; });
+    registry.register("T07", async ({ tenantId, companyId, input }) => { const result = await this._getT07Service().analyze({ tenantId, companyId, issueId: input.issue_id }); return { nextInput: { issue_id: input.issue_id, analysis_id: result.analysis?.analysisId }, nextTaskId: "T08", afterNextTaskId: "T09", result }; });
+    registry.register("T08", async ({ tenantId, companyId, input }) => { const result = await this._getT08Service().label({ tenantId, companyId, analysisId: input.analysis_id }); const promoted = await this._getCitationGate().validateAndPromote({ tenantId, companyId, analysisId: input.analysis_id }); return { nextInput: { issue_id: input.issue_id, analysis_id: input.analysis_id }, nextTaskId: "T09", afterNextTaskId: "T10", result: { labels: result, promoted } }; });
+    registry.register("T09", async ({ tenantId, companyId, input }) => { const result = await this._getT09Service().evaluate({ tenantId, companyId, issueId: input.issue_id, analysisId: input.analysis_id }); return { nextInput: { issue_id: input.issue_id, analysis_id: input.analysis_id, priority_decision_id: result.priority?.priorityDecisionId }, nextTaskId: "T10", afterNextTaskId: null, result }; });
+    const downstreamBoundary = new AutomationDownstreamBoundary({ alertRuntime: this._getAlertRuntime(), recipientId: process.env.AI_AUTOMATION_RECIPIENT_ID || null, logger: this.logger });
+    registry.register("T10", async ({ tenantId, companyId, pipelineId, input }) => { const result = await this._getT10Service().generate({ tenantId, companyId, issueId: input.issue_id, analysisId: input.analysis_id, priorityDecisionId: input.priority_decision_id }); const downstream = await downstreamBoundary.evaluate({ tenantId, companyId, issueId: input.issue_id, pipelineId }); return { result: { priority_reason: result, downstream } }; });
+    registry.register("T12", async ({ tenantId, companyId, input }) => ({ result: await this._getT12Service().generate({ tenantId, companyId, alertEventId: input.alert_event_id }) }));
+    registry.register("T13", async ({ tenantId, companyId, input }) => ({ result: await this._getReportRuntime().narrativeService.generate({ tenantId, companyId, reportId: input.report_id }) }));
+    registry.register("T14", async ({ tenantId, companyId, input }) => ({ result: await this._getReportRuntime().rewriteService.rewrite({ actor: { actorId: "ai-pipeline-worker", actorType: "ai_worker" }, tenantId, companyId, reportId: input.report_id, reportNarrativeId: input.report_narrative_id, allowedSpanId: input.allowed_span_id, humanInstruction: input.instruction, expectedVersion: input.expected_version }) }));
+    const worker = new AiPipelineWorker({ queue, registry, stateStore, workerId: "ai-pipeline-worker" });
+    const dispatcher = new PipelineStageDispatcher({ companyStore, pipelineStateStore: stateStore, pipelineWorker: worker, logger: this.logger });
+    this.pipelineRuntime = { queue, stateStore, companyStore, registry, worker, dispatcher, downstreamBoundary };
+    return this.pipelineRuntime;
   }
 }
 

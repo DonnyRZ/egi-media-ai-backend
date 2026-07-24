@@ -5,7 +5,7 @@ const { sendError } = require("../app/error-contract");
 
 function createPriorityRouter({ getT09Service, getT10Service } = {}) {
   const router = express.Router();
-  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true });
+  const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
   router.post("/api/v1/internal/issues/:issueId/priority", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const result = await getT09Service().evaluate({ ...authScope(req), issueId: req.params.issueId, analysisId: req.body?.analysis_id });
     return success(res, { priority: result.priority, issue: result.issue, analysis_id: result.analysis.analysisId, reused: result.reused, top5: false }, req);

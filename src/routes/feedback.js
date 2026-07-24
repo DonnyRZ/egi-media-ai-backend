@@ -4,7 +4,7 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 function createFeedbackRouter({ getFeedbackStore } = {}) {
   const router = express.Router();
-  router.post("/api/v1/feedback", requireAuthContext({ tenant: true, company: true, trustedScope: true }), requireIdempotencyKey, asyncHandler(async (req, res) => {
+  router.post("/api/v1/feedback", requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "feedback.create", humanOnly: true }), requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.authContext.actor?.actorType !== "human") throw Object.assign(new Error("Feedback requires a human actor"), { code: "FORBIDDEN", statusCode: 403 });
     const body = req.body || {};
     if (!["issue", "report", "analysis"].includes(body.target_type) || typeof body.target_id !== "string" || !body.target_id.trim() || !["helpful", "not_helpful", "incorrect", "missing_context", "other"].includes(body.type) || (body.comment !== undefined && (typeof body.comment !== "string" || body.comment.length > 2000))) throw validationError("Feedback payload is invalid");

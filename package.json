@@ -15,8 +15,11 @@
     "prompt:release:check": "node scripts/prompt-release-gate.js",
     "prompt:release:promote": "node scripts/prompt-release-gate.js --promote",
     "db:migrate:ai": "node scripts/migrate-ai-db.js",
+    "db:seed:generic": "node scripts/seed-generic-tenant.js",
     "swagger:validate": "node -e \"const fs=require('fs'); JSON.parse(fs.readFileSync('swagger_output.json','utf8')); console.log('swagger_output.json is valid JSON')\"",
-    "production:gate": "node scripts/production-readiness-gate.js"
+    "production:gate": "node scripts/production-readiness-gate.js",
+    "multi-tenant:gate": "node scripts/multi-tenant-readiness-gate.js",
+    "logs:inspect": "node scripts/inspect-logs.js"
   },
   "dependencies": {
     "ajv": "^8.20.0",
@@ -29,14 +32,17 @@
     "ioredis": "^5.11.1",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
     "nodemailer": "^6.9.16",
     "openai": "^6.48.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.16.3",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1",
     "winston": "^3.18.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "pdfkit": "^0.16.0"
   }
 }

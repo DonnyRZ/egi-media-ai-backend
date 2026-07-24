@@ -19,13 +19,13 @@ class RelevanceClassificationService {
     this.authorizeCompany = authorizeCompany;
   }
 
-  async classify({ companyId, articleId, locale }) {
+  async classify({ tenantId = null, companyId, articleId, locale }) {
     await this._authorizeCompany(companyId);
-    const context = await this.getEffectiveContext(companyId);
+    const context = await this.getEffectiveContext(companyId, tenantId);
     this._validateEffectiveContext(context, companyId);
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId, locale });
     const inputFingerprint = fingerprint({ source, contextVersion: context.version });
-    const existing = await this.decisionStore.get({ articleId, companyId, contextVersion: context.version, inputFingerprint });
+    const existing = await this.decisionStore.get({ tenantId, articleId, companyId, contextVersion: context.version, inputFingerprint });
     if (existing) return { decision: existing, reused: true, shouldContinue: existing.branch === "continue" };
 
     const execution = await this.promptExecutionService.executeActive({
@@ -34,9 +34,11 @@ class RelevanceClassificationService {
       model: "nano",
       input: buildT02Input({ companyId, context, source }),
       outputSchema: T02_OUTPUT_SCHEMA,
+      budgetScope: { tenantId, companyId },
       validateResult: validateT02Output,
     });
     const decision = await this.decisionStore.create({
+      tenantId,
       articleId,
       companyId,
       contextVersion: context.version,

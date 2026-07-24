@@ -108,7 +108,9 @@ test("T05 does not call the model for an issue that already has a title, is sele
   await t.test("already titled", async () => {
     const { runtime, issueStore, mutation, kernelCalls } = buildRuntime();
     issueStore.issuesById.get(mutation.issueId).title = "Existing title";
-    await assert.rejects(runtime.service.generate({ tenantId, companyId, issueId: mutation.issueId }), { code: "AI_CONFIGURATION_INVALID" });
+    const result = await runtime.service.generate({ tenantId, companyId, issueId: mutation.issueId });
+    assert.equal(result.reused, true);
+    assert.equal(result.title.title, "Existing title");
     assert.equal(kernelCalls(), 0);
   });
 

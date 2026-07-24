@@ -49,12 +49,16 @@ class InMemoryIssueStore {
     return mutation ? cloneForRead(mutation) : null;
   }
 
-  listArticles({ issueId }) {
-    return [...this.issueArticlesByKey.values()].filter((article) => article.issueId === issueId).map(cloneForRead);
+  listArticles({ tenantId = null, companyId = null, issueId }) {
+    return [...this.issueArticlesByKey.values()].filter((article) => article.issueId === issueId
+      && (tenantId == null || article.tenantId === tenantId)
+      && (companyId == null || article.companyId === companyId)).map(cloneForRead);
   }
 
-  listDevelopments({ issueId }) {
-    return [...this.developmentsById.values()].filter((development) => development.issueId === issueId).map(cloneForRead);
+  listDevelopments({ tenantId = null, companyId = null, issueId }) {
+    return [...this.developmentsById.values()].filter((development) => development.issueId === issueId
+      && (tenantId == null || development.tenantId === tenantId)
+      && (companyId == null || development.companyId === companyId)).map(cloneForRead);
   }
 
   getLatestDevelopment({ tenantId, companyId, issueId }) {
@@ -189,7 +193,7 @@ class InMemoryIssueStore {
       issueArticleId: this.uuid(), tenantId, companyId, issueId: issue.issueId,
       sourceArticleId: relevanceDecision.source.sourceArticleId,
       locale: relevanceDecision.source.requestedLocale,
-      sourceUpdatedAt: relevanceDecision.source.updatedAt,
+      sourceUpdatedAt: relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt,
       canonicalUrl: relevanceDecision.source.canonicalUrl,
       attachedAt: now,
       relationStatus: "active",
@@ -263,7 +267,7 @@ class InMemoryIssueStore {
   }
 
   _articleKey({ issueId, relevanceDecision }) {
-    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${relevanceDecision.source.updatedAt || "unknown"}`;
+    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt || "unknown"}`;
   }
 
   _timestamp() {
