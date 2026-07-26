@@ -1,4 +1,5 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
 const { T06_PROMPT_ID, T06_PROMPT_VERSION } = require("./definition");
 const { T06_OUTPUT_SCHEMA } = require("./schema");
 const { buildT06Input } = require("./prompt");
@@ -8,7 +9,7 @@ const { fingerprint } = require("../t02-relevance-class/service");
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
 class IssueOneLinerService {
-  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T06 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.getLatestDevelopment || !issueStore?.getGeneratedOneLiner || !issueStore?.applyGeneratedOneLiner) {
       throw new AiConfigurationError("T06 requires issue one-liner persistence");
@@ -16,7 +17,7 @@ class IssueOneLinerService {
     if (!matchDecisionStore?.getById || !relevanceDecisionStore?.getById || !promptExecutionService?.executeActive) {
       throw new AiConfigurationError("T06 requires validated upstream decisions and prompt execution");
     }
-    Object.assign(this, { cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, authorizeCompany });
+    Object.assign(this, { cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, issueId }) {
@@ -41,9 +42,10 @@ class IssueOneLinerService {
     if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T06 refuses to generate from a stale article snapshot");
     }
+    const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T06_PROMPT_ID, promptVersion: T06_PROMPT_VERSION, model: "nano",
-      input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source }),
+      input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }),
       outputSchema: T06_OUTPUT_SCHEMA, validateResult: validateT06Output,
       budgetScope: { tenantId, companyId },
     });
@@ -58,6 +60,13 @@ class IssueOneLinerService {
     if (!issue || !ACTIVE_STATUSES.has(issue.status) || !(typeof issue.title === "string" && issue.title.trim())) {
       throw new AiConfigurationError("T06 requires an active issue with a title in the same tenant and company");
     }
+  }
+
+  async _resolveOutputLanguage({ tenantId, companyId }) {
+    if (typeof this.resolveOutputLanguage === "function") {
+      return this.resolveOutputLanguage({ tenantId, companyId });
+    }
+    return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

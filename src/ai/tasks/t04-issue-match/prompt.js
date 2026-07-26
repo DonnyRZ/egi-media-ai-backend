@@ -1,3 +1,4 @@
+// Language preference: N/A — enum/match task; no user-facing prose output_language rule.
 const { T04_PROMPT_ID, T04_PROMPT_VERSION } = require("./definition");
 
 const SYSTEM_POLICY = [

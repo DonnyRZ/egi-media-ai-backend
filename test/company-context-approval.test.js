@@ -43,7 +43,7 @@ function createService({ authorize = async () => true } = {}) {
 
 const actor = { id: "human-1" };
 
-test("only reviewed-and-approved T01 drafts become effective Company Context", async () => {
+test("save-and-activate: edit draft then approve from draft status becomes effective", async () => {
   const { draftStore, service } = createService();
   const draft = createDraft(draftStore);
 
@@ -62,13 +62,10 @@ test("only reviewed-and-approved T01 drafts become effective Company Context", a
   assert.equal(edited.revision, 2);
   assert.equal(edited.result.context.industry, "Transport technology");
 
-  const inReview = await service.submitForReview({ actor, draftId: draft.draftId, reviewNote: "Ready" });
-  assert.equal(inReview.status, "in_review");
-
   const { draft: approvedDraft, effectiveContext } = await service.approveDraft({
     actor,
     draftId: draft.draftId,
-    approvalNote: "Approved by analyst",
+    approvalNote: "Saved and activated by owner",
   });
   assert.equal(approvedDraft.status, "approved");
   assert.equal(approvedDraft.isEffective, false);
@@ -82,6 +79,60 @@ test("only reviewed-and-approved T01 drafts become effective Company Context", a
   await assert.rejects(
     service.editDraft({ actor, draftId: draft.draftId, fields: { industry: "Changed later" } }),
     { code: "VERSION_CONFLICT" },
+  );
+});
+
+test("legacy in_review drafts remain activatable via approve", async () => {
+  const { draftStore, service } = createService();
+  const draft = createDraft(draftStore);
+
+  const inReview = await service.submitForReview({ actor, draftId: draft.draftId, reviewNote: "Ready" });
+  assert.equal(inReview.status, "in_review");
+
+  const { draft: approvedDraft, effectiveContext } = await service.approveDraft({
+    actor,
+    draftId: draft.draftId,
+    approvalNote: "Approved legacy review",
+  });
+  assert.equal(approvedDraft.status, "approved");
+  assert.equal(effectiveContext.status, "effective");
+  assert.equal(effectiveContext.version, 1);
+});
+
+test("editDraft and replaceEffectiveContext authorize with real RBAC permissions", async () => {
+  const seen = [];
+  const { draftStore, service } = createService({
+    authorize: async ({ action }) => {
+      seen.push(action);
+      return true;
+    },
+  });
+  const draft = createDraft(draftStore);
+
+  await service.editDraft({ actor, draftId: draft.draftId, fields: { industry: "Energy" } });
+  await service.replaceEffectiveContext({
+    actor, companyId: "company-1", version: 1, fields: contextFields(), changeReason: "Manual",
+  });
+
+  assert.deepEqual(seen, ["company_context.draft", "company_context.draft"]);
+});
+
+test("analyst without approve cannot activate via approveDraft", async () => {
+  const { draftStore, service } = createService({
+    authorize: async ({ action }) => action === "company_context.draft" || action === "company_context.read",
+  });
+  const draft = createDraft(draftStore);
+
+  const edited = await service.editDraft({
+    actor,
+    draftId: draft.draftId,
+    fields: { industry: "Retail" },
+  });
+  assert.equal(edited.status, "draft");
+
+  await assert.rejects(
+    service.approveDraft({ actor, draftId: draft.draftId }),
+    { code: "FORBIDDEN" },
   );
 });
 
@@ -103,7 +154,7 @@ test("human manual write creates the next effective context version", async () =
   );
 });
 
-test("Company Context review API requires authenticated authorization and exposes the lifecycle", async () => {
+test("Company Context API activates from draft without submit-review", async () => {
   const { draftStore, service } = createService({
     authorize: async ({ actor: authorizedActor, companyId, action }) => authorizedActor.id === "human-1" && companyId === "company-1" && action.startsWith("company_context."),
   });
@@ -118,18 +169,29 @@ test("Company Context review API requires authenticated authorization and expose
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    const submit = await fetch(`${baseUrl}/api/v1/company-context/drafts/${draft.draftId}/submit-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": "submit-review-key-1" },
-      body: JSON.stringify({ review_note: "Reviewed" }),
+    const patch = await fetch(`${baseUrl}/api/v1/company-context/drafts/${draft.draftId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "edit-draft-key-1",
+        "If-Match": "1",
+      },
+      body: JSON.stringify({ fields: { industry: "Finance" }, review_note: "Owner edit" }),
     });
-    assert.equal(submit.status, 200);
-    assert.equal((await submit.json()).data.status, "in_review");
+    assert.equal(patch.status, 200);
+    const patched = await patch.json();
+    assert.equal(patched.data.status, "draft");
+    assert.equal(patched.data.revision, 2);
+    assert.equal(patched.data.result.context.industry, "Finance");
 
     const approve = await fetch(`${baseUrl}/api/v1/company-context/drafts/${draft.draftId}/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": "approve-review-key-1" },
-      body: JSON.stringify({ approval_note: "Approved" }),
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "approve-draft-key-1",
+        "If-Match": String(patched.data.revision),
+      },
+      body: JSON.stringify({ approval_note: "Activate" }),
     });
     assert.equal(approve.status, 200);
     assert.equal((await approve.json()).data.effective_context.status, "effective");

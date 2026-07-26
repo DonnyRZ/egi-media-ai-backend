@@ -5,13 +5,13 @@ const { createT10PromptDefinition } = require("./definition");
 const { PriorityReasonService } = require("./service");
 const { InMemoryPriorityReasonStore } = require("./reason.store");
 
-function createT10PriorityReasonRuntime({ aiTaskKernel, openaiConfig, issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, authorizeCompany, promptRegistry, runStore, reasonStore }) {
+function createT10PriorityReasonRuntime({ aiTaskKernel, openaiConfig, issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, authorizeCompany, promptRegistry, runStore, reasonStore, companyStore = null, resolveOutputLanguage = null }) {
   const registry = promptRegistry || new PromptRegistry([createT10PromptDefinition({ modelName: openaiConfig.miniModel })]);
   const provenanceStore = runStore || new InMemoryPromptRunStore();
   const reasons = reasonStore || new InMemoryPriorityReasonStore();
   const promptExecutionService = new PromptExecutionService({ promptRegistry: registry, aiTaskKernel, runStore: provenanceStore, openaiConfig });
   return {
-    service: new PriorityReasonService({ issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore: reasons, promptExecutionService, authorizeCompany }),
+    service: new PriorityReasonService({ issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore: reasons, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany }),
     promptRegistry: registry, runStore: provenanceStore, reasonStore: reasons,
   };
 }

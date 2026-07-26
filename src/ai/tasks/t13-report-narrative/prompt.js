@@ -1,4 +1,5 @@
 const { T13_PROMPT_ID, T13_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only draft report narrative component for EGI Media.",
@@ -8,19 +9,20 @@ const SYSTEM_POLICY = [
   "Return only the required JSON Schema; source references must use supplied claim and article IDs, never URLs.",
 ].join(" ");
 
-function buildT13Input({ tenantId, companyId, report }) {
-  const trustedContext = {
+function buildT13Input({ tenantId, companyId, report, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId, company_id: companyId,
     report: { report_id: report.reportId, type: report.reportType, period_start: report.periodStart, period_end: report.periodEnd, timezone: report.timezone, company_context_version: report.contextVersion, review_status: report.reviewStatus },
     backend_metrics: report.metrics,
     selected_issue_ids: report.selectedIssuePack.map((item) => ({ report_item_id: item.reportItemId, issue_id: item.issueId, analysis_id: item.analysisId, priority: item.priority })),
     canonical_citations: report.selectedIssuePack.flatMap((item) => item.citations.map((citation) => ({ source_article_id: citation.sourceArticleId, canonical_url: citation.canonicalUrl }))),
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T13_PROMPT_ID}@${T13_PROMPT_VERSION}`,
     objective: "Write one draft narrative for every backend-selected report item using only supplied metrics and validated issue pack.",
     required_report_item_ids: report.selectedIssuePack.map((item) => item.reportItemId),
     forbidden: ["raw article", "unselected issue", "Top 5 selection", "metric calculation", "approval", "share", "email", "URL", "review-status change"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedIssuePack = report.selectedIssuePack.map((item) => ({
     report_item_id: item.reportItemId, issue_id: item.issueId, title: item.title, one_liner: item.oneLiner, priority: item.priority,

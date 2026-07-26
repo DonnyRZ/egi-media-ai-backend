@@ -6,3 +6,9 @@ node_modules
 logs
 *.log
 coverage
+
+# local audit / probe / debug scripts & stray artifacts
+scripts/_*
+_*-probe*.cjs
+_audit-out/
+=

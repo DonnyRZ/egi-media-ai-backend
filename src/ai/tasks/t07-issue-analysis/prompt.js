@@ -1,4 +1,5 @@
 const { T07_PROMPT_ID, T07_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only issue analysis component for EGI Media.",
@@ -8,8 +9,8 @@ const SYSTEM_POLICY = [
   "Return only the required JSON Schema.",
 ].join(" ");
 
-function buildT07Input({ tenantId, companyId, issue, context, evidence }) {
-  const trustedContext = {
+function buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId,
     company_id: companyId,
     issue: { issue_id: issue.issueId, status: issue.status, title: issue.title, one_liner: issue.oneLiner },
@@ -18,12 +19,13 @@ function buildT07Input({ tenantId, companyId, issue, context, evidence }) {
       source_article_id: item.sourceArticleId, locale: item.requestedLocale, canonical_citation_url: item.canonicalUrl,
       published_at: item.article.publishedAt, updated_at: item.article.updatedAt,
     })),
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T07_PROMPT_ID}@${T07_PROMPT_VERSION}`,
     objective: "Analyze one issue using only its linked article evidence: what happened, why it matters, impacts, risks, watch items, and cited claims.",
     citation_rule: "source_article_ids must be drawn only from allowed_articles. URLs are backend-generated and must not be output.",
     forbidden: ["priority", "ranking", "Top 5", "alert", "email", "recipient", "delivery decision", "claim labels", "new evidence"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedEvidence = evidence.map((item) => ({
     source_article_id: item.sourceArticleId,

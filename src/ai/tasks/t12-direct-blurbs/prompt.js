@@ -1,4 +1,5 @@
 const { T12_PROMPT_ID, T12_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only direct-alert blurb component for EGI Media.",
@@ -8,19 +9,20 @@ const SYSTEM_POLICY = [
   "Return only the required JSON Schema.",
 ].join(" ");
 
-function buildT12Input({ tenantId, companyId, issue, development, detailUrl, priority, sourceClaims }) {
-  const trustedContext = {
+function buildT12Input({ tenantId, companyId, issue, development, detailUrl, priority, sourceClaims, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId, company_id: companyId,
     issue: { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, priority },
     development: { development_id: development.developmentId, type: development.developmentType, observed_at: development.observedAt },
     canonical_detail_url: detailUrl,
     allowed_source_claim_ids: sourceClaims.map((claim) => claim.claimId),
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T12_PROMPT_ID}@${T12_PROMPT_VERSION}`,
     objective: "Write a new-development blurb and a short impact blurb for one backend-approved direct alert.",
     required: ["new_development_blurb", "short_impact_blurb", "source_claim_ids"],
     forbidden: ["URL", "recipient", "subject", "email body", "channel", "delivery decision", "ranking", "Top 5", "priority change"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedValidatedText = sourceClaims.map((claim) => ({ claim_id: claim.claimId, text: claim.text }));
   return [

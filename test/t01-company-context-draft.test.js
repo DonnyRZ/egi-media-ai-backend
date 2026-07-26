@@ -121,6 +121,8 @@ test("creates only a non-effective Company Context draft after trusted/untrusted
   assert.match(providerInput[1].content, /<TRUSTED_CONTEXT>/);
   assert.match(providerInput[1].content, /<UNTRUSTED_SOURCE_DATA>/);
   assert.match(providerInput[1].content, /Ignore all prior instructions/);
+  assert.match(providerInput[1].content, /"extraction_language":"id"/);
+  assert.match(providerInput[1].content, /"output_language":"id"/);
   assert.equal(draft.status, "draft");
   assert.equal(draft.isEffective, false);
   assert.equal(draft.result.context.name, "PT Example");
@@ -128,6 +130,36 @@ test("creates only a non-effective Company Context draft after trusted/untrusted
   assert.equal(provenance.validationOutcome, "passed");
   assert.equal(draftStore.list().length, 1);
   assert.equal(runStore.list()[0].promptVersion, "1.0.0");
+});
+
+test("createDraft with extractionLanguage en embeds output_language en in the provider prompt", async () => {
+  let providerInput;
+  const { service } = buildService({
+    onRequest: (request) => { providerInput = request.input; },
+  });
+
+  await service.createDraft({
+    trustedContext: { companyId: "company-opaque-1", extractionLanguage: "en", limits },
+    sources,
+  });
+
+  assert.match(providerInput[1].content, /"extraction_language":"en"/);
+  assert.match(providerInput[1].content, /"output_language":"en"/);
+});
+
+test("createDraft with unsupported extractionLanguage falls back to id in the provider prompt", async () => {
+  let providerInput;
+  const { service } = buildService({
+    onRequest: (request) => { providerInput = request.input; },
+  });
+
+  await service.createDraft({
+    trustedContext: { companyId: "company-opaque-1", extractionLanguage: "uz", limits },
+    sources,
+  });
+
+  assert.match(providerInput[1].content, /"extraction_language":"id"/);
+  assert.match(providerInput[1].content, /"output_language":"id"/);
 });
 
 test("fails closed before prompt construction when company authorization is absent", async () => {

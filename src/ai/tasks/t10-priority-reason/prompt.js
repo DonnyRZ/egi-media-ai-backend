@@ -1,4 +1,5 @@
 const { T10_PROMPT_ID, T10_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only priority reason component for EGI Media.",
@@ -9,8 +10,8 @@ const SYSTEM_POLICY = [
   "Return only the required JSON Schema.",
 ].join(" ");
 
-function buildT10Input({ tenantId, companyId, issue, analysis, context, priorityDecision, labeledClaims }) {
-  const trustedContext = {
+function buildT10Input({ tenantId, companyId, issue, analysis, context, priorityDecision, labeledClaims, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId,
     company_id: companyId,
     issue: { issue_id: issue.issueId, status: issue.status },
@@ -22,13 +23,14 @@ function buildT10Input({ tenantId, companyId, issue, analysis, context, priority
     validated_analysis: { analysis_id: analysis.analysisId, context_version: analysis.contextVersion, validated_at: analysis.validatedAt },
     company_context: { version: context.version, fields: context.fields },
     allowed_source_claim_ids: labeledClaims.map((claim) => claim.claimId),
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T10_PROMPT_ID}@${T10_PROMPT_VERSION}`,
     objective: "Write a concise reason for the immutable supplied priority decision, grounded in supplied validated claims.",
     immutable: ["priority_decision.priority"],
     required: ["reason", "source_claim_ids"],
     forbidden: ["priority enum", "priority change", "ranking", "Top 5", "alert", "email", "recipient", "delivery decision"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedAnalysis = {
     what_happened: analysis.analysis.what_happened,

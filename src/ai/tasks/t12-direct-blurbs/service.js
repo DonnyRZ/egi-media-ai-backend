@@ -1,4 +1,5 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
 const { T09_PROMPT_VERSION } = require("../t09-priority-enum/definition");
 const { T10_PROMPT_VERSION } = require("../t10-priority-reason/definition");
 const { T12_PROMPT_ID, T12_PROMPT_VERSION } = require("./definition");
@@ -7,12 +8,12 @@ const { buildT12Input } = require("./prompt");
 const { validateT12Output } = require("./output-validator");
 
 class DirectAlertBlurbService {
-  constructor({ eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, authorizeCompany = denyByDefault }) {
+  constructor({ eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!eventStore?.get || !eventStore?.markContentBlocked) throw new AiConfigurationError("T12 requires alert event persistence");
     if (!issueStore?.getIssue || !issueStore?.getDevelopment || !issueStore?.getArticleForDevelopment || !issueStore?.getAlertContentReadiness) throw new AiConfigurationError("T12 requires scoped issue and development reads");
     if (!analysisStore?.getCurrent || !priorityStore?.get || !reasonStore?.get) throw new AiConfigurationError("T12 requires validated priority handoff reads");
     if (!blurbStore?.get || !blurbStore?.create || !promptExecutionService?.executeActive) throw new AiConfigurationError("T12 requires blurb persistence and prompt execution");
-    Object.assign(this, { eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, authorizeCompany });
+    Object.assign(this, { eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, alertEventId }) {
@@ -25,9 +26,10 @@ class DirectAlertBlurbService {
     if (existing) return { blurb: existing, event, reused: true };
     try {
       const input = await this._loadValidatedInput({ tenantId, companyId, event });
+      const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
       const execution = await this.promptExecutionService.executeActive({
         promptId: T12_PROMPT_ID, promptVersion: T12_PROMPT_VERSION, model: "nano",
-        input: buildT12Input({ tenantId, companyId, ...input }), outputSchema: T12_OUTPUT_SCHEMA,
+        input: buildT12Input({ tenantId, companyId, ...input, outputLanguage }), outputSchema: T12_OUTPUT_SCHEMA,
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT12Output(data, { claimIds: new Set(input.sourceClaims.map((claim) => claim.claimId)) }),
       });
@@ -63,6 +65,13 @@ class DirectAlertBlurbService {
     const sourceClaims = selectSourceClaims({ analysis, sourceClaimIds: reason?.sourceClaimIds });
     if (!reason || sourceClaims.length < 1) throw new AiConfigurationError("T12 requires a validated T10 reason with source claims");
     return { issue, development, detailUrl: article.canonicalUrl, priority: priority.priority, sourceClaims };
+  }
+
+  async _resolveOutputLanguage({ tenantId, companyId }) {
+    if (typeof this.resolveOutputLanguage === "function") {
+      return this.resolveOutputLanguage({ tenantId, companyId });
+    }
+    return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

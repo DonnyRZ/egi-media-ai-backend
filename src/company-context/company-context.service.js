@@ -20,7 +20,7 @@ class CompanyContextService {
 
   async editDraft({ actor, draftId, fields, reviewNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
-    await this._authorize(actor, current.tenantId, current.companyId, "company_context.edit");
+    await this._authorize(actor, current.tenantId, current.companyId, "company_context.draft");
     this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
     const mergedFields = mergeAndValidateFields(current.result.context, fields);
@@ -33,6 +33,7 @@ class CompanyContextService {
     }));
   }
 
+  /** @deprecated Prefer save fields (PATCH) + activate (POST approve) for roles with company_context.approve. */
   async submitForReview({ actor, draftId, reviewNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.tenantId, current.companyId, "company_context.review");
@@ -55,12 +56,17 @@ class CompanyContextService {
     }));
   }
 
+  /**
+   * Activates draft fields as effective Company Context.
+   * Accepts status `draft` or legacy `in_review`. Requires company_context.approve.
+   * FE Save (owner path): PATCH fields, then POST approve with the new revision.
+   */
   async approveDraft({ actor, draftId, approvalNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.tenantId, current.companyId, "company_context.approve");
     this._assertRevision(current, expectedRevision);
-    if (current.status !== "in_review") {
-      throw new CompanyContextConflictError("Only Company Context in review can be approved", {
+    if (!["draft", "in_review"].includes(current.status)) {
+      throw new CompanyContextConflictError("Only draft or in-review Company Context can be activated", {
         details: { draftId, status: current.status },
       });
     }
@@ -106,7 +112,8 @@ class CompanyContextService {
   }
 
   async replaceEffectiveContext({ actor, tenantId = null, companyId, version, fields, changeReason = null }) {
-    await this._authorize(actor, tenantId, companyId, "company_context.write");
+    // Align with PUT /companies/:id/context route scope (company_context.draft).
+    await this._authorize(actor, tenantId, companyId, "company_context.draft");
     const validatedFields = validateFullFields(fields);
     const activation = await this.effectiveContextStore.activate({
       tenantId,

@@ -1,4 +1,5 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
 const { T05_PROMPT_ID, T05_PROMPT_VERSION } = require("./definition");
 const { T05_OUTPUT_SCHEMA } = require("./schema");
 const { buildT05Input } = require("./prompt");
@@ -8,7 +9,7 @@ const { fingerprint } = require("../t02-relevance-class/service");
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
 class IssueTitleService {
-  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T05 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.getLatestDevelopment || !issueStore?.getGeneratedTitle || !issueStore?.applyGeneratedTitle) {
       throw new AiConfigurationError("T05 requires issue title persistence");
@@ -21,6 +22,8 @@ class IssueTitleService {
     this.matchDecisionStore = matchDecisionStore;
     this.relevanceDecisionStore = relevanceDecisionStore;
     this.promptExecutionService = promptExecutionService;
+    this.companyStore = companyStore;
+    this.resolveOutputLanguage = resolveOutputLanguage;
     this.authorizeCompany = authorizeCompany;
   }
 
@@ -45,11 +48,12 @@ class IssueTitleService {
     if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T05 refuses to title an issue from a stale article snapshot");
     }
+    const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T05_PROMPT_ID,
       promptVersion: T05_PROMPT_VERSION,
       model: "nano",
-      input: buildT05Input({ tenantId, companyId, issue, development, matchDecision, source }),
+      input: buildT05Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }),
       outputSchema: T05_OUTPUT_SCHEMA,
       budgetScope: { tenantId, companyId },
       validateResult: validateT05Output,
@@ -78,6 +82,13 @@ class IssueTitleService {
       || !["high", "medium", "low"].includes(relevanceDecision.relevance)) {
       throw new AiConfigurationError("T05 requires the continuing T02 decision linked by T04");
     }
+  }
+
+  async _resolveOutputLanguage({ tenantId, companyId }) {
+    if (typeof this.resolveOutputLanguage === "function") {
+      return this.resolveOutputLanguage({ tenantId, companyId });
+    }
+    return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

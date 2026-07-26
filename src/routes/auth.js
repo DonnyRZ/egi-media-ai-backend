@@ -1,15 +1,19 @@
 const express = require("express");
 const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
+const { permissionsForRole } = require("../auth/rbac");
 function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
   const router = express.Router();
   router.post("/api/v1/auth/login", async (req, res, next) => {
     try {
       const result = await req.app.locals.localAuthService.login({ email: req.body?.email, password: req.body?.password });
       const memberships = await req.app.locals.membershipStore?.listForUser?.({ userId: result.actor.id }) || [];
-      const scoped = (await Promise.all(memberships.filter((item) => item.companyId).map(async (item) => ({ item, company: await getCompanyStore?.().get?.({ tenantId: item.tenantId, companyId: item.companyId }) })))).find(({ company }) => company?.status === "active")?.item || null;
+      const isPlatformAdmin = result.actor.role === "platform_superadmin";
+      const scoped = isPlatformAdmin ? null : (await Promise.all(memberships.filter((item) => item.companyId).map(async (item) => ({ item, company: await getCompanyStore?.().get?.({ tenantId: item.tenantId, companyId: item.companyId }) })))).find(({ company }) => company?.status === "active")?.item || null;
       const accessToken = scoped ? req.app.locals.localAuthService.issueScopedToken({ actor: result.actor, tenantId: scoped.tenantId, companyId: scoped.companyId, membershipId: scoped.membershipId, role: scoped.role }) : result.accessToken;
-      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role: scoped?.role || result.actor.role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, authorized_companies: memberships.filter((item) => item.companyId).map((item) => ({ company_id: item.companyId, tenant_id: item.tenantId, role: item.role })) }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
+      const role = isPlatformAdmin ? result.actor.role : (scoped?.role || result.actor.role);
+      const permissions = [...permissionsForRole(role)];
+      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, permissions, authorized_companies: memberships.filter((item) => item.companyId).map((item) => ({ company_id: item.companyId, tenant_id: item.tenantId, role: item.role })) }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
   router.post("/api/v1/auth/signup", async (req, res, next) => {
@@ -27,7 +31,8 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
       const membership = await req.app.locals.membershipStore.resolve({ userId: req.authContext.actor.actorId, tenantId, companyId, actorType: req.authContext.actor.actorType });
       if (!membership?.companyId && membership?.role !== "tenant_owner" && membership?.role !== "tenant_admin") throw Object.assign(new Error("An explicit company membership is required for this context"), { code: "FORBIDDEN", statusCode: 403 });
       const accessToken = req.app.locals.localAuthService.issueScopedToken({ actor: { id: req.authContext.actor.actorId, email: req.authContext.actor.email, full_name: req.authContext.actor.fullName, actor_type: req.authContext.actor.actorType }, tenantId, companyId, membershipId: membership.membershipId, role: membership.role });
-      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", tenant_id: tenantId, company_id: companyId, role: membership.role }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
+      const permissions = [...permissionsForRole(membership.role)];
+      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", tenant_id: tenantId, company_id: companyId, role: membership.role, permissions }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
   const platformSession = requireAuthContext({ tenant: false, company: false, permission: "platform.tenants.manage", humanOnly: true, platform: true });
@@ -35,9 +40,42 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
   const sessionGuard = (req, res, next) => req.authContext?.actor?.role === "platform_superadmin" ? platformSession(req, res, next) : customerSession(req, res, next);
   router.get("/api/v1/auth/session", sessionGuard, async (req, res, next) => {
     try {
-      const memberships = req.authContext.tenantId ? await req.app.locals.membershipStore?.list?.({ tenantId: req.authContext.tenantId, page: 1, limit: 100 }) : null;
-      const authorizedCompanies = memberships?.items?.filter((item) => item.companyId).map((item) => ({ company_id: item.companyId, role: item.role })) || req.authContext.authorizedCompanies || [];
-      if (!authorizedCompanies.length && req.authContext.companyId) authorizedCompanies.push({ company_id: req.authContext.companyId, role: req.authContext.role || req.authContext.actor.role });
+      let authorizedCompanies = [];
+      if (req.authContext.tenantId) {
+        const memberships = await req.app.locals.membershipStore?.list?.({ tenantId: req.authContext.tenantId, page: 1, limit: 100 });
+        authorizedCompanies = memberships?.items?.filter((item) => item.companyId).map((item) => ({
+          company_id: item.companyId,
+          tenant_id: item.tenantId || req.authContext.tenantId,
+          role: item.role,
+        })) || [];
+      } else if (req.authContext.actor?.actorId) {
+        const forUser = await req.app.locals.membershipStore?.listForUser?.({ userId: req.authContext.actor.actorId }) || [];
+        authorizedCompanies = forUser.filter((item) => item.companyId).map((item) => ({
+          company_id: item.companyId,
+          tenant_id: item.tenantId,
+          role: item.role,
+        }));
+      }
+      if (!authorizedCompanies.length && Array.isArray(req.authContext.authorizedCompanies)) {
+        authorizedCompanies = req.authContext.authorizedCompanies.map((item) => (
+          typeof item === "string"
+            ? { company_id: item, tenant_id: req.authContext.tenantId || undefined }
+            : {
+              company_id: item.company_id || item.id,
+              ...(item.tenant_id || item.tenantId || req.authContext.tenantId
+                ? { tenant_id: item.tenant_id || item.tenantId || req.authContext.tenantId }
+                : {}),
+              role: item.role,
+            }
+        ));
+      }
+      if (!authorizedCompanies.length && req.authContext.companyId) {
+        authorizedCompanies.push({
+          company_id: req.authContext.companyId,
+          ...(req.authContext.tenantId ? { tenant_id: req.authContext.tenantId } : {}),
+          role: req.authContext.role || req.authContext.actor.role,
+        });
+      }
       return res.json({ success: true, data: { actor: { id: req.authContext.actor.actorId, email: req.authContext.actor.email, type: req.authContext.actor.actorType, role: req.authContext.role || req.authContext.actor.role, membership_id: req.authContext.membership?.membershipId || req.authContext.actor.membershipId || null }, tenant_id: req.authContext.tenantId, company_id: req.authContext.companyId, role: req.authContext.role || req.authContext.actor.role, permissions: [...(req.authContext.permissions || [])], authorized_companies: authorizedCompanies }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });

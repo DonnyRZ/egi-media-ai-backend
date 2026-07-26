@@ -1,4 +1,5 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 const { sanitizeSources } = require("./source-sanitizer");
 const { CONTEXT_FIELDS, createT01OutputSchema } = require("./schema");
 const { buildT01Input } = require("./prompt");
@@ -21,7 +22,8 @@ class CompanyContextDraftService {
 
   async createDraft({ trustedContext, sources, tenantId = null }) {
     validateTrustedInput(trustedContext);
-    const { companyId, extractionLanguage, limits } = trustedContext;
+    const { companyId, limits } = trustedContext;
+    const language = resolveAiOutputLanguage(trustedContext.extractionLanguage);
     const authorized = await this.authorizeCompany({ tenantId, companyId, actor: trustedContext.actor, scopeTrusted: trustedContext.scopeTrusted });
     if (authorized !== true) {
       throw new AiConfigurationError("T01 company authorization was not granted");
@@ -31,7 +33,8 @@ class CompanyContextDraftService {
     const outputSchema = createT01OutputSchema(sourceLocators);
     const input = buildT01Input({
       companyId,
-      extractionLanguage,
+      extractionLanguage: language,
+      outputLanguage: language,
       allowedFields: CONTEXT_FIELDS,
       limits,
       sources: sanitizedSources,

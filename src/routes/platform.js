@@ -32,6 +32,10 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
     const result = await getCompanyStore().update({ tenantId: req.params.tenantId, companyId: req.params.companyId, name: req.body?.name, legalName: req.body?.legal_name, status: req.body?.status, timezone: req.body?.timezone, locale: req.body?.locale, metadata: req.body?.metadata });
     return success(res, { company: serializeCompany(result.company) }, req);
   }));
+  router.get("/api/v1/platform/tenants/:tenantId/memberships", scope, asyncHandler(async (req, res) => {
+    const result = await getMembershipStore().list({ tenantId: req.params.tenantId, page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 50, 100) });
+    return success(res, { items: result.items.map(serializeMembership), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
+  }));
   router.post("/api/v1/platform/tenants/:tenantId/owner", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (typeof req.body?.email !== "string" || !req.body.email.includes("@")) throw validationError("Owner email is required");
     const result = await getMembershipStore().invite({ userId: req.body.user_id, email: req.body.email, fullName: req.body.full_name, tenantId: req.params.tenantId, companyId: req.body.company_id || null, role: "tenant_owner" });

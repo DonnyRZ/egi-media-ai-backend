@@ -1,3 +1,4 @@
+// Language preference: N/A — enum/match task; no user-facing prose output_language rule.
 const { T08_PROMPT_ID, T08_PROMPT_VERSION } = require("./definition");
 const SYSTEM_POLICY = [
   "You are a backend-only claim labeling component for EGI Media.",

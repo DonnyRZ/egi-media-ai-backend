@@ -4,7 +4,7 @@ const { InMemoryPromptRunStore } = require("../../provenance/prompt-run.store");
 const { createT05PromptDefinition } = require("./definition");
 const { IssueTitleService } = require("./service");
 
-function createT05IssueTitleRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, authorizeCompany, promptRegistry, runStore }) {
+function createT05IssueTitleRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, authorizeCompany, promptRegistry, runStore, companyStore = null, resolveOutputLanguage = null }) {
   const registry = promptRegistry || new PromptRegistry([createT05PromptDefinition({ modelName: openaiConfig.nanoModel })]);
   const provenanceStore = runStore || new InMemoryPromptRunStore();
   const promptExecutionService = new PromptExecutionService({
@@ -12,7 +12,7 @@ function createT05IssueTitleRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate,
   });
   return {
     service: new IssueTitleService({
-      cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, authorizeCompany,
+      cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany,
     }),
     promptRegistry: registry,
     runStore: provenanceStore,

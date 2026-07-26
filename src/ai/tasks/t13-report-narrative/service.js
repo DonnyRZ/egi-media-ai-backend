@@ -1,14 +1,15 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
 const { T13_PROMPT_ID, T13_PROMPT_VERSION } = require("./definition");
 const { T13_OUTPUT_SCHEMA } = require("./schema");
 const { buildT13Input } = require("./prompt");
 const { validateT13Output } = require("./output-validator");
 
 class ReportNarrativeService {
-  constructor({ reportDraftStore, narrativeStore, promptExecutionService, authorizeCompany = denyByDefault }) {
+  constructor({ reportDraftStore, narrativeStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!reportDraftStore?.get || !reportDraftStore?.markNarrativeInvalid) throw new AiConfigurationError("T13 requires report draft persistence");
     if (!narrativeStore?.get || !narrativeStore?.create || !promptExecutionService?.executeActive) throw new AiConfigurationError("T13 requires narrative persistence and prompt execution");
-    Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, authorizeCompany });
+    Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, reportId }) {
@@ -19,9 +20,10 @@ class ReportNarrativeService {
     if (existing) return { narrative: existing, report, reused: true };
     try {
       validateReportPack(report);
+      const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
       const execution = await this.promptExecutionService.executeActive({
         promptId: T13_PROMPT_ID, promptVersion: T13_PROMPT_VERSION, model: "mini",
-        input: buildT13Input({ tenantId, companyId, report }), outputSchema: T13_OUTPUT_SCHEMA,
+        input: buildT13Input({ tenantId, companyId, report, outputLanguage }), outputSchema: T13_OUTPUT_SCHEMA,
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT13Output(data, { report }),
       });
@@ -31,6 +33,13 @@ class ReportNarrativeService {
       await this.reportDraftStore.markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode: error?.code === "AI_OUTPUT_SCHEMA_INVALID" ? "invalid_narrative_output" : "report_narrative_gate_failed" });
       throw error;
     }
+  }
+
+  async _resolveOutputLanguage({ tenantId, companyId }) {
+    if (typeof this.resolveOutputLanguage === "function") {
+      return this.resolveOutputLanguage({ tenantId, companyId });
+    }
+    return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

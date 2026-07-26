@@ -31,7 +31,7 @@ function createIssueFormationRouter({ getT04Service, getIssueMutationService, ge
 
   router.post("/api/v1/issues/:issueId/complete", completeScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (req.authContext.actor?.actorType !== "human") throw Object.assign(new Error("Completing an issue requires a human actor"), { code: "FORBIDDEN", statusCode: 403 });
-    const result = getIssueStore().complete({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: req.params.issueId, expectedVersion: req.body?.version, idempotencyKey: req.get("Idempotency-Key") });
+    const result = await getIssueStore().complete({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: req.params.issueId, expectedVersion: req.body?.version, idempotencyKey: req.get("Idempotency-Key") });
     return success(res, { issue: serializeIssue(result.issue), reused: result.reused }, req);
   }));
 

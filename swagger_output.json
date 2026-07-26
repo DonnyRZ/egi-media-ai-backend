@@ -17,7 +17,6 @@
     { "name": "Inbox", "description": "Archived alert and digest email projections" },
     { "name": "Reports", "description": "Report read and human review commands" },
     { "name": "Company Context", "description": "Versioned Company Context and async draft requests" },
-    { "name": "Feedback", "description": "Human feedback; no automatic learning in v0.1" },
     { "name": "Internal Pipeline", "description": "Service/operator-only pipeline operations" }
   ],
   "paths": {
@@ -478,28 +477,6 @@
         }
       }
     },
-    "/api/v1/feedback": {
-      "post": {
-        "tags": ["Feedback"],
-        "summary": "Submit human feedback",
-        "description": "Stores advisory feedback against a scoped target. It does not automatically retrain, alter relevance, or mutate priority in v0.1.",
-        "operationId": "createFeedback",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "$ref": "#/components/parameters/CompanyIdHeader" },
-          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
-          { "$ref": "#/components/parameters/RequestIdHeader" }
-        ],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FeedbackRequest" } } } },
-        "responses": {
-          "201": { "description": "Feedback stored", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FeedbackResponse" } } } },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" }
-        }
-      }
-    },
     "/api/v1/internal/pipeline/ingest": {
       "post": {
         "tags": ["Internal Pipeline"],
@@ -930,7 +907,6 @@
       "CompanyContextFileMetadata": { "type": "object", "required": ["fileName", "mimeType", "byteSize", "pageCount", "fileSha256"], "additionalProperties": false, "properties": { "fileName": { "type": "string" }, "mimeType": { "type": "string", "enum": ["application/pdf"] }, "byteSize": { "type": "integer", "minimum": 1 }, "pageCount": { "type": "integer", "minimum": 1 }, "fileSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "example": "0000000000000000000000000000000000000000000000000000000000000000" } } },
       "ContextUrlSource": { "type": "object", "required": ["type", "url"], "additionalProperties": false, "properties": { "type": { "type": "string", "enum": ["url"] }, "url": { "type": "string", "format": "uri", "maxLength": 2048 } } },
       "ContextTextSource": { "type": "object", "required": ["type", "text"], "additionalProperties": false, "properties": { "type": { "type": "string", "enum": ["text"] }, "text": { "type": "string", "minLength": 1, "maxLength": 100000 } } },
-      "FeedbackRequest": { "type": "object", "required": ["target_type", "target_id", "type"], "additionalProperties": false, "properties": { "target_type": { "type": "string", "enum": ["issue", "report", "analysis"] }, "target_id": { "$ref": "#/components/schemas/Uuid" }, "type": { "type": "string", "enum": ["helpful", "not_helpful", "incorrect", "missing_context", "other"] }, "comment": { "type": "string", "maxLength": 2000 } } },
       "ReadStateRequest": { "type": "object", "required": ["is_read"], "additionalProperties": false, "properties": { "is_read": { "type": "boolean" } } },
       "ReportReviewRequest": { "type": "object", "required": ["action", "version"], "additionalProperties": false, "properties": { "action": { "type": "string", "enum": ["submit", "request_changes"] }, "version": { "type": "integer", "minimum": 1 }, "comment": { "type": "string", "maxLength": 4000 } } },
       "ReportShareRequest": { "type": "object", "required": ["version", "recipient_refs"], "additionalProperties": false, "properties": { "version": { "type": "integer", "minimum": 1 }, "recipient_refs": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "type": "string", "maxLength": 255 } }, "message": { "type": "string", "maxLength": 1000 } } },
@@ -940,7 +916,6 @@
       "SavedItemResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["issue_id", "saved_at"], "properties": { "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "SavedIssueListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items", "meta"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/SavedIssue" } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "SavedIssue": { "type": "object", "required": ["saved_id", "issue_id", "saved_at", "issue"], "properties": { "saved_id": { "$ref": "#/components/schemas/Uuid" }, "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" }, "issue": { "$ref": "#/components/schemas/IssueCard" } } },
-      "FeedbackResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "created_at"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "created_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ShareIntentResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "state"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "state": { "type": "string", "enum": ["queued", "waiting_review", "suppressed"] } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ExecutiveSummaryResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ExecutiveSummary" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "IssueListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/IssueCard" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },

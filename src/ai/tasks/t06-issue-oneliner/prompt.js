@@ -1,4 +1,5 @@
 const { T06_PROMPT_ID, T06_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only issue one-liner component for EGI Media.",
@@ -9,8 +10,8 @@ const SYSTEM_POLICY = [
   "Return only the schema response.",
 ].join(" ");
 
-function buildT06Input({ tenantId, companyId, issue, development, matchDecision, source }) {
-  const trustedContext = {
+function buildT06Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId,
     company_id: companyId,
     issue: { issue_id: issue.issueId, status: issue.status, title: issue.title, one_liner_state: "missing" },
@@ -22,12 +23,13 @@ function buildT06Input({ tenantId, companyId, issue, development, matchDecision,
       source_article_id: source.sourceArticleId, requested_locale: source.requestedLocale, content_locale: source.contentLocale,
       canonical_citation_url: source.canonicalUrl, published_at: source.article.publishedAt, updated_at: source.article.updatedAt,
     },
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T06_PROMPT_ID}@${T06_PROMPT_VERSION}`,
     objective: "Generate one concise one-liner for the supplied active issue with its existing title.",
     allowed_output: { one_liner: "single line, 8 through 280 characters, no URL" },
     forbidden: ["match decision", "title rewrite", "issue status", "priority", "analysis", "alert", "email", "URL", "citation"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedArticle = { title: source.article.title, summary: source.article.summary };
   return [

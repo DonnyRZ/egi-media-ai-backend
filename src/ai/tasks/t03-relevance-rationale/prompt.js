@@ -1,4 +1,5 @@
 const { T03_PROMPT_ID, T03_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only relevance rationale component for EGI Media.",
@@ -8,8 +9,8 @@ const SYSTEM_POLICY = [
   "Do not invent company data, article IDs, URLs, or facts outside the supplied input.",
 ].join(" ");
 
-function buildT03Input({ companyId, context, decision, source }) {
-  const trustedContext = {
+function buildT03Input({ companyId, context, decision, source, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     company_id: companyId,
     company_context_version: context.version,
     company_context_fields: context.fields,
@@ -26,12 +27,13 @@ function buildT03Input({ companyId, context, decision, source }) {
       published_at: source.article.publishedAt,
       updated_at: source.article.updatedAt,
     },
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T03_PROMPT_ID}@${T03_PROMPT_VERSION}`,
     objective: "Provide one short factual rationale for the immutable T02 relevance label of exactly one article for exactly one company.",
     allowed_output: { rationale: "short string only" },
     forbidden: ["relevance label", "label change", "confidence", "issue creation", "priority", "Top 5 ranking", "alert decision", "email", "business approval"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedArticle = { title: source.article.title, summary: source.article.summary };
 

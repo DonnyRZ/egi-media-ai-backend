@@ -1,4 +1,5 @@
 const { AiConfigurationError } = require("../../provider/provider.errors");
+const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
 const { T08_PROMPT_VERSION } = require("../t08-claim-labels/definition");
 const { T09_PROMPT_VERSION } = require("../t09-priority-enum/definition");
 const { T10_PROMPT_ID, T10_PROMPT_VERSION } = require("./definition");
@@ -7,7 +8,7 @@ const { buildT10Input } = require("./prompt");
 const { validateT10Output } = require("./output-validator");
 
 class PriorityReasonService {
-  constructor({ issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, authorizeCompany = denyByDefault }) {
+  constructor({ issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!issueStore?.getIssue) throw new AiConfigurationError("T10 requires issue lookup");
     if (!analysisStore?.getById || !analysisStore?.getCurrent) throw new AiConfigurationError("T10 requires current validated analysis lookup");
     if (!priorityStore?.get) throw new AiConfigurationError("T10 requires immutable T09 priority lookup");
@@ -15,7 +16,7 @@ class PriorityReasonService {
     if (typeof getEffectiveContext !== "function") throw new AiConfigurationError("T10 requires effective Company Context reader");
     if (!reasonStore?.get || !reasonStore?.create) throw new AiConfigurationError("T10 requires priority reason persistence");
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T10 requires prompt execution service");
-    Object.assign(this, { issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, authorizeCompany });
+    Object.assign(this, { issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, issueId, analysisId, priorityDecisionId }) {
@@ -42,11 +43,12 @@ class PriorityReasonService {
     const existing = await this.reasonStore.get({ priorityDecisionId, promptVersion: T10_PROMPT_VERSION });
     if (existing) return { reason: existing, priorityDecision, analysis, reused: true };
     const claimIds = new Set(labeledClaims.map((claim) => claim.claimId));
+    const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T10_PROMPT_ID,
       promptVersion: T10_PROMPT_VERSION,
       model: "mini",
-      input: buildT10Input({ tenantId, companyId, issue, analysis, context, priorityDecision, labeledClaims }),
+      input: buildT10Input({ tenantId, companyId, issue, analysis, context, priorityDecision, labeledClaims, outputLanguage }),
       outputSchema: T10_OUTPUT_SCHEMA,
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT10Output(data, { claimIds }),
@@ -56,6 +58,13 @@ class PriorityReasonService {
       reason: execution.data.reason, sourceClaimIds: execution.data.sourceClaimIds, provenance: execution.provenance,
     });
     return { reason, priorityDecision, analysis, reused: false };
+  }
+
+  async _resolveOutputLanguage({ tenantId, companyId }) {
+    if (typeof this.resolveOutputLanguage === "function") {
+      return this.resolveOutputLanguage({ tenantId, companyId });
+    }
+    return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

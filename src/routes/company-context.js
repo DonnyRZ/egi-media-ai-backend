@@ -5,8 +5,9 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { extractPdfSource } = require("../company-context/pdf-source.service");
+const { resolveDraftLanguage } = require("../language/ai-output-language");
 
-function createCompanyContextRouter({ companyContextService, companyContextDraftService, getCompanyContextDraftService, getCompanyContextUploadStore } = {}) {
+function createCompanyContextRouter({ companyContextService, companyContextDraftService, getCompanyContextDraftService, getCompanyContextUploadStore, getCompanyStore } = {}) {
   const router = express.Router();
   const scope = optionalSaaSScope({ permission: "company_context.read" });
   const draftScope = optionalSaaSScope({ permission: "company_context.draft", humanOnly: true });
@@ -14,6 +15,19 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
   const approveScope = optionalSaaSScope({ permission: "company_context.approve", humanOnly: true });
   const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 10 * 1024 * 1024 }, fileFilter: (_req, file, callback) => callback(null, file.mimetype === "application/pdf" && /\.pdf$/i.test(file.originalname || "")) });
   const uploadRequestStore = getCompanyContextUploadStore?.();
+
+  async function resolveDraftExtractionLanguage(req) {
+    const tenantId = req.authContext?.tenantId || req.get("X-Tenant-Id");
+    const companyId = req.authContext?.companyId || req.get("X-Company-Id");
+    const companyStore = getCompanyStore?.() || req.app?.locals?.getCompanyStore?.() || req.app?.locals?.companyStore;
+    const company = companyStore?.get
+      ? await companyStore.get({ tenantId, companyId })
+      : null;
+    return resolveDraftLanguage({
+      explicitLanguage: req.body?.extraction_language,
+      companyLocale: company?.locale,
+    });
+  }
 
   router.post("/api/v1/company-context/draft/pdf", draftScope, requireIdempotencyKey, upload.single("file"), asyncHandler(async (req, res) => {
     const draftService = companyContextDraftService || getCompanyContextDraftService?.();
@@ -37,7 +51,8 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
     try {
       const source = await extractPdfSource(req.file, { maxBytes: 10 * 1024 * 1024, maxPages: 50, maxCharacters: 100000 });
       logger?.info?.("pdf_extraction_succeeded", { requestId: getRequestId(req), correlationId: getCorrelationId(req), tenantId, companyId, sourceLocator: source.sourceLocator, pageCount: source.metadata.pageCount, extractedCharacters: source.text.length, fileHash: requestHash.slice(0, 16) });
-      const result = await draftService.createDraft({ tenantId, trustedContext: { tenantId, companyId, actor: req.authContext?.actor || req.user, scopeTrusted: req.authContext?.scopeTrusted === true, extractionLanguage: req.body?.extraction_language || "id", limits: { maxSources: 1, maxCharsPerSource: 100000, maxTotalChars: 100000 } }, sources: [source] });
+      const extractionLanguage = await resolveDraftExtractionLanguage(req);
+      const result = await draftService.createDraft({ tenantId, trustedContext: { tenantId, companyId, actor: req.authContext?.actor || req.user, scopeTrusted: req.authContext?.scopeTrusted === true, extractionLanguage, limits: { maxSources: 1, maxCharsPerSource: 100000, maxTotalChars: 100000 } }, sources: [source] });
       const response = { success: true, data: { draft: serializeDraft(result.draft), provenance: result.provenance, source: source.metadata }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } };
       await uploadRequestStore?.complete?.(requestKey, response);
       await req.app.locals.accessAuditStore?.record?.({ actorId, actorType: req.authContext?.actor?.actorType || "human", tenantId, companyId, action: "company_context.pdf_upload", outcome: "allowed", metadata: { requestHash, sourceLocator: source.sourceLocator, status: "completed" } });
@@ -57,15 +72,15 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
     }
     const companyId = req.authContext?.companyId || req.get("X-Company-Id");
     const tenantId = req.authContext?.tenantId || req.get("X-Tenant-Id");
+    const extractionLanguage = await resolveDraftExtractionLanguage(req);
     const result = await draftService.createDraft({
-      tenantId,
       tenantId,
       trustedContext: {
         tenantId,
         companyId,
         actor: req.authContext?.actor || req.user,
         scopeTrusted: req.authContext?.scopeTrusted === true,
-        extractionLanguage: req.body?.extraction_language || "id",
+        extractionLanguage,
         limits: req.body?.limits || { maxSources: 1, maxCharsPerSource: 100000, maxTotalChars: 100000 },
       },
       sources: req.body?.source ? [normalizeSource(req.body.source)] : [],

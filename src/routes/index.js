@@ -9,17 +9,17 @@ const { createAlertRouter } = require("./alerts");
 const { createReportRouter } = require("./reports");
 const { createIngestRouter } = require("./ingest");
 const { createCompanyRouter } = require("./companies");
-const { createFeedbackRouter } = require("./feedback");
 const { createAuthRouter } = require("./auth");
 const { createMembershipRouter } = require("./memberships");
 const { createPlatformRouter } = require("./platform");
 const { createAutomationRouter } = require("./automation");
 
-module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getFeedbackStore, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs }) => {
+module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs }) => {
   server.use(createCompanyContextRouter({
     companyContextService,
     getCompanyContextDraftService,
     getCompanyContextUploadStore,
+    getCompanyStore,
   }));
   server.use(createAuthRouter({ getCompanyStore, getTenantStore }));
   server.use(createCompanyRouter({ getCompanyStore }));
@@ -34,6 +34,5 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   server.use(createAlertRouter({ getAlertRuntime, getT12Service, getEmailDeliveryService }));
   server.use(createReportRouter({ getReportRuntime }));
   server.use(createIngestRouter({ getIngestRuntime }));
-  server.use(createFeedbackRouter({ getFeedbackStore }));
   server.use(createAutomationRouter({ getStatus: getAutomationStatus, getJobs: getAutomationJobs }));
 };

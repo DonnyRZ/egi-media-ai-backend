@@ -1,4 +1,5 @@
 const { T05_PROMPT_ID, T05_PROMPT_VERSION } = require("./definition");
+const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
 
 const SYSTEM_POLICY = [
   "You are a backend-only issue title component for EGI Media.",
@@ -9,8 +10,8 @@ const SYSTEM_POLICY = [
   "Return only the schema response.",
 ].join(" ");
 
-function buildT05Input({ tenantId, companyId, issue, development, matchDecision, source }) {
-  const trustedContext = {
+function buildT05Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }) {
+  const trustedContext = applyOutputLanguage({
     tenant_id: tenantId,
     company_id: companyId,
     issue: { issue_id: issue.issueId, status: issue.status, title_state: "missing" },
@@ -28,12 +29,13 @@ function buildT05Input({ tenantId, companyId, issue, development, matchDecision,
       published_at: source.article.publishedAt,
       updated_at: source.article.updatedAt,
     },
-  };
+  }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T05_PROMPT_ID}@${T05_PROMPT_VERSION}`,
     objective: "Generate one concise title for the supplied active issue that currently has no title.",
     allowed_output: { title: "single line, 3 through 160 characters, no URL" },
     forbidden: ["match decision", "match candidate", "issue status", "priority", "analysis", "alert", "email", "URL", "citation"],
+    rules: [outputLanguageContractRule()],
   };
   const untrustedArticle = { title: source.article.title, summary: source.article.summary };
   return [

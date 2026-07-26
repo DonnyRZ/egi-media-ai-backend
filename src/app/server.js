@@ -34,7 +34,6 @@ const { PipelineStageDispatcher } = require("../automation/pipeline-stage-dispat
 const { AiTaskRegistry, AiPipelineWorker, InMemoryPipelineStateStore } = require("../pipeline");
 const { AutomationDownstreamBoundary } = require("../automation/downstream-boundary");
 const { createLogger, MetricsRegistry, observabilityMiddleware } = require("../observability");
-const { InMemoryFeedbackStore } = require("../feedback");
 const { createPostgresPersistence } = require("../persistence");
 const { AuthorizationService } = require("../auth/authorization");
 const { InMemoryMembershipStore } = require("../auth/membership.store");
@@ -59,7 +58,6 @@ class Server {
     this.rationaleRuntime = null;
     this.issueFormationRuntime = null;
     this.savedIssueStore = new InMemorySavedIssueStore();
-    this.feedbackStore = new InMemoryFeedbackStore();
     this.analysisRuntime = null;
     this.priorityRuntime = null;
     this.dashboardRuntime = null;
@@ -185,7 +183,6 @@ class Server {
       getEmailDeliveryService: () => this._getEmailDeliveryService(),
       getReportRuntime: () => this._getReportRuntime(),
       getIngestRuntime: () => this._getIngestRuntime(),
-      getFeedbackStore: () => this._getFeedbackStore(),
       getMembershipStore: () => this._getMembershipStore(),
       getTenantStore: () => this.tenantStore,
       getCompanyStore: () => this.companyStore,
@@ -304,6 +301,7 @@ class Server {
         cmsSourceGate: this.cmsSourceGate,
         decisionStore: this.relevanceRuntime.decisionStore,
         rationaleStore: this._getPersistenceRuntime()?.rationaleStore,
+        companyStore: this.companyStore,
         getCompanyContextVersion: async (companyId, version, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(companyId, version, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
@@ -327,11 +325,13 @@ class Server {
       const t05 = t05IssueTitle.createT05IssueTitleRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
+        companyStore: this.companyStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t06 = t06IssueOneLiner.createT06IssueOneLinerRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
+        companyStore: this.companyStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       this.issueFormationRuntime = { issueStore, t04, mutation, t05, t06 };
@@ -348,7 +348,6 @@ class Server {
     return this.persistenceRuntime;
   }
   _getSavedIssueStore() { return this._getPersistenceRuntime()?.savedIssueStore || this.savedIssueStore; }
-  _getFeedbackStore() { return this._getPersistenceRuntime()?.feedbackStore || this.feedbackStore; }
   _getMembershipStore() { return this.membershipStore; }
   _getT04Service() { return this._getIssueFormationRuntime().t04.service; }
   _getIssueMutationService() { return this._getIssueFormationRuntime().mutation.service; }
@@ -361,6 +360,7 @@ class Server {
       const t07 = t07IssueAnalysis.createT07IssueAnalysisRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
         issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
+        companyStore: this.companyStore,
         getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
@@ -394,6 +394,7 @@ class Server {
       const t10 = t10PriorityReason.createT10PriorityReasonRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, priorityStore: t09.priorityStore, labelStore: analysisRuntime.t08.labelStore, reasonStore: this._getPersistenceRuntime()?.reasonStore,
+        companyStore: this.companyStore,
         getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
@@ -434,7 +435,9 @@ class Server {
       this.directBlurbRuntime = t12DirectBlurbs.createT12DirectBlurbsRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), eventStore: alertRuntime.eventStore,
         issueStore: issueRuntime.issueStore, analysisStore: analysisRuntime.t07.analysisStore, priorityStore: priorityRuntime.t09.priorityStore,
-        reasonStore: priorityRuntime.t10.reasonStore, blurbStore: this._getPersistenceRuntime()?.blurbStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
+        reasonStore: priorityRuntime.t10.reasonStore, blurbStore: this._getPersistenceRuntime()?.blurbStore,
+        companyStore: this.companyStore,
+        authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
     }
     return this.directBlurbRuntime.service;
@@ -460,6 +463,7 @@ class Server {
       const draftStore = this._getPersistenceRuntime()?.reportDraftStore || new InMemoryReportDraftStore();
       const narrativeRuntime = t13ReportNarrative.createT13ReportNarrativeRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore, narrativeStore: this._getPersistenceRuntime()?.reportNarrativeStore,
+        companyStore: this.companyStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const shareIntents = [];
@@ -470,6 +474,7 @@ class Server {
       });
       const rewriteRuntime = t14ConstrainedRewrite.createT14ConstrainedRewriteRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore, narrativeStore: narrativeRuntime.narrativeStore,
+        companyStore: this.companyStore,
         authorizeCompany: async ({ actor, tenantId, companyId }) => Boolean(actor?.actorType === "human" && actor?.actorId && tenantId && companyId),
       });
       this.reportRuntime = { draftStore, narrativeService: narrativeRuntime.service, narrativeRuntime, narrativeStore: narrativeRuntime.narrativeStore, lifecycleService, shareIntents, rewriteService: rewriteRuntime.service, rewriteRuntime };

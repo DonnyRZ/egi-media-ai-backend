@@ -28,9 +28,11 @@ async function main() {
     const replay = await request("/api/v1/company-context/draft/pdf", { method: "POST", headers: { ...headers, "Idempotency-Key": idempotencyKey }, body: buildForm() });
     if (replay.draft.draft_id !== created.draft.draft_id) throw new Error("PDF upload idempotency replay returned a different draft");
     const draft = created.draft;
-    const draftHeaders = { ...headers, "If-Match": String(draft.revision), "Idempotency-Key": `s39-review-${Date.now()}` };
-    const reviewed = await request(`/api/v1/company-context/drafts/${draft.draft_id}/submit-review`, { method: "POST", headers: { ...draftHeaders, "content-type": "application/json" }, body: JSON.stringify({ review_note: "S39 real PDF E2E review" }) });
-    const approved = await request(`/api/v1/company-context/drafts/${draft.draft_id}/approve`, { method: "POST", headers: { ...headers, "If-Match": String(reviewed.revision), "Idempotency-Key": `s39-approve-${Date.now()}`, "content-type": "application/json" }, body: JSON.stringify({ approval_note: "S39 real PDF E2E approval" }) });
+    const approved = await request(`/api/v1/company-context/drafts/${draft.draft_id}/approve`, {
+      method: "POST",
+      headers: { ...headers, "If-Match": String(draft.revision), "Idempotency-Key": `s39-approve-${Date.now()}`, "content-type": "application/json" },
+      body: JSON.stringify({ approval_note: "S39 real PDF E2E activate" }),
+    });
     const effective = await request(`/api/v1/companies/${login.company_id}/context`, { headers });
     console.log(JSON.stringify({ draft_id: draft.draft_id, source: created.source, draft_status: approved.draft.status, effective_status: effective.status, effective_version: effective.version, company_id: effective.company_id }, null, 2));
   } finally { fs.rmSync(pdfPath, { force: true }); }
