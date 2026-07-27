@@ -2,6 +2,8 @@ const express = require("express");
 const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { permissionsForRole } = require("../auth/rbac");
+const { enrichCompanyOptions } = require("../auth/company-options");
+
 function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
   const router = express.Router();
   router.post("/api/v1/auth/login", async (req, res, next) => {
@@ -13,7 +15,15 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
       const accessToken = scoped ? req.app.locals.localAuthService.issueScopedToken({ actor: result.actor, tenantId: scoped.tenantId, companyId: scoped.companyId, membershipId: scoped.membershipId, role: scoped.role }) : result.accessToken;
       const role = isPlatformAdmin ? result.actor.role : (scoped?.role || result.actor.role);
       const permissions = [...permissionsForRole(role)];
-      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, permissions, authorized_companies: memberships.filter((item) => item.companyId).map((item) => ({ company_id: item.companyId, tenant_id: item.tenantId, role: item.role })) }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
+      const authorizedCompanies = await enrichCompanyOptions(
+        memberships.filter((item) => item.companyId).map((item) => ({
+          company_id: item.companyId,
+          tenant_id: item.tenantId,
+          role: item.role,
+        })),
+        { getCompanyStore },
+      );
+      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, permissions, authorized_companies: authorizedCompanies }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
   router.post("/api/v1/auth/signup", async (req, res, next) => {
@@ -32,7 +42,7 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
       if (!membership?.companyId && membership?.role !== "tenant_owner" && membership?.role !== "tenant_admin") throw Object.assign(new Error("An explicit company membership is required for this context"), { code: "FORBIDDEN", statusCode: 403 });
       const accessToken = req.app.locals.localAuthService.issueScopedToken({ actor: { id: req.authContext.actor.actorId, email: req.authContext.actor.email, full_name: req.authContext.actor.fullName, actor_type: req.authContext.actor.actorType }, tenantId, companyId, membershipId: membership.membershipId, role: membership.role });
       const permissions = [...permissionsForRole(membership.role)];
-      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", tenant_id: tenantId, company_id: companyId, role: membership.role, permissions }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
+      return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", tenant_id: tenantId, company_id: companyId, role: membership.role, permissions, company_name: company.name || null }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
   const platformSession = requireAuthContext({ tenant: false, company: false, permission: "platform.tenants.manage", humanOnly: true, platform: true });
@@ -66,6 +76,7 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
                 ? { tenant_id: item.tenant_id || item.tenantId || req.authContext.tenantId }
                 : {}),
               role: item.role,
+              ...(item.name ? { name: item.name } : {}),
             }
         ));
       }
@@ -76,6 +87,10 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
           role: req.authContext.role || req.authContext.actor.role,
         });
       }
+      authorizedCompanies = await enrichCompanyOptions(authorizedCompanies, {
+        getCompanyStore,
+        fallbackTenantId: req.authContext.tenantId || null,
+      });
       return res.json({ success: true, data: { actor: { id: req.authContext.actor.actorId, email: req.authContext.actor.email, type: req.authContext.actor.actorType, role: req.authContext.role || req.authContext.actor.role, membership_id: req.authContext.membership?.membershipId || req.authContext.actor.membershipId || null }, tenant_id: req.authContext.tenantId, company_id: req.authContext.companyId, role: req.authContext.role || req.authContext.actor.role, permissions: [...(req.authContext.permissions || [])], authorized_companies: authorizedCompanies }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });

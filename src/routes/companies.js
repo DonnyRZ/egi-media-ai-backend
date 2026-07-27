@@ -3,6 +3,7 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { resolveCompanyLanguage, normalizeLanguagePreference } = require("../language/company-language");
+const { enrichCompanyOptions } = require("../auth/company-options");
 
 function createCompanyRouter({ getCompanyStore } = {}) {
   const router = express.Router();
@@ -15,27 +16,21 @@ function createCompanyRouter({ getCompanyStore } = {}) {
     const fromMemberships = memberships?.items?.filter((item) => item.companyId).map((item) => ({
       company_id: item.companyId,
       tenant_id: item.tenantId || req.authContext.tenantId,
-      name: null,
       role: item.role,
     })) || [];
     const claims = req.authContext.authorizedCompanies;
-    const companies = fromMemberships.length ? fromMemberships : (Array.isArray(claims) && claims.length ? claims : [{ company_id: req.authContext.companyId, tenant_id: req.authContext.tenantId, name: null }]);
+    const companies = fromMemberships.length
+      ? fromMemberships
+      : (Array.isArray(claims) && claims.length
+        ? claims
+        : [{ company_id: req.authContext.companyId, tenant_id: req.authContext.tenantId }]);
+    const items = await enrichCompanyOptions(companies, {
+      getCompanyStore,
+      fallbackTenantId: req.authContext.tenantId || null,
+    });
     return res.json({
       success: true,
-      data: {
-        items: companies.map((item) => {
-          if (typeof item === "string") {
-            return { company_id: item, tenant_id: req.authContext.tenantId || undefined, name: null };
-          }
-          return {
-            company_id: item.company_id || item.id,
-            ...(item.tenant_id || item.tenantId || req.authContext.tenantId
-              ? { tenant_id: item.tenant_id || item.tenantId || req.authContext.tenantId }
-              : {}),
-            name: item.name || null,
-          };
-        }),
-      },
+      data: { items },
       meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) },
     });
     } catch (error) { return next(error); }

@@ -29,8 +29,10 @@ test("generic tenant provisioning never requires an EGI company and can issue a 
     const companies = await request(base, "/api/v1/companies", { headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}` } });
     assert.equal(companies.response.status, 200); assert.deepEqual(companies.body.data.items.map((item) => item.company_id), [companyId]);
     assert.equal(companies.body.data.items[0].tenant_id, tenantId);
+    assert.equal(companies.body.data.items[0].name, "Acme Main");
     assert.ok(Array.isArray(customerLogin.body.data.authorized_companies));
     assert.equal(customerLogin.body.data.authorized_companies[0]?.company_id, companyId);
     assert.equal(customerLogin.body.data.authorized_companies[0]?.tenant_id, tenantId);
+    assert.equal(customerLogin.body.data.authorized_companies[0]?.name, "Acme Main");
   } finally { await server.stop(); }
 });
