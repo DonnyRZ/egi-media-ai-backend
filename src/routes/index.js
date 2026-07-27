@@ -5,16 +5,18 @@ const { createIssueFormationRouter } = require("./issues");
 const { createAnalysisRouter } = require("./analysis");
 const { createPriorityRouter } = require("./priority");
 const { createDashboardRouter } = require("./dashboard");
+const { createNewsFeedRouter } = require("./news-feed");
 const { createAlertRouter } = require("./alerts");
 const { createReportRouter } = require("./reports");
 const { createIngestRouter } = require("./ingest");
+const { createNewsIntakeRouter } = require("./news-intake");
 const { createCompanyRouter } = require("./companies");
 const { createAuthRouter } = require("./auth");
 const { createMembershipRouter } = require("./memberships");
 const { createPlatformRouter } = require("./platform");
 const { createAutomationRouter } = require("./automation");
 
-module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs }) => {
+module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake }) => {
   server.use(createCompanyContextRouter({
     companyContextService,
     getCompanyContextDraftService,
@@ -25,14 +27,21 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   server.use(createCompanyRouter({ getCompanyStore }));
   server.use(createMembershipRouter({ getMembershipStore }));
   server.use(createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore }));
-  server.use(createSourceRouter({ cmsSourceGate }));
+  server.use(createSourceRouter({ cmsSourceGate, getIssueSourceResolver }));
   server.use(createRelevanceRouter({ getT02Service, getT03Service }));
   server.use(createIssueFormationRouter({ getT04Service, getIssueMutationService, getT05Service, getT06Service, getSavedIssueStore, getIssueReadService, getIssueStore }));
   server.use(createAnalysisRouter({ getT07Service, getT08Service, getCitationGate }));
   server.use(createPriorityRouter({ getT09Service, getT10Service }));
   server.use(createDashboardRouter({ getExecutiveSummaryService, getIssueReadService }));
+  server.use(createNewsFeedRouter({ getNewsFeedService }));
   server.use(createAlertRouter({ getAlertRuntime, getT12Service, getEmailDeliveryService }));
   server.use(createReportRouter({ getReportRuntime }));
   server.use(createIngestRouter({ getIngestRuntime }));
+  server.use(createNewsIntakeRouter({
+    getIngestRuntime,
+    getStatus: getAutomationStatus,
+    getRecentRuns: getNewsIntakeRecentRuns,
+    setAutomaticIntake,
+  }));
   server.use(createAutomationRouter({ getStatus: getAutomationStatus, getJobs: getAutomationJobs }));
 };

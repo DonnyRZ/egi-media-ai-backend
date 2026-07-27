@@ -87,3 +87,58 @@ test("analysis without complete T08 labels cannot become current", async () => {
   assert.equal(analysisStore.getCurrent({ tenantId, companyId, issueId }), null);
   assert.equal(analysisStore.getById(analysis.analysisId).status, "validated");
 });
+
+test("citation gate accepts crawl evidence when updatedAt is intentionally null", async () => {
+  const crawlId = "crawl:detik:a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+  const mediaUrl = "https://news.detik.com/berita/artikel-asli";
+  const relevanceStore = new InMemoryRelevanceDecisionStore();
+  const matchStore = new InMemoryIssueMatchDecisionStore();
+  const issueStore = new InMemoryIssueStore();
+  const analysisStore = new InMemoryIssueAnalysisStore({ now: () => 0 });
+  const labelStore = new InMemoryClaimLabelStore({ now: () => 0 });
+  const crawlSource = {
+    sourceArticleId: crawlId,
+    requestedLocale: "id",
+    contentLocale: "id",
+    canonicalUrl: mediaUrl,
+    article: { publishedAt: "2026-07-26T10:00:00.000Z", updatedAt: null },
+  };
+  const relevance = relevanceStore.create({
+    articleId: crawlId, companyId, contextVersion: 3, inputFingerprint: "crawl-relevance-fp",
+    source: crawlSource, output: { relevance: "high", confidence: 0.9 }, provenance: {},
+  });
+  const match = matchStore.create({
+    tenantId, companyId, relevanceDecisionId: relevance.decisionId, promptVersion: "1.0.0",
+    output: { decision: "new", candidate_issue_id: null, reason_code: "new_event" }, provenance: {},
+  });
+  const mutation = issueStore.apply({ tenantId, companyId, matchDecision: match, relevanceDecision: relevance }).mutation;
+  const gate = new CitationAnalysisGate({
+    cmsSourceGate: {
+      requirePublishedArticle: async () => ({
+        sourceArticleId: crawlId,
+        requestedLocale: "id",
+        contentLocale: "id",
+        canonicalUrl: mediaUrl,
+        article: { publishedAt: "2026-07-26T10:00:00.000Z", updatedAt: null },
+      }),
+    },
+    issueStore, analysisStore, labelStore,
+    authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId,
+    now: () => 0,
+  });
+  const analysis = analysisStore.create({
+    tenantId, companyId, issueId: mutation.issueId, contextVersion: 3, inputFingerprint: "crawl-analysis-fp",
+    promptVersion: "1.0.0",
+    analysis: {
+      what_happened: "Berita media.", why_matters: "Relevan.",
+      impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
+      claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
+    },
+    evidence: [crawlSource],
+    provenance: {},
+  });
+  labelAll(labelStore, analysis);
+  const current = await gate.validateAndPromote({ tenantId, companyId, analysisId: analysis.analysisId });
+  assert.equal(current.status, "current");
+  assert.equal(current.gate.citationStatus, "passed");
+});

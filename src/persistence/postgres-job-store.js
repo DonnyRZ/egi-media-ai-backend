@@ -12,7 +12,28 @@ class PostgresJobStore {
     return { job, reused: true };
   }
   async get({ tenantId, companyId, jobId }) { const r = await this.db.query("SELECT * FROM ai.queue_jobs WHERE id=$1 AND tenant_id=$2 AND company_id=$3", [jobId,tenantId,companyId]); return r.rows[0] ? mapJob(r.rows[0]) : null; }
-  async list({ tenantId, companyId, status } = {}) { const values=[]; const clauses=[]; if(tenantId){values.push(tenantId);clauses.push(`tenant_id=$${values.length}`);} if(companyId){values.push(companyId);clauses.push(`company_id=$${values.length}`);} if(status){values.push(status);clauses.push(`status=$${values.length}`);} const r=await this.db.query(`SELECT * FROM ai.queue_jobs${clauses.length?` WHERE ${clauses.join(" AND ")}`:""} ORDER BY created_at DESC`,values); return r.rows.map(mapJob); }
+  async list({ tenantId, companyId, status, queueName, jobTypes, limit, offset } = {}) {
+    const values = [];
+    const clauses = [];
+    if (tenantId) { values.push(tenantId); clauses.push(`tenant_id=$${values.length}`); }
+    if (companyId) { values.push(companyId); clauses.push(`company_id=$${values.length}`); }
+    if (status) { values.push(status); clauses.push(`status=$${values.length}`); }
+    if (queueName) { values.push(queueName); clauses.push(`queue_name=$${values.length}`); }
+    if (jobTypes?.length) { values.push(jobTypes); clauses.push(`job_type = ANY($${values.length})`); }
+    let sql = `SELECT * FROM ai.queue_jobs${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""} ORDER BY created_at DESC, id DESC`;
+    if (limit != null) {
+      values.push(limit);
+      sql += ` LIMIT $${values.length}`;
+      const start = Math.max(0, Number(offset) || 0);
+      values.push(start);
+      sql += ` OFFSET $${values.length}`;
+    } else if (offset != null && Number(offset) > 0) {
+      values.push(Math.max(0, Number(offset) || 0));
+      sql += ` OFFSET $${values.length}`;
+    }
+    const r = await this.db.query(sql, values);
+    return r.rows.map(mapJob);
+  }
   async recoverStale({ olderThanMs = 300000 } = {}) { const r = await this.db.query("UPDATE ai.queue_jobs SET status='retrying',locked_by=NULL,locked_at=NULL,available_at=now(),updated_at=now() WHERE status='running' AND locked_at < now() - ($1::int * interval '1 millisecond')", [olderThanMs]); return r.rowCount; }
   async claimNext({ queueName, workerId, now = Date.now }) { const r = await this.db.query("UPDATE ai.queue_jobs SET status='running',attempts=attempts+1,locked_by=$1,locked_at=$2,updated_at=$2 WHERE id=(SELECT id FROM ai.queue_jobs WHERE queue_name=$3 AND status IN ('queued','retrying') AND available_at <= $2 ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *", [workerId,new Date(typeof now === "function" ? now() : now).toISOString(),queueName]); return r.rows[0] ? mapJob(r.rows[0]) : null; }
   async complete({ jobId, workerId }) { return this._transition(jobId,workerId,"succeeded",{}); }

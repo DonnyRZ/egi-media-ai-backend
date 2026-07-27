@@ -6,6 +6,13 @@ const DATABASE_OWNERSHIP = Object.freeze({
     owner: "egi-media-backend",
     tables: Object.freeze(["articles", "user_profiles"]),
   }),
+  crawl: Object.freeze({
+    databaseEnv: "CRAWL_DATABASE_URL",
+    schema: "public",
+    access: "read-only",
+    owner: "egi-media-crawl",
+    tables: Object.freeze(["articles"]),
+  }),
   ai: Object.freeze({
     databaseEnv: "AI_DATABASE_URL",
     schema: "ai",

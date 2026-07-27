@@ -6,6 +6,7 @@ node_modules
 logs
 *.log
 coverage
+.data/
 
 # local audit / probe / debug scripts & stray artifacts
 scripts/_*

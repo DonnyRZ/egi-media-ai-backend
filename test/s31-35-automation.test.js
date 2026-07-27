@@ -9,6 +9,7 @@ const { InMemoryJobStore, JobQueueService } = require("../src/queue");
 test("S32 validates safe scheduler defaults and explicit configuration", () => {
   const defaults = readSchedulerConfig({});
   assert.equal(defaults.enabled, false);
+  assert.equal(defaults.workersEnabled, true);
   assert.deepEqual(defaults.locales, ["id"]);
   assert.equal(readSchedulerConfig({ AI_SCHEDULER_ENABLED: "true", AI_SCHEDULER_LOCALES: "id,en", AI_SCHEDULER_INTERVAL_MS: "60000" }).enabled, true);
   assert.throws(() => readSchedulerConfig({ AI_SCHEDULER_LOCALES: "fr" }), /Invalid automation configuration/);

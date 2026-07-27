@@ -35,6 +35,16 @@ const STATUS_BY_CODE = Object.freeze({
   CMS_SOURCE_REJECTED: 502,
   CMS_SOURCE_MALFORMED_RESPONSE: 502,
   CMS_SOURCE_CONFIGURATION_INVALID: 503,
+  CRAWL_SOURCE_UNAVAILABLE: 503,
+  CRAWL_SOURCE_NOT_FOUND: 404,
+  CRAWL_SOURCE_MALFORMED_ARTICLE: 502,
+  CRAWL_SOURCE_CONFIGURATION_INVALID: 503,
+  ISSUE_SOURCE_ID_INVALID: 400,
+  ISSUE_SOURCE_VIRAL_REJECTED: 400,
+  ISSUE_SOURCE_CRAWL_CHANNEL_INVALID: 400,
+  UNKNOWN_NEWS_FEED_CHANNEL: 400,
+  INVALID_CRAWL_CURSOR: 400,
+  INVALID_CRAWL_CHANNEL: 400,
   BUSINESS_RULE_FAILED: 422,
   CONFIGURATION_INVALID: 503,
   EMAIL_CONFIGURATION_INVALID: 503,
@@ -69,6 +79,8 @@ function categoryForCode(code = "") {
   if (code.startsWith("AI_PROVIDER") || code.startsWith("AI_OUTPUT") || code.startsWith("AI_")) return "ai";
   if (code.startsWith("DATABASE") || ["23505", "23503", "23514", "23502"].includes(code)) return "database";
   if (code.startsWith("CMS_SOURCE")) return "cms";
+  if (code.startsWith("CRAWL_")) return "crawl";
+  if (code.startsWith("ISSUE_SOURCE")) return "source";
   if (code.startsWith("PDF_")) return "pdf";
   if (code.startsWith("EMAIL_")) return "email";
   if (code.includes("AUTH") || code === "FORBIDDEN" || code.includes("SCOPE")) return "security";
@@ -78,7 +90,15 @@ function categoryForCode(code = "") {
 }
 
 function defaultRetryable(code) {
-  return ["AI_PROVIDER_TIMEOUT", "AI_PROVIDER_RATE_LIMITED", "AI_PROVIDER_UNAVAILABLE", "DATABASE_UNAVAILABLE"].includes(code);
+  return [
+    "AI_PROVIDER_TIMEOUT",
+    "AI_PROVIDER_RATE_LIMITED",
+    "AI_PROVIDER_UNAVAILABLE",
+    "DATABASE_UNAVAILABLE",
+    "CMS_SOURCE_UNAVAILABLE",
+    "CMS_SOURCE_TIMEOUT",
+    "CRAWL_SOURCE_UNAVAILABLE",
+  ].includes(code);
 }
 
 function publicMessage(code) {
@@ -116,6 +136,16 @@ function publicMessage(code) {
     CMS_SOURCE_REJECTED: "CMS source rejected the request",
     CMS_SOURCE_MALFORMED_RESPONSE: "CMS source response was invalid",
     CMS_SOURCE_CONFIGURATION_INVALID: "CMS source is not configured",
+    CRAWL_SOURCE_UNAVAILABLE: "Crawl article source is temporarily unavailable",
+    CRAWL_SOURCE_NOT_FOUND: "Source article was not found",
+    CRAWL_SOURCE_MALFORMED_ARTICLE: "Source article failed validation",
+    CRAWL_SOURCE_CONFIGURATION_INVALID: "Crawl source is not configured",
+    ISSUE_SOURCE_ID_INVALID: "Source article ID is invalid",
+    ISSUE_SOURCE_VIRAL_REJECTED: "Viral sources cannot be used as issue sources",
+    ISSUE_SOURCE_CRAWL_CHANNEL_INVALID: "Source channel is not an issue source",
+    UNKNOWN_NEWS_FEED_CHANNEL: "News feed channel is unknown",
+    INVALID_CRAWL_CURSOR: "News feed cursor is invalid",
+    INVALID_CRAWL_CHANNEL: "News feed channel is not a crawl source",
     BUSINESS_RULE_FAILED: "Business rule rejected the request",
     CONFIGURATION_INVALID: "Alert eligibility service is not configured",
     EMAIL_CONFIGURATION_INVALID: "Email delivery is not configured",

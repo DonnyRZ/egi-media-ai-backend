@@ -6,7 +6,7 @@ const T13_OUTPUT_SCHEMA = Object.freeze({
     issue_narratives: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: false, required: ["report_item_id", "narrative", "source_claim_ids"], properties: { report_item_id: { type: "string", minLength: 1, maxLength: 64 }, ...CITED_TEXT.properties } } },
     impact_narrative: CITED_TEXT,
     watch_items: { type: "array", minItems: 1, maxItems: 12, items: CITED_TEXT },
-    source_references: { type: "array", minItems: 1, maxItems: 60, items: { type: "object", additionalProperties: false, required: ["claim_id", "source_article_id"], properties: { claim_id: { type: "string", minLength: 1, maxLength: 64 }, source_article_id: { type: "string", minLength: 1, maxLength: 64 } } } },
+    source_references: { type: "array", minItems: 1, maxItems: 60, items: { type: "object", additionalProperties: false, required: ["claim_id", "source_article_id"], properties: { claim_id: { type: "string", minLength: 1, maxLength: 64 }, source_article_id: { type: "string", minLength: 1, maxLength: 160 } } } },
   } },
 });
 module.exports = { T13_OUTPUT_SCHEMA };

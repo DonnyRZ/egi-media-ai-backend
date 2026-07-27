@@ -1,8 +1,16 @@
+// Accepts legacy bare CMS UUIDs and F4 crawl ids (`crawl:<source_id>:<content_hash>`).
+// Do not use format:uuid — OpenAI strict json_schema would reject crawl citations.
+const ISSUE_SOURCE_ARTICLE_ID = Object.freeze({
+  type: "string",
+  minLength: 1,
+  maxLength: 160,
+});
+
 const citedItem = {
   type: "object", additionalProperties: false, required: ["text", "source_article_ids"],
   properties: {
     text: { type: "string", minLength: 1, maxLength: 500 },
-    source_article_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } },
+    source_article_ids: { type: "array", minItems: 1, maxItems: 5, items: ISSUE_SOURCE_ARTICLE_ID },
   },
 };
 
@@ -28,4 +36,4 @@ const T07_OUTPUT_SCHEMA = Object.freeze({
   },
 });
 
-module.exports = { T07_OUTPUT_SCHEMA };
+module.exports = { ISSUE_SOURCE_ARTICLE_ID, T07_OUTPUT_SCHEMA };

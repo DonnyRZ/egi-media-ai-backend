@@ -17,6 +17,7 @@
     { "name": "Inbox", "description": "Archived alert and digest email projections" },
     { "name": "Reports", "description": "Report read and human review commands" },
     { "name": "Company Context", "description": "Versioned Company Context and async draft requests" },
+    { "name": "News Intake", "description": "Human Settings actions for bringing articles into the issue pipeline (status, pull articles, recent runs). Does not expose internal AI task routes." },
     { "name": "Internal Pipeline", "description": "Service/operator-only pipeline operations" }
   ],
   "paths": {
@@ -66,6 +67,56 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "422": { "$ref": "#/components/responses/BusinessRuleError" }
+        }
+      }
+    },
+    "/api/v1/news-feed": {
+      "get": {
+        "tags": ["News Feed"],
+        "summary": "List News Feed items for a channel",
+        "description": "Company-scoped read of the multi-channel News Feed. Defaults to egi_media. Crawl channels use the crawl reader; egi_media uses CMS published articles; viral returns an empty coming-soon payload.",
+        "operationId": "listNewsFeed",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "description": "News Feed channel slug. Defaults to egi_media.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "viral", "egi_media", "detik", "viva", "suara", "cnn_indonesia", "liputan6",
+                "tirto", "tempo", "kumparan", "jawa_pos", "okezone", "sindonews", "idn_times",
+                "republika", "media_indonesia", "merdeka", "beritasatu", "tribunnews"
+              ],
+              "default": "egi_media"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque keyset pagination cursor from a previous next_cursor.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 2048 }
+          },
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": {
+            "description": "News Feed page",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NewsFeedResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
     },
@@ -481,7 +532,7 @@
       "post": {
         "tags": ["Internal Pipeline"],
         "summary": "Start a scoped ingest or backfill run",
-        "description": "Internal-only. Does not accept article content from callers. The worker reads CMS using the source contract and performs published/source validation before creating snapshots.",
+        "description": "Internal-only. Does not accept article content from callers. `poll`/`article` read the editorial CMS; `crawl-poll` reads the crawl store read-only for one registered `crawl_source_id` since its watermark. Published/source validation runs before any snapshot is created. Requires `ai.pipeline.run`. Human Settings should use `/api/v1/news-intake/pull` instead.",
         "operationId": "startIngestRun",
         "security": [{ "internalServiceAuth": [] }],
         "parameters": [
@@ -493,6 +544,96 @@
           "202": { "description": "Ingest run accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PipelineRunResponse" } } } },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/news-intake/status": {
+      "get": {
+        "tags": ["News Intake"],
+        "summary": "Read News intake status",
+        "description": "Business-facing status for Automatic intake (process-wide CMS poll scheduler) and workers that process Pull articles now. Requires `news.intake.read` and trusted tenant/company scope. Does not expose internal pipeline task routes.",
+        "operationId": "getNewsIntakeStatus",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": {
+          "200": { "description": "News intake status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewsIntakeStatusResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/news-intake/runs": {
+      "get": {
+        "tags": ["News Intake"],
+        "summary": "List recent News intake runs",
+        "description": "Company-scoped Recent runs for News intake (ingest-family jobs: cms.poll, crawl.poll, cms.article.trigger). Newest-first, bounded pagination via `limit` (default 20, max 100) plus `offset` or opaque `cursor` (mutually exclusive). Optional `status` filter. Unrelated AI-task jobs are excluded unless `include_ai_tasks=true` (then labeled `family=ai_task`). Does not dump the full queue. Requires `news.intake.read` and trusted scope.",
+        "operationId": "listNewsIntakeRuns",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "required": false, "schema": { "type": "string", "enum": ["queued", "running", "retrying", "succeeded", "dead_letter"] }, "description": "Filter by job state; invalid values return 400" },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }, "description": "Page size; invalid values return 400" },
+          { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }, "description": "Zero-based offset; mutually exclusive with cursor" },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Opaque pagination cursor from a prior `next_cursor`; mutually exclusive with offset" },
+          { "name": "include_ai_tasks", "in": "query", "required": false, "schema": { "type": "boolean", "default": false }, "description": "When true, include non-intake company jobs labeled family=ai_task" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Recent News intake runs", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewsIntakeRunsResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/news-intake/pull": {
+      "post": {
+        "tags": ["News Intake"],
+        "summary": "Pull articles now",
+        "description": "Manual News intake trigger. Modes: poll (EGI Media CMS), crawl-poll (one registered media), article (one article id). Reuses the ingest worker queue. Does not accept article content from callers. Requires `news.intake.trigger`, Idempotency-Key, and trusted scope. Does not grant or require full `ai.pipeline.run`.",
+        "operationId": "pullNewsIntake",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewsIntakePullRequest" } } } },
+        "responses": {
+          "202": { "description": "Pull accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewsIntakePullResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/news-intake/automatic": {
+      "post": {
+        "tags": ["News Intake"],
+        "summary": "Set Automatic intake desired state",
+        "description": "Enable or disable process-wide Automatic intake (CMS poll scheduler only). Idempotent start/stop of the scheduler; does not stop workers so Pull articles now still works. Requires `news.intake.manage`. Does not grant `ai.pipeline.run`. `AI_SCHEDULER_CATCH_UP` is dead config and is not exposed here.",
+        "operationId": "setNewsIntakeAutomatic",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/RequestIdHeader" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["desired"],
+                "additionalProperties": false,
+                "properties": {
+                  "desired": { "type": "boolean", "description": "Desired Automatic intake on/off (scheduler only)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated News intake status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewsIntakeStatusResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
@@ -552,20 +693,20 @@
     },
     "/api/v1/articles/{articleId}/source": {
       "get": {
-        "tags": ["Source"], "summary": "Read a published article source", "operationId": "getArticleSource", "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "articleId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "name": "locale", "in": "query", "required": false, "schema": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } }, { "$ref": "#/components/parameters/RequestIdHeader" }],
-        "responses": { "200": { "description": "Published source article and locale-aware citation" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } }
+        "tags": ["Source"], "summary": "Read a published article source", "description": "Accepts a CMS article UUID, `cms:<uuid>`, or `crawl:<source_id>:<content_hash>`. Crawl sources are read-only and cite the original media URL.", "operationId": "getArticleSource", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "articleId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/IssueSourceId" } }, { "name": "locale", "in": "query", "required": false, "schema": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } }, { "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": { "200": { "description": "Published source article and locale-aware citation" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" }, "503": { "$ref": "#/components/responses/ServiceUnavailable" } }
       }
     },
     "/api/v1/internal/source/articles/{articleId}": {
       "get": {
         "tags": ["Internal Source Boundary"],
         "summary": "Read a published CMS article through the source gate",
-        "description": "Read-only CMS lookup. Unpublished, deleted, malformed, or unsupported-locale articles are rejected. The citation URL is generated with the requested locale.",
+        "description": "Read-only source lookup. CMS ids (`<uuid>` or `cms:<uuid>`) resolve through the CMS gate; `crawl:<source_id>:<content_hash>` resolves read-only from the crawl store and cites the original media URL. Viral references are rejected. Unpublished, deleted, malformed, or unsupported-locale articles are rejected.",
         "operationId": "getPublishedSourceArticle",
         "security": [{ "internalServiceAuth": [] }],
         "parameters": [
-          { "name": "articleId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+          { "name": "articleId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/IssueSourceId" } },
           { "name": "locale", "in": "query", "required": false, "schema": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } },
           { "$ref": "#/components/parameters/RequestIdHeader" }
         ],
@@ -588,7 +729,7 @@
         "operationId": "classifyArticleRelevance",
         "security": [{ "internalServiceAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["company_id", "article_id"], "properties": { "company_id": { "$ref": "#/components/schemas/Uuid" }, "article_id": { "$ref": "#/components/schemas/Uuid" }, "locale": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } } } } } },
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["company_id", "article_id"], "properties": { "company_id": { "$ref": "#/components/schemas/Uuid" }, "article_id": { "$ref": "#/components/schemas/IssueSourceId" }, "locale": { "type": "string", "enum": ["id", "en", "uz"], "default": "id" } } } } } },
         "responses": { "200": { "description": "T02 relevance decision" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } }
       }
     },
@@ -695,6 +836,7 @@
     },
     "schemas": {
       "Uuid": { "type": "string", "format": "uuid" },
+      "IssueSourceId": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Issue pipeline source reference: `cms:<uuid>`, a legacy bare `<uuid>` (CMS), or `crawl:<source_id>:<content_hash>`. Viral references are rejected.", "example": "550e8400-e29b-41d4-a716-446655440000" },
       "LoginRequest": { "type": "object", "required": ["email", "password"], "additionalProperties": false, "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "minLength": 1, "writeOnly": true } } },
       "LoginResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["access_token", "token_type", "actor"], "properties": { "access_token": { "type": "string" }, "token_type": { "type": "string", "enum": ["Bearer"] }, "actor": { "type": "object", "required": ["id", "email", "role", "type"], "properties": { "id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string" }, "type": { "type": "string", "enum": ["human", "service", "ai_worker"] } } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "Timestamp": { "type": "string", "format": "date-time" },
@@ -910,7 +1052,136 @@
       "ReadStateRequest": { "type": "object", "required": ["is_read"], "additionalProperties": false, "properties": { "is_read": { "type": "boolean" } } },
       "ReportReviewRequest": { "type": "object", "required": ["action", "version"], "additionalProperties": false, "properties": { "action": { "type": "string", "enum": ["submit", "request_changes"] }, "version": { "type": "integer", "minimum": 1 }, "comment": { "type": "string", "maxLength": 4000 } } },
       "ReportShareRequest": { "type": "object", "required": ["version", "recipient_refs"], "additionalProperties": false, "properties": { "version": { "type": "integer", "minimum": 1 }, "recipient_refs": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "type": "string", "maxLength": 255 } }, "message": { "type": "string", "maxLength": 1000 } } },
-      "IngestRunRequest": { "type": "object", "required": ["mode", "locale"], "additionalProperties": false, "properties": { "mode": { "type": "string", "enum": ["poll", "article"] }, "article_id": { "$ref": "#/components/schemas/Uuid" }, "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }, "locale": { "type": "string", "enum": ["id", "en", "uz"] } } },
+      "IngestRunRequest": { "type": "object", "required": ["mode", "locale"], "additionalProperties": false, "properties": { "mode": { "type": "string", "enum": ["poll", "article", "crawl-poll"] }, "article_id": { "$ref": "#/components/schemas/IssueSourceId" }, "crawl_source_id": { "type": "string", "description": "Registered crawl adapter id; required when mode is crawl-poll.", "example": "detik" }, "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }, "locale": { "type": "string", "enum": ["id", "en", "uz"] } } },
+      "NewsIntakePullRequest": {
+        "type": "object",
+        "required": ["mode", "locale"],
+        "additionalProperties": false,
+        "description": "Pull articles now request. Same mode bounds as internal ingest; never accepts article body fields.",
+        "properties": {
+          "mode": { "type": "string", "enum": ["poll", "article", "crawl-poll"], "description": "poll = EGI Media CMS; crawl-poll = one registered media; article = one article id" },
+          "article_id": { "$ref": "#/components/schemas/IssueSourceId" },
+          "crawl_source_id": { "type": "string", "description": "Registered crawl media id; required when mode is crawl-poll.", "example": "detik" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 },
+          "locale": { "type": "string", "enum": ["id", "en", "uz"] }
+        }
+      },
+      "NewsIntakeStatusResponse": {
+        "type": "object",
+        "required": ["success", "data", "meta"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "data": {
+            "type": "object",
+            "required": ["automatic_intake", "workers", "pipeline"],
+            "properties": {
+              "automatic_intake": {
+                "type": "object",
+                "required": ["desired", "actual_running", "enabled", "running"],
+                "properties": {
+                  "desired": { "type": "boolean", "description": "Persisted desired Automatic intake (process-wide CMS poll scheduler)" },
+                  "actual_running": { "type": "boolean", "description": "Whether the scheduler loop is currently running" },
+                  "enabled": { "type": "boolean", "description": "Alias of desired (S2 compatibility)" },
+                  "running": { "type": "boolean", "description": "Alias of actual_running (S2 compatibility)" },
+                  "interval_ms": { "type": ["integer", "null"] },
+                  "batch_size": { "type": ["integer", "null"] },
+                  "locales": { "type": "array", "items": { "type": "string", "enum": ["id", "en", "uz"] } },
+                  "last_enqueue_at": { "type": ["string", "null"], "format": "date-time" },
+                  "last_enqueue_status": { "type": ["string", "null"] },
+                  "last_error_code": { "type": ["string", "null"] },
+                  "last_job_id": { "type": ["string", "null"] },
+                  "desired_source": { "type": ["string", "null"], "description": "env_default | manage_api" },
+                  "desired_updated_at": { "type": ["string", "null"], "format": "date-time" }
+                }
+              },
+              "workers": {
+                "type": "object",
+                "required": ["enabled", "running"],
+                "properties": {
+                  "enabled": { "type": "boolean", "description": "Whether intake workers process queued Pull articles jobs" },
+                  "running": { "type": "boolean" }
+                }
+              },
+              "pipeline": {
+                "type": "object",
+                "required": ["configured"],
+                "properties": { "configured": { "type": "boolean" } }
+              }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/ApiMeta" }
+        }
+      },
+      "NewsIntakeRun": {
+        "type": "object",
+        "required": ["id", "when", "mode", "action", "state", "family", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string", "description": "Job id" },
+          "when": { "type": ["string", "null"], "format": "date-time", "description": "Run timestamp (created_at)" },
+          "source": { "type": ["string", "null"], "description": "egi-media-cms or crawl_source_id" },
+          "mode": { "type": ["string", "null"], "description": "poll | article | crawl-poll" },
+          "action": { "type": ["string", "null"], "description": "Alias of mode for Settings copy compatibility" },
+          "state": { "type": "string", "enum": ["queued", "running", "retrying", "succeeded", "dead_letter"] },
+          "locale": { "type": ["string", "null"] },
+          "crawl_source_id": { "type": ["string", "null"] },
+          "job_type": { "type": ["string", "null"], "description": "Secondary technical detail" },
+          "family": { "type": "string", "enum": ["intake", "ai_task"], "description": "intake = News intake jobs; ai_task only when include_ai_tasks=true" },
+          "reused": { "type": ["boolean", "null"], "description": "Present when known (e.g. pull response); usually null on list" },
+          "created_at": { "$ref": "#/components/schemas/Timestamp" },
+          "updated_at": { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+      "NewsIntakeRunsResponse": {
+        "type": "object",
+        "required": ["success", "data", "meta"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "data": {
+            "type": "object",
+            "required": ["items", "limit", "offset", "has_more", "next_offset", "next_cursor"],
+            "properties": {
+              "items": { "type": "array", "items": { "$ref": "#/components/schemas/NewsIntakeRun" } },
+              "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+              "offset": { "type": "integer", "minimum": 0 },
+              "has_more": { "type": "boolean" },
+              "next_offset": { "type": ["integer", "null"] },
+              "next_cursor": { "type": ["string", "null"] }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/ApiMeta" }
+        }
+      },
+      "NewsIntakePullResponse": {
+        "type": "object",
+        "required": ["success", "data", "meta"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "data": {
+            "type": "object",
+            "required": ["id", "action", "state", "reused", "locale", "stages"],
+            "properties": {
+              "id": { "type": "string" },
+              "action": { "type": "string", "enum": ["poll", "article", "crawl-poll"] },
+              "state": { "type": "string" },
+              "reused": { "type": "boolean" },
+              "locale": { "type": "string", "enum": ["id", "en", "uz"] },
+              "stages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "state", "updated_at"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "state": { "type": "string" },
+                    "updated_at": { "$ref": "#/components/schemas/Timestamp" }
+                  }
+                }
+              }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/ApiMeta" }
+        }
+      },
       "ReplayRunRequest": { "type": "object", "required": ["from_stage", "reason"], "additionalProperties": false, "properties": { "from_stage": { "$ref": "#/components/schemas/PipelineStageName" }, "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }, "expected_input_fingerprint": { "type": "string", "maxLength": 255 } } },
       "PipelineRun": { "type": "object", "required": ["id", "trigger", "state", "stages", "created_at", "trace_id"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "trigger": { "type": "string", "enum": ["scheduled", "manual", "backfill", "replay", "context_draft"] }, "state": { "$ref": "#/components/schemas/PipelineStageState" }, "tenant_id": { "$ref": "#/components/schemas/Uuid" }, "company_id": { "$ref": "#/components/schemas/Uuid" }, "stages": { "type": "array", "items": { "$ref": "#/components/schemas/PipelineStage" } }, "created_at": { "$ref": "#/components/schemas/Timestamp" }, "completed_at": { "$ref": "#/components/schemas/Timestamp" }, "trace_id": { "type": "string" } } },
       "SavedItemResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["issue_id", "saved_at"], "properties": { "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
@@ -918,6 +1189,46 @@
       "SavedIssue": { "type": "object", "required": ["saved_id", "issue_id", "saved_at", "issue"], "properties": { "saved_id": { "$ref": "#/components/schemas/Uuid" }, "issue_id": { "$ref": "#/components/schemas/Uuid" }, "saved_at": { "$ref": "#/components/schemas/Timestamp" }, "issue": { "$ref": "#/components/schemas/IssueCard" } } },
       "ShareIntentResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["id", "state"], "properties": { "id": { "$ref": "#/components/schemas/Uuid" }, "state": { "type": "string", "enum": ["queued", "waiting_review", "suppressed"] } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "ExecutiveSummaryResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/ExecutiveSummary" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
+      "NewsFeedItem": {
+        "type": "object",
+        "required": ["id", "channel", "provider", "layout", "title", "thumbnail_url"],
+        "properties": {
+          "id": { "type": "string" },
+          "channel": { "type": "string" },
+          "provider": { "type": "string", "enum": ["viral_x", "cms", "crawl"] },
+          "layout": { "type": "string", "enum": ["card", "text"] },
+          "title": { "type": ["string", "null"] },
+          "summary": { "type": ["string", "null"] },
+          "published_at": { "type": ["string", "null"], "format": "date-time" },
+          "source_url": { "type": ["string", "null"], "format": "uri" },
+          "thumbnail_url": { "type": ["string", "null"], "format": "uri", "description": "Always present; nullable." },
+          "crawl_source_id": { "type": ["string", "null"] },
+          "issue_source_id": { "type": ["string", "null"] }
+        }
+      },
+      "NewsFeedPage": {
+        "type": "object",
+        "required": ["channel", "label", "layout", "provider", "items", "next_cursor"],
+        "properties": {
+          "channel": { "type": "string" },
+          "label": { "type": "string" },
+          "layout": { "type": "string", "enum": ["card", "text"] },
+          "provider": { "type": "string", "enum": ["viral_x", "cms", "crawl"] },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/NewsFeedItem" } },
+          "next_cursor": { "type": ["string", "null"] },
+          "availability": { "type": "string", "enum": ["coming_soon"] },
+          "message": { "type": "string" }
+        }
+      },
+      "NewsFeedResponse": {
+        "type": "object",
+        "required": ["success", "data", "meta"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "data": { "$ref": "#/components/schemas/NewsFeedPage" },
+          "meta": { "$ref": "#/components/schemas/ApiMeta" }
+        }
+      },
       "IssueListResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/IssueCard" } } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "IssueDetailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/IssueDetail" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },
       "EmailResponse": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "$ref": "#/components/schemas/EmailMessage" }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } },

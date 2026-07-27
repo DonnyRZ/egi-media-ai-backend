@@ -16,6 +16,9 @@ const registerRoutes = require("../routes");
 const { createCompanyContextRuntime } = require("../company-context/runtime");
 const { createT01CompanyContextDraftRuntime, t02RelevanceClass, t03RelevanceRationale, t04IssueMatch, t05IssueTitle, t06IssueOneLiner, t07IssueAnalysis, t08ClaimLabels, t09PriorityEnum, t10PriorityReason, t12DirectBlurbs, t13ReportNarrative, t14ConstrainedRewrite, createAiTaskKernel } = require("../ai");
 const { createCmsSourceGate } = require("../cms");
+const { CrawlIngestService, createIssueSourceResolver } = require("../source");
+const { createCrawlArticleReader } = require("../news-feed/crawl-article-reader");
+const { createNewsFeedService } = require("../news-feed/news-feed.service");
 const { InMemoryIssueStore, InMemorySavedIssueStore, createIssueMutationRuntime } = require("../issues");
 const { CitationAnalysisGate } = require("../analysis");
 const { ExecutiveSummaryService, IssueReadService } = require("../dashboard");
@@ -29,6 +32,15 @@ const { SchedulerStateStore } = require("../automation/scheduler-state");
 const { PollEnqueueService } = require("../automation/poll-enqueue.service");
 const { MultiTenantIngestScheduler } = require("../automation/scheduler");
 const { QueueWorkerRunner } = require("../automation/worker-runner");
+const { resolveAutomationStart } = require("../automation/start-policy");
+const {
+  InMemoryAutomaticIntakeSettingsStore,
+  FileAutomaticIntakeSettingsStore,
+  PostgresAutomaticIntakeSettingsStore,
+  defaultAutomaticIntakeSettingsPath,
+} = require("../automation/automatic-intake-settings.store");
+const { AutomaticIntakeController } = require("../automation/automatic-intake.controller");
+const { listRecentRunsFromStore } = require("../routes/news-intake");
 const { InMemoryPipelineCompanyStore, PostgresPipelineCompanyStore } = require("../automation/company-scope");
 const { PipelineStageDispatcher } = require("../automation/pipeline-stage-dispatcher");
 const { AiTaskRegistry, AiPipelineWorker, InMemoryPipelineStateStore } = require("../pipeline");
@@ -54,6 +66,9 @@ class Server {
     this.companyContextRuntime = null;
     this.companyContextDraftRuntime = null;
     this.cmsSourceGate = createCmsSourceGate();
+    this.crawlArticleReader = null;
+    this.issueSourceResolver = null;
+    this.newsFeedService = null;
     this.relevanceRuntime = null;
     this.rationaleRuntime = null;
     this.issueFormationRuntime = null;
@@ -69,6 +84,9 @@ class Server {
     this.schedulerStateStore = new SchedulerStateStore();
     this.scheduler = null;
     this.workerRunner = null;
+    this.automaticIntakeSettingsStore = null;
+    this.automaticIntakeController = null;
+    this.automationRuntimeConfig = null;
     this.pipelineRuntime = null;
     this.logger = createLogger({ service: process.env.SERVICE_NAME });
     this.app.locals.logger = this.logger;
@@ -163,6 +181,8 @@ class Server {
       getCompanyContextDraftService: () => this._getCompanyContextDraftService(),
       getCompanyContextUploadStore: () => this._getPersistenceRuntime()?.uploadRequestStore || (this.companyContextUploadStore ||= new InMemoryCompanyContextUploadRequestStore()),
       cmsSourceGate: this.cmsSourceGate,
+      getIssueSourceResolver: () => this._getIssueSourceResolver(),
+      getNewsFeedService: () => this._getNewsFeedService(),
       getT02Service: () => this._getT02Service(),
       getT03Service: () => this._getT03Service(),
       getT04Service: () => this._getT04Service(),
@@ -186,8 +206,22 @@ class Server {
       getMembershipStore: () => this._getMembershipStore(),
       getTenantStore: () => this.tenantStore,
       getCompanyStore: () => this.companyStore,
-      getAutomationStatus: () => ({ scheduler: this.scheduler?.status() || { running: false, enabled: false }, worker: this.workerRunner?.status() || { running: false }, pipeline: { configured: Boolean(this.pipelineRuntime) } }),
+      getAutomationStatus: async () => this._getAutomationStatusPayload(),
+      setAutomaticIntake: async ({ desired, actorId, role } = {}) => {
+        if (!this.automaticIntakeController) {
+          throw Object.assign(new Error("Automatic intake management is not available"), {
+            code: "SERVICE_UNAVAILABLE",
+            statusCode: 503,
+          });
+        }
+        return this.automaticIntakeController.setDesired(desired, { actorId, role });
+      },
       getAutomationJobs: async (req) => this._getIngestRuntime().jobStore.list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, status: req.query.status || undefined }),
+      getNewsIntakeRecentRuns: async (req, query = {}) => listRecentRunsFromStore(this._getIngestRuntime().jobStore, {
+        tenantId: req.authContext.tenantId,
+        companyId: req.authContext.companyId,
+        ...query,
+      }),
     });
 
     this.app.use((_req, res) => {
@@ -220,7 +254,7 @@ class Server {
     }
     await this.platformBootstrapPromise;
     const result = await this.listen();
-    this._startAutomation();
+    await this._startAutomation();
     return result;
   }
 
@@ -283,7 +317,7 @@ class Server {
       this.relevanceRuntime = t02RelevanceClass.createT02RelevanceRuntime({
         aiTaskKernel: createAiTaskKernel(),
         openaiConfig: config.get("/openai"),
-        cmsSourceGate: this.cmsSourceGate,
+        cmsSourceGate: this._getIssueSourceResolver(),
         decisionStore: this._getPersistenceRuntime()?.relevanceDecisionStore,
         getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
@@ -298,7 +332,7 @@ class Server {
       this.rationaleRuntime = t03RelevanceRationale.createT03RelevanceRationaleRuntime({
         aiTaskKernel: createAiTaskKernel(),
         openaiConfig: config.get("/openai"),
-        cmsSourceGate: this.cmsSourceGate,
+        cmsSourceGate: this._getIssueSourceResolver(),
         decisionStore: this.relevanceRuntime.decisionStore,
         rationaleStore: this._getPersistenceRuntime()?.rationaleStore,
         companyStore: this.companyStore,
@@ -314,7 +348,7 @@ class Server {
       const t02 = this._getT02Service();
       const issueStore = this._getPersistenceRuntime()?.issueStore || new InMemoryIssueStore();
       const t04 = t04IssueMatch.createT04IssueMatchRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         decisionStore: this.relevanceRuntime.decisionStore, matchDecisionStore: this._getPersistenceRuntime()?.matchDecisionStore, issueCandidateStore: issueStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
@@ -323,13 +357,13 @@ class Server {
         issueStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t05 = t05IssueTitle.createT05IssueTitleRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t06 = t06IssueOneLiner.createT06IssueOneLinerRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
@@ -358,7 +392,7 @@ class Server {
     if (!this.analysisRuntime) {
       const issueRuntime = this._getIssueFormationRuntime();
       const t07 = t07IssueAnalysis.createT07IssueAnalysisRuntime({
-        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this.cmsSourceGate,
+        aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
         companyStore: this.companyStore,
         getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
@@ -369,7 +403,7 @@ class Server {
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const gate = new CitationAnalysisGate({
-        cmsSourceGate: this.cmsSourceGate, issueStore: issueRuntime.issueStore,
+        cmsSourceGate: this._getIssueSourceResolver(), issueStore: issueRuntime.issueStore,
         analysisStore: t07.analysisStore, labelStore: t08.labelStore,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
@@ -420,6 +454,32 @@ class Server {
   }
   _getExecutiveSummaryService() { return this._getDashboardRuntime().executiveSummary; }
   _getIssueReadService() { return this._getDashboardRuntime().issueRead; }
+
+  _getCrawlArticleReader() {
+    if (!this.crawlArticleReader) this.crawlArticleReader = createCrawlArticleReader();
+    return this.crawlArticleReader;
+  }
+
+  _getIssueSourceResolver() {
+    if (!this.issueSourceResolver) {
+      this.issueSourceResolver = createIssueSourceResolver({
+        cmsSourceGate: this.cmsSourceGate,
+        crawlArticleReader: this._getCrawlArticleReader(),
+      });
+    }
+    return this.issueSourceResolver;
+  }
+
+  _getNewsFeedService() {
+    if (!this.newsFeedService) {
+      this.newsFeedService = createNewsFeedService({
+        crawlArticleReader: this._getCrawlArticleReader(),
+        cmsArticleClient: this.cmsSourceGate.cmsArticleClient,
+        portalBaseUrl: config.get("/portal").baseUrl,
+      });
+    }
+    return this.newsFeedService;
+  }
 
   _getAlertRuntime() {
     if (!this.alertRuntime) {
@@ -484,15 +544,74 @@ class Server {
   _getIngestRuntime() {
     if (!this.ingestRuntime) {
       const persistence = this._getPersistenceRuntime(); const jobStore = persistence?.jobStore || new InMemoryJobStore(); const queue = new JobQueueService({ jobStore, workerId: "ingest-worker", logger: this.logger }); const snapshotStore = persistence?.snapshotStore || new InMemorySourceSnapshotStore(); const watermarkStore = persistence?.watermarkStore || new InMemoryWatermarkStore();
-      const worker = new IngestWorker({ sourceGate: this.cmsSourceGate, articleListClient: this.cmsSourceGate.cmsArticleClient, snapshotStore, watermarkStore, enqueueStageJob: async ({ tenantId, companyId, stage, sourceSnapshotId, sourceArticleId, locale }) => queue.enqueue({ tenantId, companyId, queueName: "pipeline-stage", jobType: `${stage}.dispatch`, idempotencyKey: `stage-${sourceSnapshotId}-${companyId}`.slice(0, 255), payload: { stage, source_snapshot_id: sourceSnapshotId, source_article_id: sourceArticleId, locale }, maxAttempts: 3 }) });
-      const runNext = () => queue.processNext({ queueName: "ingest", handler: (job) => job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
-      this.ingestRuntime = { queue, jobStore, worker, snapshotStore, watermarkStore, runNext };
+      const enqueueStageJob = async ({ tenantId, companyId, stage, sourceSnapshotId, sourceArticleId, locale }) => queue.enqueue({ tenantId, companyId, queueName: "pipeline-stage", jobType: `${stage}.dispatch`, idempotencyKey: `stage-${sourceSnapshotId}-${companyId}`.slice(0, 255), payload: { stage, source_snapshot_id: sourceSnapshotId, source_article_id: sourceArticleId, locale }, maxAttempts: 3 });
+      const worker = new IngestWorker({ sourceGate: this._getIssueSourceResolver(), articleListClient: this.cmsSourceGate.cmsArticleClient, snapshotStore, watermarkStore, enqueueStageJob });
+      const crawlIngestService = new CrawlIngestService({ crawlArticleReader: this._getCrawlArticleReader(), sourceGate: this._getIssueSourceResolver(), snapshotStore, watermarkStore, enqueueStageJob });
+      const runNext = () => queue.processNext({ queueName: "ingest", handler: (job) => job.payload.mode === "crawl-poll" ? crawlIngestService.pollSource({ tenantId: job.tenantId, companyId: job.companyId, sourceId: job.payload.crawl_source_id, locale: job.payload.locale, limit: job.payload.limit }) : job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
+      this.ingestRuntime = { queue, jobStore, worker, crawlIngestService, snapshotStore, watermarkStore, runNext };
     }
     return this.ingestRuntime;
   }
 
-  _startAutomation() {
-    const automation = config.get("/automation");
+  _createAutomaticIntakeSettingsStore() {
+    if (process.env.AI_PERSISTENCE_MODE === "postgres") {
+      return new PostgresAutomaticIntakeSettingsStore({ db: this.getDatabaseRuntime().ai });
+    }
+    if (process.env.AI_AUTOMATIC_INTAKE_SETTINGS_MODE === "memory") {
+      return new InMemoryAutomaticIntakeSettingsStore();
+    }
+    return new FileAutomaticIntakeSettingsStore({
+      filePath: defaultAutomaticIntakeSettingsPath(process.env),
+    });
+  }
+
+  async _getAutomationStatusPayload() {
+    const automation = this.automationRuntimeConfig || config.get("/automation");
+    const start = resolveAutomationStart(automation);
+    const automatic_intake = this.automaticIntakeController
+      ? await this.automaticIntakeController.getStatus()
+      : {
+        desired: Boolean(automation?.enabled),
+        actual_running: Boolean(this.scheduler?.running),
+        interval_ms: automation?.intervalMs ?? null,
+        batch_size: automation?.batchSize ?? null,
+        locales: automation?.locales || [],
+        last_enqueue_at: null,
+        last_enqueue_status: null,
+        last_error_code: null,
+        last_job_id: null,
+        desired_source: null,
+        desired_updated_at: null,
+      };
+    return {
+      automatic_intake,
+      scheduler: this.scheduler?.status() || {
+        running: Boolean(automatic_intake.actual_running),
+        enabled: Boolean(automatic_intake.desired),
+        interval_ms: automatic_intake.interval_ms,
+        locales: automatic_intake.locales,
+      },
+      worker: this.workerRunner?.status() || { running: false },
+      workers_enabled: start.startWorkers,
+      pipeline: { configured: Boolean(this.pipelineRuntime) },
+    };
+  }
+
+  async _startAutomation() {
+    const envAutomation = config.get("/automation");
+    const automation = { ...envAutomation };
+    this.automationRuntimeConfig = automation;
+    this.automaticIntakeSettingsStore = this._createAutomaticIntakeSettingsStore();
+    this.automaticIntakeController = new AutomaticIntakeController({
+      settingsStore: this.automaticIntakeSettingsStore,
+      getScheduler: () => this.scheduler,
+      getAutomationConfig: () => this.automationRuntimeConfig,
+      envDefaultEnabled: Boolean(envAutomation.enabled),
+      logger: this.logger,
+    });
+    // Persisted desired wins; AI_SCHEDULER_ENABLED is the seed only when none exists.
+    automation.enabled = await this.automaticIntakeController.resolveDesiredOnBoot();
+
     const ingest = this._getIngestRuntime();
     const pipeline = this._getPipelineRuntime();
     const pollEnqueue = new PollEnqueueService({ queue: ingest.queue, maxAttempts: automation.maxAttempts });
@@ -504,7 +623,11 @@ class Server {
       if (queueName.startsWith("ai-task-")) return pipeline.worker.processNext({ taskId: queueName.replace("ai-task-", "") });
       return null;
     }, logger: this.logger });
-    if (automation.enabled) { this.scheduler.start(); this.workerRunner.start(); }
+    // Automatic intake (scheduler) and queue workers are independent. Manual
+    // News intake must still process when Automatic intake desired is off.
+    const { startScheduler, startWorkers } = resolveAutomationStart(automation);
+    if (startScheduler) this.scheduler.start();
+    if (startWorkers) this.workerRunner.start();
   }
 
   _getPipelineRuntime() {

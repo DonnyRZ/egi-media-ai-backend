@@ -44,9 +44,13 @@ const config = {
   database: {
     sourceUrl: process.env.SOURCE_DATABASE_URL,
     aiUrl: process.env.AI_DATABASE_URL,
+    crawlUrl: process.env.CRAWL_DATABASE_URL,
     sourcePoolMax: Number(process.env.SOURCE_DB_POOL_MAX || 5),
     aiPoolMax: Number(process.env.AI_DB_POOL_MAX || 10),
+    crawlPoolMax: Number(process.env.CRAWL_DB_POOL_MAX || 5),
     connectionTimeoutMs: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
+    crawlConnectionTimeoutMs: Number(process.env.CRAWL_DB_CONNECTION_TIMEOUT_MS || 3000),
+    crawlQueryTimeoutMs: Number(process.env.CRAWL_DB_QUERY_TIMEOUT_MS || 3000),
     idleTimeoutMs: Number(process.env.DB_IDLE_TIMEOUT_MS || 10000),
     ssl: process.env.DB_SSL === "true",
   },

@@ -46,5 +46,12 @@ class MultiTenantIngestScheduler extends IngestScheduler {
     }
     return results;
   }
+  status() {
+    const base = super.status();
+    const listed = typeof this.stateStore.list === "function"
+      ? this.stateStore.list().filter((state) => state.sourceName === this.sourceName)
+      : base.state;
+    return { ...base, state: listed };
+  }
 }
 module.exports = { IngestScheduler, MultiTenantIngestScheduler };

@@ -4,7 +4,9 @@ const test = require("node:test");
 const { InMemoryRelevanceDecisionStore } = require("../src/ai/tasks/t02-relevance-class");
 const { InMemoryIssueMatchDecisionStore } = require("../src/ai/tasks/t04-issue-match");
 const { InMemoryIssueStore } = require("../src/issues");
-const { createT07IssueAnalysisRuntime } = require("../src/ai/tasks/t07-issue-analysis");
+const Ajv = require("ajv");
+const { createT07IssueAnalysisRuntime, T07_OUTPUT_SCHEMA } = require("../src/ai/tasks/t07-issue-analysis");
+const { T13_OUTPUT_SCHEMA } = require("../src/ai/tasks/t13-report-narrative/schema");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -117,4 +119,35 @@ test("T07 does not call the model when linked evidence is stale or cross-scope",
     await assert.rejects(runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }), { code: "AI_CONFIGURATION_INVALID" });
     assert.equal(kernelCalls(), 0);
   });
+});
+
+test("T07 and T13 schemas accept crawl issue source ids (not UUID-only)", () => {
+  const crawlId = `crawl:media_indonesia:${"ab".repeat(32)}`;
+  assert.ok(crawlId.length > 64, "fixture must exceed the old T13 maxLength of 64");
+
+  const citedItems = T07_OUTPUT_SCHEMA.schema.properties.impacts.items.properties.source_article_ids.items;
+  assert.equal(citedItems.format, undefined);
+  assert.equal(citedItems.maxLength, 160);
+
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  const validateT07 = ajv.compile(T07_OUTPUT_SCHEMA.schema);
+  assert.equal(validateT07({
+    what_happened: "Peristiwa dari media crawl.",
+    why_matters: "Perlu dilacak di pipeline isu.",
+    impacts: [{ text: "Dampak operasional.", source_article_ids: [crawlId] }],
+    risks: [],
+    watch: [],
+    claims: [{ claim_id: "c1", text: "Klaim berbasis crawl.", source_article_ids: [crawlId] }],
+  }), true, ajv.errorsText(validateT07.errors));
+
+  const t13ArticleId = T13_OUTPUT_SCHEMA.schema.properties.source_references.items.properties.source_article_id;
+  assert.equal(t13ArticleId.maxLength, 160);
+  const validateT13 = ajv.compile(T13_OUTPUT_SCHEMA.schema);
+  assert.equal(validateT13({
+    executive_summary: "Ringkasan.",
+    issue_narratives: [{ report_item_id: "item-1", narrative: "Narasi.", source_claim_ids: ["c1"] }],
+    impact_narrative: { narrative: "Dampak.", source_claim_ids: ["c1"] },
+    watch_items: [{ narrative: "Pantau.", source_claim_ids: ["c1"] }],
+    source_references: [{ claim_id: "c1", source_article_id: crawlId }],
+  }), true, ajv.errorsText(validateT13.errors));
 });

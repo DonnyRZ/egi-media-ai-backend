@@ -52,6 +52,16 @@ class CmsSourceGate {
       requestedLocale: locale,
       contentLocale: article.locale || locale,
       canonicalUrl: buildCanonicalArticleUrl({ portalBaseUrl: this.portalBaseUrl, locale, articleId }),
+      provider: "cms",
+      issueSourceId: `cms:${article.id}`,
+      metadata: Object.freeze({
+        provider: "cms",
+        crawl_source_id: null,
+        content_hash: null,
+        thumbnail_url: typeof article.featured_image === "string" && article.featured_image.trim()
+          ? article.featured_image
+          : null,
+      }),
       article: Object.freeze({
         id: article.id,
         title: article.title || null,

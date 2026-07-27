@@ -45,7 +45,9 @@ class CitationAnalysisGate {
 
   async _validateFreshCanonicalEvidence(evidence) {
     const locale = evidence.locale || evidence.requestedLocale;
-    const updatedAt = evidence.updatedAt || evidence.sourceUpdatedAt || evidence.article?.updatedAt;
+    // Crawl sources intentionally set updatedAt=null (content_hash pins the snapshot).
+    // Use nullish coalescing so a stored null is not treated as "missing".
+    const updatedAt = evidence.updatedAt ?? evidence.sourceUpdatedAt ?? evidence.article?.updatedAt ?? null;
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: evidence.sourceArticleId, locale });
     if (source.sourceArticleId !== evidence.sourceArticleId || source.requestedLocale !== locale
       || source.canonicalUrl !== evidence.canonicalUrl || source.article.updatedAt !== updatedAt) {
@@ -80,8 +82,8 @@ class CitationAnalysisGate {
 
 function evidenceKey(item) {
   const locale = item.locale || item.requestedLocale;
-  const updatedAt = item.updatedAt || item.sourceUpdatedAt || item.article?.updatedAt;
-  return `${item.sourceArticleId}|${locale}|${item.canonicalUrl}|${updatedAt || ""}`;
+  const updatedAt = item.updatedAt ?? item.sourceUpdatedAt ?? item.article?.updatedAt ?? null;
+  return `${item.sourceArticleId}|${locale}|${item.canonicalUrl}|${updatedAt ?? ""}`;
 }
 function denyByDefault() { throw new AiConfigurationError("Analysis gate requires a tenant/company authorization guard"); }
 module.exports = { CitationAnalysisGate };
