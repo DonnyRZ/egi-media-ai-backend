@@ -39,7 +39,7 @@ function createAnalysis(analysisStore, { issueId, fingerprint = "analysis-fp", e
   return analysisStore.create({
     tenantId, companyId, issueId, contextVersion: 3, inputFingerprint: fingerprint, promptVersion: "1.0.0",
     analysis: {
-      what_happened: "Regulasi diumumkan.", why_matters: "Operasi dapat berubah.",
+      what_happened: ["Regulasi diumumkan."], why_matters: ["Operasi dapat berubah."],
       impacts: [{ text: "Perlu penyesuaian.", source_article_ids: claimSourceIds }], risks: [], watch: [],
       claims: [{ claim_id: "c1", text: "Regulasi menyasar operator.", source_article_ids: claimSourceIds }],
     }, evidence, provenance: {},
@@ -130,7 +130,7 @@ test("citation gate accepts crawl evidence when updatedAt is intentionally null"
     tenantId, companyId, issueId: mutation.issueId, contextVersion: 3, inputFingerprint: "crawl-analysis-fp",
     promptVersion: "1.0.0",
     analysis: {
-      what_happened: "Berita media.", why_matters: "Relevan.",
+      what_happened: ["Berita media."], why_matters: ["Relevan."],
       impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
       claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
     },

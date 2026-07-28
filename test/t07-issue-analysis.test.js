@@ -61,8 +61,8 @@ function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
 
 function validOutput() {
   return {
-    what_happened: "Regulasi baru diumumkan untuk operator logistik.",
-    why_matters: "Perubahan ini dapat memengaruhi operasi armada perusahaan.",
+    what_happened: ["Regulasi baru diumumkan untuk operator logistik."],
+    why_matters: ["Perubahan ini dapat memengaruhi operasi armada perusahaan."],
     impacts: [{ text: "Operator perlu meninjau kepatuhan armada.", source_article_ids: [articleOne] }],
     risks: [{ text: "Biaya penyesuaian dapat meningkat.", source_article_ids: [articleTwo] }],
     watch: [{ text: "Pantau panduan pelaksanaan regulator.", source_article_ids: [articleOne] }],
@@ -160,7 +160,7 @@ test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted"
           kernelCalls += 1;
           return {
             data: {
-              what_happened: "Peristiwa crawl.", why_matters: "Perlu dilacak.",
+              what_happened: ["Peristiwa crawl."], why_matters: ["Perlu dilacak."],
               impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
               claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
             },
@@ -197,8 +197,8 @@ test("T07 and T13 schemas accept crawl issue source ids (not UUID-only)", () => 
   const ajv = new Ajv({ allErrors: true, strict: false });
   const validateT07 = ajv.compile(T07_OUTPUT_SCHEMA.schema);
   assert.equal(validateT07({
-    what_happened: "Peristiwa dari media crawl.",
-    why_matters: "Perlu dilacak di pipeline isu.",
+    what_happened: ["Peristiwa dari media crawl."],
+    why_matters: ["Perlu dilacak di pipeline isu."],
     impacts: [{ text: "Dampak operasional.", source_article_ids: [crawlId] }],
     risks: [],
     watch: [],

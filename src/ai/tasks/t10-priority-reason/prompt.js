@@ -1,5 +1,6 @@
 const { T10_PROMPT_ID, T10_PROMPT_VERSION } = require("./definition");
 const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
+const { flattenAnalysisPoints } = require("../../../analysis/analysis-points");
 
 const SYSTEM_POLICY = [
   "You are a backend-only priority reason component for EGI Media.",
@@ -33,8 +34,8 @@ function buildT10Input({ tenantId, companyId, issue, analysis, context, priority
     rules: [outputLanguageContractRule()],
   };
   const untrustedAnalysis = {
-    what_happened: analysis.analysis.what_happened,
-    why_matters: analysis.analysis.why_matters,
+    what_happened: flattenAnalysisPoints(analysis.analysis.what_happened),
+    why_matters: flattenAnalysisPoints(analysis.analysis.why_matters),
     impacts: analysis.analysis.impacts,
     risks: analysis.analysis.risks,
     watch: analysis.analysis.watch,

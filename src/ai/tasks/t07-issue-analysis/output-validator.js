@@ -5,7 +5,7 @@ function validateT07Output(data, { allowedArticleIds }) {
   if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length !== required.length
     || required.some((field) => !Object.hasOwn(data, field))) throw invalid();
   for (const field of ["what_happened", "why_matters"]) {
-    if (typeof data[field] !== "string" || !data[field].trim() || data[field].trim().length > 1200) throw invalid();
+    validatePointList(data[field]);
   }
   for (const field of ["impacts", "risks", "watch"]) {
     if (!Array.isArray(data[field]) || data[field].length > 6) throw invalid();
@@ -22,6 +22,13 @@ function validateT07Output(data, { allowedArticleIds }) {
   return normalize(data);
 }
 
+function validatePointList(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) throw invalid();
+  value.forEach((point) => {
+    if (typeof point !== "string" || !point.trim() || point.trim().length > 280) throw invalid();
+  });
+}
+
 function validateCitedItem(item, allowedArticleIds) {
   if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.text !== "string"
     || !item.text.trim() || item.text.trim().length > 500 || !Array.isArray(item.source_article_ids)
@@ -33,7 +40,8 @@ function validateCitedItem(item, allowedArticleIds) {
 function normalize(data) {
   const trimItem = (item) => ({ ...item, text: item.text.trim(), source_article_ids: [...item.source_article_ids] });
   return {
-    what_happened: data.what_happened.trim(), why_matters: data.why_matters.trim(),
+    what_happened: data.what_happened.map((point) => point.trim()),
+    why_matters: data.why_matters.map((point) => point.trim()),
     impacts: data.impacts.map(trimItem), risks: data.risks.map(trimItem), watch: data.watch.map(trimItem),
     claims: data.claims.map((claim) => ({ ...trimItem(claim), claim_id: claim.claim_id })),
   };

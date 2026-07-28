@@ -6,6 +6,8 @@ const ISSUE_SOURCE_ARTICLE_ID = Object.freeze({
   maxLength: 160,
 });
 
+const pointText = Object.freeze({ type: "string", minLength: 1, maxLength: 280 });
+
 const citedItem = {
   type: "object", additionalProperties: false, required: ["text", "source_article_ids"],
   properties: {
@@ -15,13 +17,14 @@ const citedItem = {
 };
 
 const T07_OUTPUT_SCHEMA = Object.freeze({
-  name: "issue_analysis_v1",
+  name: "issue_analysis_v2",
   schema: {
     type: "object", additionalProperties: false,
     required: ["what_happened", "why_matters", "impacts", "risks", "watch", "claims"],
     properties: {
-      what_happened: { type: "string", minLength: 1, maxLength: 1200 },
-      why_matters: { type: "string", minLength: 1, maxLength: 1200 },
+      // Discrete points (not paragraphs) for the issue drawer and downstream packers.
+      what_happened: { type: "array", minItems: 1, maxItems: 6, items: pointText },
+      why_matters: { type: "array", minItems: 1, maxItems: 6, items: pointText },
       impacts: { type: "array", maxItems: 6, items: citedItem },
       risks: { type: "array", maxItems: 6, items: citedItem },
       watch: { type: "array", maxItems: 6, items: citedItem },

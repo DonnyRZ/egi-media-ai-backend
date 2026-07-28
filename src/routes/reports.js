@@ -3,6 +3,7 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { validateReportPack } = require("../ai/tasks/t13-report-narrative/service");
+const { flattenAnalysisPoints } = require("../analysis/analysis-points");
 
 function createReportRouter({ getReportRuntime } = {}) {
   const router = express.Router();
@@ -82,7 +83,7 @@ function toCamelIssuePackItem(item) {
   const allowed = ["report_item_id", "issue_id", "analysis_id", "priority", "title", "one_liner", "analysis", "claims", "citations"];
   if (Object.keys(item).some((key) => !allowed.includes(key))) throw validationError("Report draft accepts only validated issue and insight fields");
   if (Object.hasOwn(item, "raw_article_body") || Object.hasOwn(item, "article_body") || Object.hasOwn(item, "content")) throw validationError("Raw article content is not accepted in report drafts");
-  return { reportItemId: item.report_item_id, issueId: item.issue_id, analysisId: item.analysis_id, priority: item.priority, title: item.title, oneLiner: item.one_liner, analysis: { whatHappened: item.analysis?.what_happened, whyMatters: item.analysis?.why_matters }, claims: (item.claims || []).map((claim) => ({ claimId: claim.claim_id, text: claim.text, sourceArticleIds: claim.source_article_ids })), citations: (item.citations || []).map((citation) => ({ sourceArticleId: citation.source_article_id, canonicalUrl: citation.canonical_url })) };
+  return { reportItemId: item.report_item_id, issueId: item.issue_id, analysisId: item.analysis_id, priority: item.priority, title: item.title, oneLiner: item.one_liner, analysis: { whatHappened: flattenAnalysisPoints(item.analysis?.what_happened), whyMatters: flattenAnalysisPoints(item.analysis?.why_matters) }, claims: (item.claims || []).map((claim) => ({ claimId: claim.claim_id, text: claim.text, sourceArticleIds: claim.source_article_ids })), citations: (item.citations || []).map((citation) => ({ sourceArticleId: citation.source_article_id, canonicalUrl: citation.canonical_url })) };
 }
 function serializeDraft(draft) { return { report_id: draft.reportId, report_type: draft.reportType, period_start: draft.periodStart, period_end: draft.periodEnd, timezone: draft.timezone, context_version: draft.contextVersion, metrics: draft.metrics, selected_issue_pack: draft.selectedIssuePack, review_status: draft.reviewStatus, version: draft.version, created_at: draft.createdAt, updated_at: draft.updatedAt }; }
 function serializeNarrative(narrative) { return { report_narrative_id: narrative.reportNarrativeId, report_id: narrative.reportId, prompt_version: narrative.promptVersion, narrative: narrative.narrative, review_status: narrative.reviewStatus, version: narrative.version, created_at: narrative.createdAt, updated_at: narrative.updatedAt }; }
