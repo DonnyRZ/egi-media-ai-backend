@@ -12,6 +12,8 @@ function contextFields() {
   return {
     name: "PT Example", industry: "Logistics", sub_industry: null, description: null,
     products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],
+    brands_aliases: [],
+    key_people: [],
     priorities: ["Reduce costs"], goals: [], risks: [], topics: [], dependencies: [],
   };
 }

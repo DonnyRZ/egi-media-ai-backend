@@ -1,0 +1,70 @@
+{
+  "A": {
+    "id": "context-a-hospitality",
+    "label": "Context A",
+    "fields": {
+      "name": "PT Arunika Hospitality Indonesia (Arunika Hospitality Group)",
+      "industry": "Perhotelan (Hotel, Restoran, Food & Beverage)",
+      "sub_industry": "Pengembangan dan manajemen hotel",
+      "description": "Hospitality group based in Jakarta",
+      "products": [
+        "Hotel mewah, hotel butik, dan hotel bisnis",
+        "Resor pantai dan resor destinasi",
+        "Restoran (fine dining, all-day dining)",
+        "Layanan manajemen hotel"
+      ],
+      "customers": ["Pelancong bisnis", "Wisatawan rekreasi"],
+      "regions": ["Indonesia", "Jakarta", "Bali", "Bandung"],
+      "competitors": [],
+      "brands_aliases": ["Arunika Grand Bali", "Casa Arunika Jakarta", "Arunika Culinary Lab"],
+      "key_people": ["Maya Santoso", "Andi Wijaya"],
+      "priorities": ["Memperkuat pemesanan langsung", "Ekspansi portofolio hotel"],
+      "goals": ["Pengalaman tamu yang personal"],
+      "risks": [],
+      "topics": ["Operasi hotel dan layanan tamu", "Konsep kuliner", "Pengembangan properti"],
+      "dependencies": ["Pemilik properti"]
+    }
+  },
+  "B": {
+    "id": "context-b-manufacturing",
+    "label": "Context B",
+    "fields": {
+      "name": "PT Nexora Logistics Manufacturing",
+      "industry": "Manufacturing and logistics",
+      "sub_industry": "Industrial equipment and fleet logistics",
+      "description": "Manufacturing and logistics operator",
+      "products": ["Fleet telemetry modules", "Cold-chain packing lines"],
+      "customers": ["Regional distributors"],
+      "regions": ["Indonesia", "Surabaya", "Gresik"],
+      "competitors": ["Helix Freight Systems", "Orbit Pack Industri", "Cascade Hub Logistics"],
+      "brands_aliases": ["Nexora FleetCore", "Nexora ColdLine"],
+      "key_people": ["Rina Kartika"],
+      "priorities": ["Reduce outbound delay"],
+      "goals": ["Expand regional hubs"],
+      "risks": [],
+      "topics": ["Supply chain resilience", "Factory automation"],
+      "dependencies": ["Component suppliers"]
+    }
+  },
+  "C": {
+    "id": "context-c-fintech",
+    "label": "Context C",
+    "fields": {
+      "name": "AurumPay Financial Services",
+      "industry": "Financial services / fintech",
+      "sub_industry": "Digital payments and SME lending",
+      "description": "Digital payments and lending",
+      "products": ["SME working-capital loans", "Merchant QR payments"],
+      "customers": ["SMEs"],
+      "regions": ["Indonesia", "Jakarta"],
+      "competitors": ["NovaLedger Bank", "PixelClear Payments"],
+      "brands_aliases": ["AurumPay QR", "AurumKredit"],
+      "key_people": ["Dewi Lestari"],
+      "priorities": ["Grow merchant acceptance"],
+      "goals": [],
+      "risks": [],
+      "topics": ["Payment rails", "Credit underwriting"],
+      "dependencies": ["Bank partners"]
+    }
+  }
+}

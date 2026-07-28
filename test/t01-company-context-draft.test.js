@@ -35,6 +35,8 @@ function validOutput() {
       customers: [],
       regions: ["Indonesia"],
       competitors: [],
+      brands_aliases: [],
+      key_people: [],
       priorities: ["Reduce transport costs"],
       goals: [],
       risks: [],
@@ -49,7 +51,7 @@ function validOutput() {
       { field: "priorities", source_locator: "ctx-paste-1" },
     ],
     missing_fields: [
-      "sub_industry", "description", "customers", "competitors", "goals", "risks", "topics", "dependencies",
+      "sub_industry", "description", "customers", "competitors", "brands_aliases", "key_people", "goals", "risks", "topics", "dependencies",
     ],
   };
 }
@@ -226,11 +228,11 @@ test("persists insufficient data as a draft, never as effective context", async 
     industry: null,
     sub_industry: null,
     description: null,
-    products: [], customers: [], regions: [], competitors: [], priorities: [], goals: [], risks: [], topics: [], dependencies: [],
+    products: [], customers: [], regions: [], competitors: [], brands_aliases: [], key_people: [], priorities: [], goals: [], risks: [], topics: [], dependencies: [],
   };
   output.field_sources = [];
   output.missing_fields = [
-    "name", "industry", "sub_industry", "description", "products", "customers", "regions", "competitors", "priorities", "goals", "risks", "topics", "dependencies",
+    "name", "industry", "sub_industry", "description", "products", "customers", "regions", "competitors", "brands_aliases", "key_people", "priorities", "goals", "risks", "topics", "dependencies",
   ];
   const { service } = buildService({ output });
 

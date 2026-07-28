@@ -7,6 +7,8 @@ const CONTEXT_FIELDS = Object.freeze([
   "customers",
   "regions",
   "competitors",
+  "brands_aliases",
+  "key_people",
   "priorities",
   "goals",
   "risks",
@@ -71,4 +73,14 @@ function createContextSchema() {
   };
 }
 
-module.exports = { CONTEXT_FIELDS, SCALAR_FIELDS, ARRAY_FIELDS, createT01OutputSchema };
+module.exports = { CONTEXT_FIELDS, SCALAR_FIELDS, ARRAY_FIELDS, createT01OutputSchema, normalizeContextFieldsForRead };
+
+/** Fill missing array CONTEXT_FIELDS with [] for read paths (no throw). */
+function normalizeContextFieldsForRead(fields = {}) {
+  const out = { ...(fields || {}) };
+  for (const field of CONTEXT_FIELDS) {
+    if (SCALAR_FIELDS.includes(field)) continue;
+    if (!Array.isArray(out[field])) out[field] = [];
+  }
+  return out;
+}

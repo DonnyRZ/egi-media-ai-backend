@@ -11,6 +11,8 @@ const fields = {
   goals: [],
   customers: ["Local community families"],
   competitors: [],
+  brands_aliases: [],
+  key_people: [],
   risks: [],
   dependencies: [],
   name: "PT Example Hospitality Indonesia",

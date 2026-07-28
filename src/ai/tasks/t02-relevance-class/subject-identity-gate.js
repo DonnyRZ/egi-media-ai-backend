@@ -13,7 +13,10 @@ const STOP_WORDS = new Set([
 /**
  * Deterministic identity gate: who the article is about relative to company_context.fields.
  * Industry/product token overlap alone MUST NOT create issues — that is "market".
+ * Self evidence: name + brands_aliases + key_people (runtime fields only).
+ * Match surface: title + summary + optional body (recall for body-only mentions).
  */
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
@@ -22,6 +25,11 @@ function normalizeText(value) {
     .replace(/[^\p{L}\p{N}\s&+]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function cleanBody(value, maxChars = 4000) {
+  if (typeof value !== "string" || !value) return "";
+  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, maxChars);
 }
 
 function distinctiveTokens(phrase) {
@@ -40,7 +48,6 @@ function aliasesFromName(name) {
     const cleaned = part.replace(/[()]/g, " ").trim();
     if (cleaned.length >= 3) aliases.add(cleaned);
   }
-  // Strip common legal prefixes for shorter distinctive forms.
   const stripped = raw
     .replace(/\b(PT|TBK|Ltd|Limited|Inc|Corp|Corporation|Group|Holding)\b\.?/gi, " ")
     .replace(/[()]/g, " ")
@@ -51,10 +58,20 @@ function aliasesFromName(name) {
 }
 
 function collectSelfAliases(fields = {}) {
-  // Identity is anchored on company name aliases only. Generic product/category
-  // phrases from products[] must not become self aliases (they cause peer-industry
-  // false positives). Named brands belong in the name field or competitors list.
-  return aliasesFromName(fields.name);
+  const aliases = new Set(aliasesFromName(fields.name));
+  for (const brand of fields.brands_aliases || []) {
+    const raw = String(brand || "").trim();
+    if (!raw) continue;
+    aliases.add(raw);
+    for (const a of aliasesFromName(raw)) aliases.add(a);
+  }
+  for (const person of fields.key_people || []) {
+    const raw = String(person || "").trim();
+    if (!raw) continue;
+    aliases.add(raw);
+    for (const a of aliasesFromName(raw)) aliases.add(a);
+  }
+  return [...aliases];
 }
 
 function collectCompetitorAliases(fields = {}) {
@@ -82,29 +99,25 @@ function hasContiguousTokenSequence(textTokens, needleTokens) {
 
 /**
  * Entity alias match: contiguous whole-phrase or ordered contiguous whole-word
- * distinctive-token sequence. Bag-of-tokens and substring includes are forbidden
- * (they false-positive peer names that share scattered tokens).
+ * distinctive-token sequence. Bag-of-tokens and substring includes are forbidden.
  */
 function phraseHitsText(phrase, textNorm) {
   const phraseNorm = normalizeText(phrase);
   if (!phraseNorm || phraseNorm.length < 3) return false;
-  // Whole-phrase with word boundaries (spaces already normalized).
   const phraseRe = new RegExp(`(?:^|\\s)${escapeRegex(phraseNorm)}(?:\\s|$)`);
   if (phraseRe.test(textNorm)) return true;
 
   const tokens = distinctiveTokens(phrase);
   if (tokens.length === 0) return false;
   const textTokens = textNorm.split(/\s+/).filter(Boolean);
-  // Single distinctive token (≥6 chars): whole-word only.
   if (tokens.length === 1) {
     return tokens[0].length >= 6 && textTokens.includes(tokens[0]);
   }
-  // Multi-token: ordered contiguous whole-word sequence only.
   return hasContiguousTokenSequence(textTokens, tokens);
 }
 
-function findAliasHits(aliases, title, summary) {
-  const textNorm = normalizeText(`${title || ""}\n${summary || ""}`);
+function findAliasHits(aliases, title, summary, body = "") {
+  const textNorm = normalizeText(`${title || ""}\n${summary || ""}\n${cleanBody(body)}`);
   const matched = [];
   for (const alias of aliases) {
     if (phraseHitsText(alias, textNorm)) {
@@ -137,13 +150,28 @@ function applySubjectIdentityGate({
   fields = {},
   title,
   summary,
+  body = "",
 }) {
   const competitors = Array.isArray(fields.competitors) ? fields.competitors : [];
   const competitorOptIn = competitors.length > 0;
-  const selfHits = findAliasHits(collectSelfAliases(fields), title, summary);
+  const selfHits = findAliasHits(collectSelfAliases(fields), title, summary, body);
   const competitorHits = competitorOptIn
-    ? findAliasHits(collectCompetitorAliases(fields), title, summary)
+    ? findAliasHits(collectCompetitorAliases(fields), title, summary, body)
     : { hits: 0, matched: [] };
+
+  const combinedLen = `${title || ""} ${summary || ""} ${cleanBody(body)}`.replace(/\s+/g, " ").trim().length;
+  if (combinedLen < 48 && selfHits.hits === 0 && competitorHits.hits === 0) {
+    return {
+      relevance: "none",
+      confidence: Math.min(typeof confidence === "number" ? confidence : 0.5, 0.4),
+      subjectRelation: "unrelated",
+      competitorOptIn,
+      gated: true,
+      reason: "content_too_thin_for_identity",
+      selfHits: [],
+      competitorHits: [],
+    };
+  }
 
   let nextRelation = SUBJECT_RELATIONS.includes(subjectRelation) ? subjectRelation : "unrelated";
   let nextRelevance = relevance;
@@ -151,12 +179,52 @@ function applySubjectIdentityGate({
   let gated = false;
   let reason = null;
 
+  const llmRelevance = relevance;
+  const llmRelation = SUBJECT_RELATIONS.includes(subjectRelation) ? subjectRelation : "unrelated";
+
   if (selfHits.hits > 0) {
+    // Lexical identity evidence → relation is self (recall vs LLM "market").
     nextRelation = "self";
+    if (!isContinuingRelevance(nextRelevance)) {
+      const strongHit = selfHits.matched.some((alias) => {
+        const toks = distinctiveTokens(alias);
+        return toks.length >= 2 || String(alias).trim().length >= 12;
+      });
+      // Restore continue when LLM intended entity/continue, or strong multi-token/legal-name hit.
+      // Weak single-token / passing mentions with LLM none stay stopped.
+      if (
+        isContinuingRelevance(llmRelevance)
+        || llmRelation === "self"
+        || llmRelation === "competitor"
+        || llmRelation === "market"
+        || strongHit
+      ) {
+        nextRelevance = "medium";
+        nextConfidence = Math.max(nextConfidence, 0.55);
+        reason = "lexical_self_promotes_continue";
+      }
+    }
   } else if (competitorHits.hits > 0) {
     nextRelation = "competitor";
+    if (competitorOptIn && !isContinuingRelevance(nextRelevance)) {
+      const strongHit = competitorHits.matched.some((alias) => {
+        const toks = distinctiveTokens(alias);
+        return toks.length >= 2 || String(alias).trim().length >= 12;
+      });
+      if (
+        isContinuingRelevance(llmRelevance)
+        || llmRelation === "competitor"
+        || llmRelation === "self"
+        || llmRelation === "market"
+        || strongHit
+      ) {
+        nextRelevance = "medium";
+        nextConfidence = Math.max(nextConfidence, 0.55);
+        reason = "lexical_competitor_promotes_continue";
+      }
+    }
   } else if (nextRelation === "self" || nextRelation === "competitor") {
-    // LLM claimed entity identity without lexical entity evidence → demote.
+    // LLM claimed entity identity without lexical entity evidence → demote (precision).
     gated = true;
     if (industryOverlapPresent(fields, title, summary)) {
       nextRelation = "market";
@@ -170,8 +238,10 @@ function applySubjectIdentityGate({
       nextConfidence = Math.min(nextConfidence, 0.49);
     }
   } else if (nextRelation === "market" || nextRelation === "unrelated") {
-    // Keep; optionally refine market vs unrelated via overlap.
-    if (nextRelation === "unrelated" && industryOverlapPresent(fields, title, summary)) {
+    // Keep LLM market only when industry overlap exists; otherwise unrelated.
+    if (nextRelation === "market" && !industryOverlapPresent(fields, title, summary)) {
+      nextRelation = "unrelated";
+    } else if (nextRelation === "unrelated" && industryOverlapPresent(fields, title, summary)) {
       nextRelation = "market";
     }
   } else if (industryOverlapPresent(fields, title, summary)) {
@@ -180,7 +250,6 @@ function applySubjectIdentityGate({
     nextRelation = "unrelated";
   }
 
-  // Market/unrelated must never remain a continuing relevance class.
   if ((nextRelation === "market" || nextRelation === "unrelated") && isContinuingRelevance(nextRelevance)) {
     gated = true;
     reason = reason || (nextRelation === "market" ? "market_subject_blocks_issue" : "unrelated_subject_blocks_issue");
@@ -188,7 +257,6 @@ function applySubjectIdentityGate({
     nextConfidence = Math.min(nextConfidence, 0.49);
   }
 
-  // Competitor without opt-in list cannot form issues — treat as market if industry-ish else unrelated.
   if (nextRelation === "competitor" && !competitorOptIn) {
     gated = true;
     reason = "competitor_without_opt_in_list";
@@ -217,5 +285,6 @@ module.exports = {
   collectSelfAliases,
   collectCompetitorAliases,
   findAliasHits,
+  cleanBody,
   applySubjectIdentityGate,
 };

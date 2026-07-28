@@ -15,6 +15,8 @@ const arunikaFields = {
   goals: [],
   regions: ["Indonesia", "Jakarta", "Bandung"],
   competitors: [],
+  brands_aliases: ["Arunika Grand Bali", "Casa Arunika Jakarta"],
+  key_people: ["Maya Santoso"],
   customers: [],
   risks: [],
   dependencies: [],
@@ -31,6 +33,8 @@ const manufacturingFields = {
   goals: ["Expand regional hubs"],
   regions: ["Indonesia", "Surabaya"],
   competitors: ["Helix Freight Systems", "Orbit Pack Industri"],
+  brands_aliases: ["Nexora FleetCore"],
+  key_people: ["Rina Kartika"],
   customers: ["Regional distributors"],
   risks: [],
   dependencies: [],
@@ -47,6 +51,8 @@ const fintechFields = {
   goals: [],
   regions: ["Indonesia", "Jakarta"],
   competitors: ["NovaLedger Bank", "PixelClear Payments"],
+  brands_aliases: ["AurumPay QR", "AurumKredit"],
+  key_people: ["Dewi Lestari"],
   customers: ["SMEs"],
   risks: [],
   dependencies: [],
@@ -153,7 +159,7 @@ test("Fintech: another bank promo is market (Context C)", () => {
     subjectRelation: "self",
     fields: fintechFields,
     title: "Bank Nusantara luncurkan promo cashback QR merchant",
-    summary: "Bank Nusantara menawarkan cashback untuk pembayaran QR tanpa menyebut AurumPay.",
+    summary: "Bank Nusantara menawarkan cashback untuk pembayaran QR di warung kota besar.",
   });
   assert.equal(gated.subjectRelation, "market");
   assert.equal(shouldFormIssue({
@@ -161,6 +167,50 @@ test("Fintech: another bank promo is market (Context C)", () => {
     subjectRelation: gated.subjectRelation,
     competitorOptIn: true,
   }), false);
+});
+
+test("Body-only legal name recall promotes self", () => {
+  const gated = applySubjectIdentityGate({
+    relevance: "none",
+    confidence: 0.4,
+    subjectRelation: "unrelated",
+    fields: arunikaFields,
+    title: "Investor tinjau peluang properti hospitality di Bali",
+    summary: "Analis mencatat minat baru pada manajemen hotel premium.",
+    body: "Dalam pertemuan tertutup, manajemen PT Arunika Hospitality Indonesia memaparkan pipeline pra-pembukaan.",
+  });
+  assert.equal(gated.subjectRelation, "self");
+  assert.equal(shouldFormIssue({
+    relevance: gated.relevance,
+    subjectRelation: gated.subjectRelation,
+    competitorOptIn: false,
+  }), true);
+});
+
+test("Brand alias in body recalls self", () => {
+  const gated = applySubjectIdentityGate({
+    relevance: "low",
+    confidence: 0.4,
+    subjectRelation: "market",
+    fields: arunikaFields,
+    title: "Resor pantai di Bali perbarui program spa",
+    summary: "Beberapa properti menyiapkan paket wellness.",
+    body: "Arunika Grand Bali menambah treatment lokal dan kemitraan spa.",
+  });
+  assert.equal(gated.subjectRelation, "self");
+  assert.ok(gated.selfHits.length > 0);
+});
+
+test("Key person title hit is self", () => {
+  const gated = applySubjectIdentityGate({
+    relevance: "medium",
+    confidence: 0.7,
+    subjectRelation: "market",
+    fields: arunikaFields,
+    title: "Maya Santoso tegaskan fokus pengalaman tamu",
+    summary: "Eksekutif menekankan diferensiasi layanan.",
+  });
+  assert.equal(gated.subjectRelation, "self");
 });
 
 test("Fintech: listed competitor NovaLedger is competitor", () => {

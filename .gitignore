@@ -18,4 +18,6 @@ eval/t02/FINAL_decision.json
 eval/t02/harness_run.log
 eval/t02/v2/result_*.json
 eval/t02/v2/*.log
+eval/t02/v3/result_*.json
+eval/t02/v3/*.log
 

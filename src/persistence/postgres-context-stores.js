@@ -1,4 +1,5 @@
 const { randomUUID } = require("crypto");
+const { normalizeContextFieldsForRead } = require("../ai/tasks/t01-company-context-draft/schema");
 
 class PostgresCompanyContextDraftStore {
   constructor({ db, uuid = randomUUID } = {}) { this.db = db; this.uuid = uuid; }
@@ -28,6 +29,24 @@ class PostgresEffectiveCompanyContextStore {
 }
 
 function mapDraft(row) { return { draftId: row.id, tenantId: row.tenant_id, companyId: row.company_id, status: row.status, isEffective: false, revision: row.revision, result: row.result_jsonb, sourceFingerprints: row.source_fingerprints_jsonb, provenance: row.provenance_jsonb, review: row.review_jsonb, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }; }
-function mapContext(row) { const content = row.content_jsonb || {}; return { contextId: row.id, tenantId: row.tenant_id, companyId: row.company_id, version: row.version, status: row.status, source: row.source, draftId: content.draftId || null, fields: content.fields || {}, fieldSources: content.fieldSources || [], missingFields: content.missingFields || [], changeReason: content.changeReason || null, updatedBy: row.updated_by, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }; }
+function mapContext(row) {
+  const content = row.content_jsonb || {};
+  return {
+    contextId: row.id,
+    tenantId: row.tenant_id,
+    companyId: row.company_id,
+    version: row.version,
+    status: row.status,
+    source: row.source,
+    draftId: content.draftId || null,
+    fields: normalizeContextFieldsForRead(content.fields || {}),
+    fieldSources: content.fieldSources || [],
+    missingFields: content.missingFields || [],
+    changeReason: content.changeReason || null,
+    updatedBy: row.updated_by,
+    createdAt: date(row.created_at),
+    updatedAt: date(row.updated_at),
+  };
+}
 function date(value) { return value?.toISOString?.() || value; }
 module.exports = { PostgresCompanyContextDraftStore, PostgresEffectiveCompanyContextStore };

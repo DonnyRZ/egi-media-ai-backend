@@ -1,4 +1,4 @@
-const { CONTEXT_FIELDS, SCALAR_FIELDS } = require("../ai/tasks/t01-company-context-draft/schema");
+const { CONTEXT_FIELDS, SCALAR_FIELDS, normalizeContextFieldsForRead } = require("../ai/tasks/t01-company-context-draft/schema");
 const {
   CompanyContextError,
   CompanyContextNotFoundError,
@@ -197,7 +197,8 @@ function validateFullFields(fields) {
   }
   const normalized = {};
   for (const field of CONTEXT_FIELDS) {
-    const value = fields[field];
+    // Legacy effective contexts may omit newly added array fields — default to [].
+    const value = fields[field] === undefined && !SCALAR_FIELDS.includes(field) ? [] : fields[field];
     if (SCALAR_FIELDS.includes(field)) {
       if (value !== null && (typeof value !== "string" || value.length > (field === "description" ? 4000 : 255))) {
         throw new CompanyContextError("Company Context scalar field is invalid", { code: "VALIDATION_ERROR", details: { field } });
@@ -225,4 +226,4 @@ function denyByDefault() {
   return false;
 }
 
-module.exports = { CompanyContextService, validateFullFields };
+module.exports = { CompanyContextService, validateFullFields, normalizeContextFieldsForRead };

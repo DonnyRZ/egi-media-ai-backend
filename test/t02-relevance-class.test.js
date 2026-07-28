@@ -14,6 +14,8 @@ function context() {
     fields: {
       name: "PT Example Logistics", industry: "Logistics", sub_industry: null, description: null,
       products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],
+      brands_aliases: [],
+      key_people: [],
       priorities: ["Reduce costs"], goals: [], risks: [], topics: [], dependencies: [],
     },
   };
@@ -27,8 +29,8 @@ function source(overrides = {}) {
     canonicalUrl: `https://portal.example/id/articles/${articleId}`,
     article: {
       id: articleId,
-      title: "PT Example Logistics faces new fleet regulation",
-      summary: "A new regulation affects PT Example Logistics fleet tracking operators.",
+      title: "Regional courier association debates fleet regulation draft",
+      summary: "Industry groups discuss compliance costs for tracking operators nationwide.",
       content: "This full article body must not be sent to T02.",
       status: "published",
       publishedAt: "2026-07-22T10:00:00.000Z",
@@ -90,7 +92,7 @@ test("T02 classifies one article for one effective context and stops on none", a
   assert.equal(result.reused, false);
   assert.match(input[1].content, /<TRUSTED_CONTEXT>/);
   assert.match(input[1].content, /<UNTRUSTED_ARTICLE_DATA>/);
-  assert.match(input[1].content, /PT Example Logistics faces new fleet regulation/);
+  assert.match(input[1].content, /Regional courier association debates fleet regulation draft/);
   assert.match(input[1].content, /classification_rubric/);
   assert.doesNotMatch(input[1].content, /This full article body must not be sent to T02/);
   assert.equal(runtime.decisionStore.list().length, 1);
@@ -133,6 +135,10 @@ test("T02 stops on low relevance so low does not create issues", async () => {
 test("T02 reuses the same article snapshot × company × context version decision", async () => {
   const { runtime, kernelCalls } = buildRuntime({
     output: { relevance: "high", confidence: 0.8, subject_relation: "self" },
+    articleSource: source({
+      title: "PT Example Logistics faces new fleet regulation",
+      summary: "A new regulation affects PT Example Logistics fleet tracking operators.",
+    }),
   });
 
   const first = await runtime.service.classify({ companyId, articleId, locale: "id" });

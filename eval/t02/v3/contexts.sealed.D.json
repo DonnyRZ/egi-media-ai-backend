@@ -1,0 +1,24 @@
+{
+  "D": {
+    "id": "context-d-healthcare-edu",
+    "label": "Context D sealed",
+    "note": "Sealed generalization context — do not tune builder fixes against this file.",
+    "fields": {
+      "name": "Yayasan Medika Cahaya Nusantara",
+      "industry": "Healthcare and education services",
+      "sub_industry": "Private hospitals and vocational nursing schools",
+      "description": "Operates regional hospitals and nursing academies",
+      "products": ["Inpatient hospital care", "Nursing diploma programs", "Outpatient diagnostics"],
+      "customers": ["Patients", "Nursing students"],
+      "regions": ["Indonesia", "Medan", "Palembang"],
+      "competitors": ["Sehat Prima Hospital Group"],
+      "brands_aliases": ["RS Cahaya Medika", "Akademi Keperawatan Cahaya"],
+      "key_people": ["Dr. Farhan Yusuf"],
+      "priorities": ["Expand diagnostic capacity", "Graduate more licensed nurses"],
+      "goals": ["Regional care access"],
+      "risks": ["Staffing shortages"],
+      "topics": ["Hospital operations", "Nursing education accreditation"],
+      "dependencies": ["Medical device vendors"]
+    }
+  }
+}
