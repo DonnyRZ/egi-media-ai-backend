@@ -121,6 +121,71 @@ test("T07 does not call the model when linked evidence is stale or cross-scope",
   });
 });
 
+test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted", async (t) => {
+  const crawlId = "crawl:detik:a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+  const mediaUrl = "https://news.detik.com/berita/artikel-asli";
+
+  for (const [name, linkedUpdatedAt] of [
+    ["explicit null", null],
+    ["omitted key (production crawl rows)", undefined],
+  ]) {
+    await t.test(name, async () => {
+      const relevanceDecisionStore = new InMemoryRelevanceDecisionStore();
+      const matchDecisionStore = new InMemoryIssueMatchDecisionStore();
+      const issueStore = new InMemoryIssueStore({ now: () => Date.parse("2026-07-22T12:00:00.000Z") });
+      const crawlSource = {
+        sourceArticleId: crawlId, requestedLocale: "id", contentLocale: "id", canonicalUrl: mediaUrl,
+        article: { id: crawlId, title: "Crawl article", summary: "Ringkasan.", content: "CRAWL_BODY", status: "published", publishedAt: "2026-07-22T10:00:00.000Z", updatedAt: null },
+      };
+      const relevance = relevanceDecisionStore.create({
+        articleId: crawlId, companyId, contextVersion: 3, inputFingerprint: `fp-${name}`,
+        source: crawlSource, output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+      });
+      const match = matchDecisionStore.create({
+        tenantId, companyId, relevanceDecisionId: relevance.decisionId, promptVersion: "1.0.0",
+        output: { decision: "new", candidate_issue_id: null, reason_code: "new_event" }, provenance: { runId: "t04" },
+      });
+      const created = issueStore.apply({ tenantId, companyId, matchDecision: match, relevanceDecision: relevance }).mutation;
+      // Simulate production JSON payloads that omit null sourceUpdatedAt.
+      for (const record of issueStore.issueArticlesByKey.values()) {
+        if (record.issueId === created.issueId) {
+          if (linkedUpdatedAt === undefined) delete record.sourceUpdatedAt;
+          else record.sourceUpdatedAt = linkedUpdatedAt;
+        }
+      }
+
+      let kernelCalls = 0;
+      const runtime = createT07IssueAnalysisRuntime({
+        aiTaskKernel: { execute: async (request) => {
+          kernelCalls += 1;
+          return {
+            data: {
+              what_happened: "Peristiwa crawl.", why_matters: "Perlu dilacak.",
+              impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
+              claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
+            },
+            model: { alias: "mini", name: "mini-test-model" },
+            correlation: { requestId: request.requestId, providerRequestId: "req_t07" },
+            providerResponseId: "resp_t07",
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            latencyMs: 5,
+          };
+        } },
+        openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
+        cmsSourceGate: { requirePublishedArticle: async () => crawlSource },
+        issueStore, getEffectiveContext: async () => context(),
+        authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.analyze",
+      });
+
+      const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+      assert.equal(kernelCalls, 1);
+      assert.equal(result.reused, false);
+      assert.equal(result.analysis.evidence[0].sourceArticleId, crawlId);
+      assert.equal(result.analysis.evidence[0].updatedAt, null);
+    });
+  }
+});
+
 test("T07 and T13 schemas accept crawl issue source ids (not UUID-only)", () => {
   const crawlId = `crawl:media_indonesia:${"ab".repeat(32)}`;
   assert.ok(crawlId.length > 64, "fixture must exceed the old T13 maxLength of 64");

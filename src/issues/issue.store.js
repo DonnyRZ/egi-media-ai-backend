@@ -193,7 +193,8 @@ class InMemoryIssueStore {
       issueArticleId: this.uuid(), tenantId, companyId, issueId: issue.issueId,
       sourceArticleId: relevanceDecision.source.sourceArticleId,
       locale: relevanceDecision.source.requestedLocale,
-      sourceUpdatedAt: relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt,
+      // Preserve crawl's intentional null updatedAt (do not coerce with ||).
+      sourceUpdatedAt: relevanceDecision.source.article?.updatedAt ?? relevanceDecision.source.updatedAt ?? null,
       canonicalUrl: relevanceDecision.source.canonicalUrl,
       attachedAt: now,
       relationStatus: "active",
@@ -267,7 +268,8 @@ class InMemoryIssueStore {
   }
 
   _articleKey({ issueId, relevanceDecision }) {
-    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${relevanceDecision.source.article?.updatedAt || relevanceDecision.source.updatedAt || "unknown"}`;
+    const updatedAt = relevanceDecision.source.article?.updatedAt ?? relevanceDecision.source.updatedAt;
+    return `${issueId}|${relevanceDecision.source.sourceArticleId}|${relevanceDecision.source.requestedLocale}|${updatedAt ?? "unknown"}`;
   }
 
   _timestamp() {

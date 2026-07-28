@@ -56,9 +56,28 @@ class IssueAnalysisService {
 
   async _loadEvidence(linked) {
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: linked.sourceArticleId, locale: linked.locale });
-    if (source.sourceArticleId !== linked.sourceArticleId || source.requestedLocale !== linked.locale
-      || source.article.updatedAt !== linked.sourceUpdatedAt || source.canonicalUrl !== linked.canonicalUrl) {
-      throw new AiConfigurationError("T07 refuses stale or mismatched linked article evidence");
+    // Crawl sources intentionally pin content via content_hash and set updatedAt=null.
+    // Linked rows may omit the key (JSON undefined) or store null — treat both as the same pin.
+    const linkedUpdatedAt = normalizeEvidenceUpdatedAt(linked.sourceUpdatedAt);
+    const liveUpdatedAt = normalizeEvidenceUpdatedAt(source.article.updatedAt);
+    const idOk = source.sourceArticleId === linked.sourceArticleId;
+    const localeOk = source.requestedLocale === linked.locale;
+    const updatedOk = liveUpdatedAt === linkedUpdatedAt;
+    const urlOk = source.canonicalUrl === linked.canonicalUrl;
+    if (!idOk || !localeOk || !updatedOk || !urlOk) {
+      throw new AiConfigurationError("T07 refuses stale or mismatched linked article evidence", {
+        details: {
+          sourceArticleId: linked.sourceArticleId,
+          mismatches: {
+            sourceArticleId: !idOk,
+            locale: !localeOk,
+            updatedAt: !updatedOk,
+            canonicalUrl: !urlOk,
+          },
+          linked: { locale: linked.locale, sourceUpdatedAt: linked.sourceUpdatedAt ?? null, canonicalUrl: linked.canonicalUrl },
+          live: { locale: source.requestedLocale, updatedAt: source.article.updatedAt ?? null, canonicalUrl: source.canonicalUrl },
+        },
+      });
     }
     return source;
   }
@@ -93,6 +112,11 @@ function fingerprint({ issue, context, evidence }) {
   })).digest("hex");
 }
 
+/** Normalize evidence pins so JSON-omitted undefined and explicit null compare equal. */
+function normalizeEvidenceUpdatedAt(value) {
+  return value === undefined ? null : value;
+}
+
 function denyByDefault() { throw new AiConfigurationError("T07 requires a tenant/company authorization guard"); }
 
-module.exports = { IssueAnalysisService, fingerprint };
+module.exports = { IssueAnalysisService, fingerprint, normalizeEvidenceUpdatedAt };
