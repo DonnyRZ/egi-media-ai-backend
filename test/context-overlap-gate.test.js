@@ -37,7 +37,7 @@ test("context overlap gate ignores country name and generic community words", ()
     confidence: 0.7,
     fields,
     title: "Pemkot Serang tanam mangrove di pesisir Indonesia",
-    summary: "Aksi lingkungan bersama masyarakat tanpa tautan operasi hotel.",
+    summary: "Aksi lingkungan bersama warga tanpa tautan operasi properti.",
   });
   assert.equal(gated.relevance, "low");
   assert.equal(gated.gated, true);
