@@ -6,6 +6,7 @@ const { T02_OUTPUT_SCHEMA } = require("./schema");
 const { buildT02Input } = require("./prompt");
 const { validateT02Output } = require("./output-validator");
 const { isContinuingRelevance } = require("./relevance-policy");
+const { applyContextOverlapGate } = require("./context-overlap-gate");
 
 const RELEVANCE_RANK = Object.freeze({ none: 0, low: 1, medium: 2, high: 3 });
 
@@ -84,13 +85,25 @@ class RelevanceClassificationService {
     for (let i = 0; i < callCount; i += 1) {
       passes.push(await this._executeOnce({ tenantId, companyId, input }));
     }
-    const output = mergeRelevanceOutputs(...passes.map((p) => p.data));
+    const output = applyContextOverlapGate({
+      ...mergeRelevanceOutputs(...passes.map((p) => p.data)),
+      fields: context.fields,
+      title: source.article?.title,
+      summary: source.article?.summary,
+    });
     const provenance = {
       ...passes[0].provenance,
       consensusCalls: callCount,
       passes: passes.map((p) => p.data),
       merged: output,
+      contextOverlapGate: {
+        gated: Boolean(output.gated),
+        reason: output.reason || null,
+        hits: output.hits ?? null,
+        matched: output.matched || [],
+      },
     };
+    const persistedOutput = { relevance: output.relevance, confidence: output.confidence };
 
     const decision = await this.decisionStore.create({
       tenantId,
@@ -99,7 +112,7 @@ class RelevanceClassificationService {
       contextVersion: context.version,
       inputFingerprint,
       source,
-      output,
+      output: persistedOutput,
       provenance,
     });
 
@@ -153,6 +166,8 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippet = cleaned.slice(0, chars);
     base.bodySnippetChars = chars;
   }
+  // Bump when post-T02 overlap gate semantics change so stale continues are not reused.
+  base.contextOverlapGate = "v1-no-regions";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 
