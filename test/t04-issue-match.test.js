@@ -104,6 +104,32 @@ test("T04 deterministically reuses an active issue already linked to the same so
   assert.equal(result.match.provenance.policy, "exact-source-reuse");
 });
 
+test("T04 reuses an active issue when a reingested article has the same canonical URL", async () => {
+  const candidate = issue({ issueId: activeIssueId });
+  const canonicalSourceStore = {
+    listActive: async () => [candidate],
+    listArticles: async () => [{
+      relationStatus: "active",
+      sourceArticleId: "older-crawl-row",
+      canonicalUrl: source().canonicalUrl,
+    }],
+  };
+  const { runtime, relevanceDecision, kernelCalls } = buildRuntime({
+    issueCandidateStore: canonicalSourceStore,
+    seedIssues: [],
+  });
+
+  const result = await runtime.service.match({
+    tenantId,
+    companyId,
+    relevanceDecisionId: relevanceDecision.decisionId,
+  });
+
+  assert.equal(kernelCalls(), 0);
+  assert.equal(result.match.candidateIssueId, activeIssueId);
+  assert.equal(result.match.provenance.policy, "canonical-source-reuse");
+});
+
 test("T04 excludes selesai and other-tenant issues; selesai policy defaults to new without reopen", async () => {
   let input;
   const { runtime, relevanceDecision, kernelCalls } = buildRuntime({

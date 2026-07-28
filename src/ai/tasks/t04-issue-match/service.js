@@ -40,13 +40,14 @@ class IssueMatchService {
     const candidates = await this.issueCandidateStore.listActive({ tenantId, companyId });
     this._validateCandidates(candidates, { tenantId, companyId });
     const candidateIssueIds = new Set(candidates.map((candidate) => candidate.issueId));
-    const exactSourceIssue = await this._findExactSourceIssue({
+    const existingSource = await this._findExistingSourceIssue({
       tenantId,
       companyId,
       candidates,
       sourceArticleId: relevanceDecision.articleId,
+      canonicalUrl: source.canonicalUrl,
     });
-    if (exactSourceIssue) {
+    if (existingSource) {
       const match = await this.matchDecisionStore.create({
         tenantId,
         companyId,
@@ -54,12 +55,13 @@ class IssueMatchService {
         promptVersion: T04_PROMPT_VERSION,
         output: {
           decision: "update",
-          candidate_issue_id: exactSourceIssue.issueId,
+          candidate_issue_id: existingSource.issue.issueId,
           reason_code: "same_event",
         },
         provenance: {
-          policy: "exact-source-reuse",
+          policy: existingSource.policy,
           sourceArticleId: relevanceDecision.articleId,
+          canonicalUrl: source.canonicalUrl,
         },
       });
       return { match, relevanceDecision, reused: false };
@@ -98,7 +100,7 @@ class IssueMatchService {
     }
   }
 
-  async _findExactSourceIssue({ tenantId, companyId, candidates, sourceArticleId }) {
+  async _findExistingSourceIssue({ tenantId, companyId, candidates, sourceArticleId, canonicalUrl }) {
     if (typeof this.issueCandidateStore.listArticles !== "function") return null;
     for (const candidate of candidates) {
       const articles = await this.issueCandidateStore.listArticles({
@@ -106,9 +108,15 @@ class IssueMatchService {
         companyId,
         issueId: candidate.issueId,
       });
-      if (Array.isArray(articles) && articles.some((article) => article.relationStatus === "active"
-        && article.sourceArticleId === sourceArticleId)) {
-        return candidate;
+      const activeArticles = Array.isArray(articles)
+        ? articles.filter((article) => article.relationStatus === "active")
+        : [];
+      if (activeArticles.some((article) => article.sourceArticleId === sourceArticleId)) {
+        return { issue: candidate, policy: "exact-source-reuse" };
+      }
+      if (typeof canonicalUrl === "string" && canonicalUrl.length > 0
+        && activeArticles.some((article) => article.canonicalUrl === canonicalUrl)) {
+        return { issue: candidate, policy: "canonical-source-reuse" };
       }
     }
     return null;
