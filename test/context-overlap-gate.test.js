@@ -62,7 +62,7 @@ test("single generic priority token is not enough to continue", () => {
     confidence: 0.8,
     fields,
     title: "Efisiensi energi water heater rumah tangga",
-    summary: "Konsumen memprioritaskan hemat daya tanpa kaitan hotel.",
+    summary: "Konsumen memprioritaskan hemat daya tanpa kaitan properti penginapan.",
   });
   assert.equal(gated.relevance, "low");
   assert.equal(gated.gated, true);
