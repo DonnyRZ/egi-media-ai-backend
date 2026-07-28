@@ -167,7 +167,7 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippetChars = chars;
   }
   // Bump when post-T02 overlap gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v3-strong-fields-only";
+  base.contextOverlapGate = "v4-strong-fields-min2";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 

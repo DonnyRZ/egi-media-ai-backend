@@ -53,5 +53,17 @@ test("context overlap gate keeps continuing relevance when product/topic hooks e
   });
   assert.equal(kept.relevance, "medium");
   assert.equal(kept.gated, false);
-  assert.ok(kept.hits >= 1);
+  assert.ok(kept.hits >= 2);
+});
+
+test("single generic token hit is not enough to continue", () => {
+  const gated = applyContextOverlapGate({
+    relevance: "high",
+    confidence: 0.8,
+    fields,
+    title: "Efisiensi energi water heater rumah tangga",
+    summary: "Konsumen memprioritaskan hemat daya tanpa kaitan hotel.",
+  });
+  assert.equal(gated.relevance, "low");
+  assert.equal(gated.gated, true);
 });

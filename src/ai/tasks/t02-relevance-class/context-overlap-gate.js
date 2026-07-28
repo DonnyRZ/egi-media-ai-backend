@@ -57,7 +57,7 @@ function applyContextOverlapGate({ relevance, confidence, fields, title, summary
   }
   const contextTokens = collectStrongContextTokens(fields);
   const { hits, matched } = countOverlap(`${title || ""}\n${summary || ""}`, contextTokens);
-  if (hits >= 1) {
+  if (hits >= 2) {
     return { relevance, confidence, gated: false, reason: null, hits, matched };
   }
   return {
