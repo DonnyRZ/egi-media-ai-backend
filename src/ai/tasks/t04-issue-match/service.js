@@ -3,7 +3,8 @@ const { T04_PROMPT_ID, T04_PROMPT_VERSION } = require("./definition");
 const { T04_OUTPUT_SCHEMA } = require("./schema");
 const { buildT04Input } = require("./prompt");
 const { validateT04Output } = require("./output-validator");
-const { fingerprint } = require("../t02-relevance-class/service");
+const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
+const { isContinuingRelevance } = require("../t02-relevance-class/relevance-policy");
 const { ACTIVE_ISSUE_STATUSES } = require("./issue-candidate.store");
 
 class IssueMatchService {
@@ -32,7 +33,7 @@ class IssueMatchService {
       articleId: relevanceDecision.articleId,
       locale: relevanceDecision.source.requestedLocale,
     });
-    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion }) !== relevanceDecision.inputFingerprint) {
+    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion, inputOptions: resolveT02InputOptions() }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T04 refuses to match a stale T02 article snapshot");
     }
 
@@ -56,9 +57,9 @@ class IssueMatchService {
   }
 
   _validateRelevanceDecision(decision, companyId) {
-    if (!decision || decision.companyId !== companyId || !["high", "medium", "low"].includes(decision.relevance)
+    if (!decision || decision.companyId !== companyId || !isContinuingRelevance(decision.relevance)
       || decision.branch !== "continue") {
-      throw new AiConfigurationError("T04 requires a relevant T02 decision for the same company");
+      throw new AiConfigurationError("T04 requires a continuing (high/medium) T02 decision for the same company");
     }
   }
 

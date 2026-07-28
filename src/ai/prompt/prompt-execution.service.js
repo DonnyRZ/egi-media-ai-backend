@@ -25,7 +25,7 @@ class PromptExecutionService {
     this.now = now;
   }
 
-  async executeActive({ promptId, promptVersion, model, input, outputSchema, timeoutMs, validateResult, budgetScope = null }) {
+  async executeActive({ promptId, promptVersion, model, input, outputSchema, timeoutMs, validateResult, budgetScope = null, seed = null }) {
     const modelName = resolveModel(model, this.openaiConfig);
     const prompt = this.promptRegistry.requireActive({
       promptId,
@@ -44,6 +44,7 @@ class PromptExecutionService {
         requestId,
         timeoutMs,
         budgetScope,
+        seed,
       });
       const data = validateResult ? validateResult(result.data) : result.data;
       const provenance = this.runStore.record({

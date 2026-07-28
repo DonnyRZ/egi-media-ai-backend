@@ -1,4 +1,5 @@
 const { randomUUID } = require("crypto");
+const { branchForRelevance } = require("./relevance-policy");
 
 class InMemoryRelevanceDecisionStore {
   constructor({ uuid = randomUUID, now = Date.now } = {}) {
@@ -32,7 +33,7 @@ class InMemoryRelevanceDecisionStore {
       inputFingerprint,
       relevance: output.relevance,
       confidence: output.confidence,
-      branch: output.relevance === "none" ? "stop" : "continue",
+      branch: branchForRelevance(output.relevance),
       source: {
         sourceArticleId: source.sourceArticleId,
         canonicalUrl: source.canonicalUrl,

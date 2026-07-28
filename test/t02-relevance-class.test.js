@@ -46,7 +46,7 @@ function buildRuntime({ output = { relevance: "none", confidence: 0.91 }, contex
         onKernelRequest?.(request);
         return {
           data: output,
-          model: { alias: "nano", name: "nano-test-model" },
+          model: { alias: "mini", name: "mini-test-model" },
           correlation: { requestId: request.requestId, providerRequestId: "req_t02" },
           providerResponseId: "resp_t02",
           usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
@@ -63,6 +63,7 @@ function buildRuntime({ output = { relevance: "none", confidence: 0.91 }, contex
     },
     getEffectiveContext: async () => contextResult,
     authorizeCompany: async ({ companyId: authorizedCompanyId, action }) => authorizedCompanyId === companyId && action === "relevance.classify",
+    inputOptions: { includeBodySnippet: false, useRubric: true, dualCall: false },
   });
   return { runtime, kernelCalls: () => kernelCalls };
 }
@@ -83,8 +84,37 @@ test("T02 classifies one article for one effective context and stops on none", a
   assert.match(input[1].content, /<TRUSTED_CONTEXT>/);
   assert.match(input[1].content, /<UNTRUSTED_ARTICLE_DATA>/);
   assert.match(input[1].content, /New logistics regulation/);
+  assert.match(input[1].content, /classification_rubric/);
   assert.doesNotMatch(input[1].content, /This full article body must not be sent to T02/);
   assert.equal(runtime.decisionStore.list().length, 1);
+});
+
+test("T02 dual-call merge prefers the more conservative relevance class", () => {
+  const { mergeRelevanceOutputs } = require("../src/ai/tasks/t02-relevance-class/service");
+  assert.deepEqual(
+    mergeRelevanceOutputs({ relevance: "medium", confidence: 0.8 }, { relevance: "none", confidence: 0.6 }),
+    { relevance: "none", confidence: 0.6 },
+  );
+  assert.deepEqual(
+    mergeRelevanceOutputs({ relevance: "high", confidence: 0.9 }, { relevance: "high", confidence: 0.7 }),
+    { relevance: "high", confidence: 0.7 },
+  );
+  assert.deepEqual(
+    mergeRelevanceOutputs(
+      { relevance: "low", confidence: 0.5 },
+      { relevance: "low", confidence: 0.4 },
+      { relevance: "none", confidence: 0.6 },
+    ),
+    { relevance: "none", confidence: 0.4 },
+  );
+});
+
+test("T02 stops on low relevance so low does not create issues", async () => {
+  const { runtime } = buildRuntime({ output: { relevance: "low", confidence: 0.4 } });
+  const result = await runtime.service.classify({ companyId, articleId, locale: "id" });
+  assert.equal(result.decision.relevance, "low");
+  assert.equal(result.decision.branch, "stop");
+  assert.equal(result.shouldContinue, false);
 });
 
 test("T02 reuses the same article snapshot × company × context version decision", async () => {

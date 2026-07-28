@@ -8,8 +8,12 @@ logs
 coverage
 .data/
 
-# local audit / probe / debug scripts & stray artifacts
-scripts/_*
-_*-probe*.cjs
-_audit-out/
-=
+# Offline T02 eval artifacts (local harness outputs)
+eval/t02/*.log
+eval/t02/pool_raw.json
+eval/t02/article_pool.json
+eval/t02/result_*.json
+eval/t02/E*_decision.json
+eval/t02/FINAL_decision.json
+eval/t02/harness_run.log
+

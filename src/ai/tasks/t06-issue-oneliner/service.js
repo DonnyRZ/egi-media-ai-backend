@@ -4,7 +4,8 @@ const { T06_PROMPT_ID, T06_PROMPT_VERSION } = require("./definition");
 const { T06_OUTPUT_SCHEMA } = require("./schema");
 const { buildT06Input } = require("./prompt");
 const { validateT06Output } = require("./output-validator");
-const { fingerprint } = require("../t02-relevance-class/service");
+const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
+const { isContinuingRelevance } = require("../t02-relevance-class/relevance-policy");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
@@ -35,11 +36,11 @@ class IssueOneLinerService {
     }
     const relevanceDecision = await this.relevanceDecisionStore.getById(development.relevanceDecisionId);
     if (!relevanceDecision || relevanceDecision.companyId !== companyId || relevanceDecision.decisionId !== matchDecision.relevanceDecisionId
-      || !["high", "medium", "low"].includes(relevanceDecision.relevance)) {
+      || !isContinuingRelevance(relevanceDecision.relevance)) {
       throw new AiConfigurationError("T06 requires the continuing T02 decision linked by T04");
     }
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: relevanceDecision.articleId, locale: relevanceDecision.source.requestedLocale });
-    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion }) !== relevanceDecision.inputFingerprint) {
+    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion, inputOptions: resolveT02InputOptions() }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T06 refuses to generate from a stale article snapshot");
     }
     const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });

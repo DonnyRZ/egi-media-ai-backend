@@ -31,7 +31,7 @@ class AiTaskKernel {
     this.ajv = new Ajv({ allErrors: true, strict: false });
   }
 
-  async execute({ model, input, outputSchema, requestId, timeoutMs, budgetScope = null }) {
+  async execute({ model, input, outputSchema, requestId, timeoutMs, budgetScope = null, seed = null }) {
     this._validateInput({ input, outputSchema, timeoutMs });
 
     const resolvedModel = resolveModel(model, this.openaiConfig);
@@ -44,20 +44,22 @@ class AiTaskKernel {
     let response;
     try {
       this.budgetGate?.beforeRequest(budgetScope);
-      response = await this.openaiClient.responses.create(
-        {
-          model: resolvedModel,
-          input,
-          store: false,
-          text: {
-            format: {
-              type: "json_schema",
-              name: outputSchema.name,
-              strict: true,
-              schema: outputSchema.schema,
-            },
+      const requestBody = {
+        model: resolvedModel,
+        input,
+        store: false,
+        text: {
+          format: {
+            type: "json_schema",
+            name: outputSchema.name,
+            strict: true,
+            schema: outputSchema.schema,
           },
         },
+      };
+      if (Number.isInteger(seed)) requestBody.seed = seed;
+      response = await this.openaiClient.responses.create(
+        requestBody,
         {
           timeout: resolvedTimeoutMs,
           headers: { "X-Client-Request-Id": correlationId },

@@ -4,7 +4,8 @@ const { T05_PROMPT_ID, T05_PROMPT_VERSION } = require("./definition");
 const { T05_OUTPUT_SCHEMA } = require("./schema");
 const { buildT05Input } = require("./prompt");
 const { validateT05Output } = require("./output-validator");
-const { fingerprint } = require("../t02-relevance-class/service");
+const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
+const { isContinuingRelevance } = require("../t02-relevance-class/relevance-policy");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
@@ -45,7 +46,7 @@ class IssueTitleService {
     const source = await this.cmsSourceGate.requirePublishedArticle({
       articleId: relevanceDecision.articleId, locale: relevanceDecision.source.requestedLocale,
     });
-    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion }) !== relevanceDecision.inputFingerprint) {
+    if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion, inputOptions: resolveT02InputOptions() }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T05 refuses to title an issue from a stale article snapshot");
     }
     const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
@@ -79,7 +80,7 @@ class IssueTitleService {
   _validateRelevanceDecision(relevanceDecision, { companyId, matchDecision }) {
     if (!relevanceDecision || relevanceDecision.companyId !== companyId
       || relevanceDecision.decisionId !== matchDecision.relevanceDecisionId
-      || !["high", "medium", "low"].includes(relevanceDecision.relevance)) {
+      || !isContinuingRelevance(relevanceDecision.relevance)) {
       throw new AiConfigurationError("T05 requires the continuing T02 decision linked by T04");
     }
   }

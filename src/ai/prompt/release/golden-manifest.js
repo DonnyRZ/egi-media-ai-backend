@@ -3,7 +3,7 @@ const path = require("path");
 const REQUIRED_GOLDEN_SCENARIOS = Object.freeze(["normal", "multilingual", "injection", "citation_fake", "cross_tenant", "stale_state", "schema_invalid"]);
 const TASKS = Object.freeze([
   task("T01", "t01-company-context-draft", "createT01PromptDefinition", "mini", "test/t01-company-context-draft.test.js", { schemaFactory: "createT01OutputSchema" }),
-  task("T02", "t02-relevance-class", "createT02PromptDefinition", "nano", "test/t02-relevance-class.test.js"),
+  task("T02", "t02-relevance-class", "createT02PromptDefinition", "mini", "test/t02-relevance-class.test.js"),
   task("T03", "t03-relevance-rationale", "createT03PromptDefinition", "nano", "test/t03-relevance-rationale.test.js"),
   task("T04", "t04-issue-match", "createT04PromptDefinition", "nano", "test/t04-issue-match.test.js"),
   task("T05", "t05-issue-title", "createT05PromptDefinition", "nano", "test/t05-issue-title.test.js"),

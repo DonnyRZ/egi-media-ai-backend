@@ -2,11 +2,11 @@ const { PromptRegistry } = require("../../prompt/registry/prompt-registry");
 const { PromptExecutionService } = require("../../prompt/prompt-execution.service");
 const { InMemoryPromptRunStore } = require("../../provenance/prompt-run.store");
 const { createT02PromptDefinition } = require("./definition");
-const { RelevanceClassificationService } = require("./service");
+const { RelevanceClassificationService, resolveT02InputOptions } = require("./service");
 const { InMemoryRelevanceDecisionStore } = require("./decision.store");
 
-function createT02RelevanceRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, getEffectiveContext, authorizeCompany, promptRegistry, runStore, decisionStore }) {
-  const registry = promptRegistry || new PromptRegistry([createT02PromptDefinition({ modelName: openaiConfig.nanoModel })]);
+function createT02RelevanceRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, getEffectiveContext, authorizeCompany, promptRegistry, runStore, decisionStore, inputOptions = null }) {
+  const registry = promptRegistry || new PromptRegistry([createT02PromptDefinition({ modelName: openaiConfig.miniModel || openaiConfig.nanoModel })]);
   const provenanceStore = runStore || new InMemoryPromptRunStore();
   const relevanceDecisionStore = decisionStore || new InMemoryRelevanceDecisionStore();
   const promptExecutionService = new PromptExecutionService({
@@ -23,6 +23,7 @@ function createT02RelevanceRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, 
       promptExecutionService,
       decisionStore: relevanceDecisionStore,
       authorizeCompany,
+      inputOptions: inputOptions || resolveT02InputOptions(),
     }),
     promptRegistry: registry,
     runStore: provenanceStore,
