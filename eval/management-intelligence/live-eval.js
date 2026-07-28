@@ -95,7 +95,7 @@ const contexts = {
   },
 };
 
-const scenarios = [
+const allScenarios = [
   scenario("A-peer", "A", true, "market",
     "Rival lodging operator launches 25% direct-channel discount in Metro One",
     "The offer targets business and leisure stays for the next six weeks.",
@@ -132,6 +132,18 @@ const scenarios = [
     "Private running event for foreign residents draws criticism in Island Two",
     "A community event allegedly restricted registration by nationality.",
     "The dispute does not change tourism rules, visitor access, demand, hotel operations, or any company-context property or dependency."),
+  scenario("A-advocacy-only", "A", false, "market",
+    "Business association asks government to study early workforce mitigation",
+    "The association requests discussion to prevent possible future layoffs.",
+    "No layoffs, enacted policy, labor-cost change, staffing rule, or measured effect on the supplied company context is reported."),
+  scenario("A-unrelated-vendor-metric", "A", false, "market",
+    "Home water-heater vendor says electric units make up 65 percent of its sales",
+    "The appliance seller reports its own product mix and promotes energy efficiency.",
+    "It states no hotel operating standard, procurement dependency, utility-cost change, regulation, or adoption benchmark for the supplied company context."),
+  scenario("A-broad-sustainability", "A", false, "market",
+    "Minister reports long-term national mangrove loss and urges restoration",
+    "A national environmental programme discusses restoration in unspecified locations.",
+    "It reports no change affecting a company operating region, property, supplier, rule, cost, demand condition, or named dependency."),
   scenario("A-weak", "A", false, "market",
     "A restaurant changes the colour of its staff uniforms",
     "The change has no disclosed effect on demand, pricing, regulation, supply, or guest behaviour.",
@@ -183,6 +195,11 @@ const scenarios = [
     "The entertainment programme premieres next month.",
     "No financial-services development is present."),
 ];
+
+const requestedIds = new Set((process.env.AUDIT_SCENARIO_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
+const scenarios = requestedIds.size > 0
+  ? allScenarios.filter((item) => requestedIds.has(item.id))
+  : allScenarios;
 
 function scenario(id, contextKey, expectedContinue, expectedRelation, title, summary, content) {
   return { id, contextKey, expectedContinue, expectedRelation, title, summary, content };

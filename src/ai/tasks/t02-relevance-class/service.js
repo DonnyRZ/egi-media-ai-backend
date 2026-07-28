@@ -243,7 +243,7 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippetChars = chars;
   }
   // Bump when identity/subject_relation gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v11-material-market-effect";
+  base.contextOverlapGate = "v12-observable-direct-effect";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 

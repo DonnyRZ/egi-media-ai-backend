@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.7.0";
+const T02_PROMPT_VERSION = "1.8.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT02PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.7",
+    inputSchemaVersion: "1.8",
     outputSchemaVersion: "2.0",
-    changeSummary: "Reject geographic and customer-segment coincidence without a material market effect",
+    changeSummary: "Require an observable event and direct context effect for external market relevance",
     approvedBy: null,
-    rollbackVersion: "1.6.0",
+    rollbackVersion: "1.7.0",
   };
 }
 
