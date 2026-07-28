@@ -17,22 +17,13 @@ function tokenize(value) {
     .filter((t) => t.length >= 4);
 }
 
-function collectContextTokens(fields = {}, { includeRegions = false } = {}) {
-  // Intentionally exclude `name` / `description`: legal names often contain country
-  // tokens (e.g. "Indonesia") that would false-pass nearly every local article.
+function collectStrongContextTokens(fields = {}) {
+  // Strong hooks only: industry / products / topics / priorities / sub_industry.
+  // Exclude name, description, regions, customers (often contain generic words like
+  // "masyarakat", "Indonesia", "keluarga" that false-pass local news).
   const bags = []
-    .concat(
-      fields.products || [],
-      fields.topics || [],
-      fields.priorities || [],
-      fields.goals || [],
-      fields.customers || [],
-      fields.dependencies || [],
-      fields.competitors || [],
-      fields.risks || [],
-    )
+    .concat(fields.products || [], fields.topics || [], fields.priorities || [], fields.goals || [])
     .concat([fields.industry, fields.sub_industry].filter(Boolean));
-  if (includeRegions) bags.push(...(fields.regions || []));
   const regionTokens = new Set();
   for (const region of fields.regions || []) {
     for (const token of tokenize(String(region))) regionTokens.add(token);
@@ -40,7 +31,7 @@ function collectContextTokens(fields = {}, { includeRegions = false } = {}) {
   const tokens = new Set();
   for (const item of bags) {
     for (const token of tokenize(String(item))) {
-      if (regionTokens.has(token)) continue; // drop region tokens even when embedded in other fields
+      if (regionTokens.has(token)) continue;
       tokens.add(token);
     }
   }
@@ -64,8 +55,7 @@ function applyContextOverlapGate({ relevance, confidence, fields, title, summary
   if (!isContinuingRelevance(relevance)) {
     return { relevance, confidence, gated: false, reason: null };
   }
-  // Exclude regions-only matches (too broad: city names alone must not open issues).
-  const contextTokens = collectContextTokens(fields, { includeRegions: false });
+  const contextTokens = collectStrongContextTokens(fields);
   const { hits, matched } = countOverlap(`${title || ""}\n${summary || ""}`, contextTokens);
   if (hits >= 1) {
     return { relevance, confidence, gated: false, reason: null, hits, matched };
@@ -82,7 +72,8 @@ function applyContextOverlapGate({ relevance, confidence, fields, title, summary
 
 module.exports = {
   tokenize,
-  collectContextTokens,
+  collectContextTokens: collectStrongContextTokens,
+  collectStrongContextTokens,
   countOverlap,
   applyContextOverlapGate,
 };
