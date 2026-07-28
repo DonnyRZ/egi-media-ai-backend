@@ -43,7 +43,7 @@ function buildService() {
   return { service, issueStore, analysisStore, priorityStore, addIssue };
 }
 
-test("Executive Summary is a deterministic backend-only Top 5 projection", async () => {
+test("Executive Summary is a deterministic backend-only Top 20 projection", async () => {
   const { service, addIssue } = buildService();
   addIssue({ issueId: "high-old", priority: "tinggi", observedAt: "2026-07-22T08:00:00.000Z", relevance: "low" });
   addIssue({ issueId: "high-new-b", priority: "tinggi", observedAt: "2026-07-22T11:00:00.000Z", relevance: "none" });
@@ -51,11 +51,16 @@ test("Executive Summary is a deterministic backend-only Top 5 projection", async
   addIssue({ issueId: "medium", priority: "sedang", observedAt: "2026-07-22T11:30:00.000Z", relevance: "high" });
   addIssue({ issueId: "low", priority: "rendah", observedAt: "2026-07-22T11:45:00.000Z", relevance: "high" });
   addIssue({ issueId: "sixth", priority: "rendah", observedAt: "2026-07-22T11:50:00.000Z", relevance: "high" });
+  for (let i = 7; i <= 22; i += 1) {
+    addIssue({ issueId: `extra-${String(i).padStart(2, "0")}`, priority: "rendah", observedAt: `2026-07-22T11:${String(i).padStart(2, "0")}:00.000Z`, relevance: "high" });
+  }
 
   const summary = await service.getExecutiveSummary({ tenantId, companyId, period: "24jam" });
-  assert.equal(summary.items.length, 5);
-  assert.deepEqual(summary.items.map((item) => item.issueId), ["high-new-a", "high-new-b", "high-old", "medium", "sixth"]);
-  assert.deepEqual(summary.items.map((item) => item.priority), ["tinggi", "tinggi", "tinggi", "sedang", "rendah"]);
+  assert.equal(summary.items.length, 20);
+  assert.deepEqual(summary.items.slice(0, 5).map((item) => item.issueId), ["high-new-a", "high-new-b", "high-old", "medium", "sixth"]);
+  assert.deepEqual(summary.items.slice(0, 5).map((item) => item.priority), ["tinggi", "tinggi", "tinggi", "sedang", "rendah"]);
+  assert.equal(summary.items[5].issueId, "low");
+  assert.equal(summary.items[19].issueId, "extra-09");
   assert.equal(Object.hasOwn(summary.items[0], "relevance"), false);
   assert.equal(Object.hasOwn(summary.items[0], "rank"), false);
 });

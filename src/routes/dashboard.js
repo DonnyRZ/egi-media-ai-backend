@@ -9,7 +9,7 @@ function createDashboardRouter({ getExecutiveSummaryService, getIssueReadService
   router.get("/api/v1/dashboard/executive-summary", scope, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.query.company_id || req.authContext.companyId);
     const result = await getExecutiveSummaryService().getExecutiveSummary({ tenantId: req.authContext.tenantId, companyId, period: req.query.period || "24jam" });
-    return success(res, { ...result, issues: result.items, top5_limit: 5 }, req);
+    return success(res, { ...result, issues: result.items, top5_limit: 20 }, req);
   }));
   router.get("/api/v1/issues", scope, asyncHandler(async (req, res) => {
     const companyId = scopedCompany(req, req.query.company_id || req.authContext.companyId);

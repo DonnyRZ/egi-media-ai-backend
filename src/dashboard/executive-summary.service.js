@@ -27,7 +27,7 @@ class ExecutiveSummaryService {
       .map(async (issue) => (await this._isEligible({ issue, tenantId, companyId, start, end })) ? issue : null));
     const items = eligible.filter(Boolean)
       .sort(compareIssues)
-      .slice(0, 5)
+      .slice(0, 20)
       .map(serializeIssue);
     return { period, startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(), items };
   }
