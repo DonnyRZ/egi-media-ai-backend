@@ -378,6 +378,74 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/language-preference": {
+      "get": {
+        "tags": ["Companies"],
+        "summary": "Get company AI output language preference",
+        "operationId": "getCompanyLanguagePreference",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Effective company AI output language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["success", "data", "meta"],
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "required": ["language"],
+                      "properties": { "language": { "type": "string", "enum": ["id", "en"] } }
+                    },
+                    "meta": { "$ref": "#/components/schemas/ApiMeta" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["Companies"],
+        "summary": "Update company AI output language preference",
+        "operationId": "updateCompanyLanguagePreference",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["language"],
+                "properties": { "language": { "type": "string", "enum": ["id", "en"] } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated company AI output language" },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/context": {
       "get": {
         "tags": ["Company Context"],
@@ -777,6 +845,24 @@
     "/api/v1/platform/tenants/{tenantId}/companies": {
       "get": { "tags": ["Platform Access Control"], "summary": "List companies in a customer tenant", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/PageQuery" }, { "$ref": "#/components/parameters/LimitQuery" }], "responses": { "200": { "description": "Tenant companies" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } },
       "post": { "tags": ["Platform Access Control"], "summary": "Create a company in a customer tenant", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "company_id": { "type": "string" }, "name": { "type": "string" }, "legal_name": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "active", "suspended", "archived"] }, "timezone": { "type": "string" }, "locale": { "type": "string" }, "metadata": { "type": "object" } } } } } }, "responses": { "201": { "description": "Company created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/v1/platform/tenants/{tenantId}/memberships": {
+      "get": {
+        "tags": ["Platform Access Control"],
+        "summary": "List memberships for a customer tenant",
+        "operationId": "listPlatformTenantMemberships",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Tenant memberships" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
     },
     "/api/v1/platform/tenants/{tenantId}/companies/{companyId}": {
       "patch": { "tags": ["Platform Access Control"], "summary": "Update a customer company", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "companyId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }], "responses": { "200": { "description": "Company updated" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } } }

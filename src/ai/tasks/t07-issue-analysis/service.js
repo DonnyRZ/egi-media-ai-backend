@@ -1,11 +1,21 @@
 const { createHash } = require("crypto");
 const { AiConfigurationError } = require("../../provider/provider.errors");
 const { loadCompanyOutputLanguage } = require("../../../language/resolve-company-output-language");
-const { T07_PROMPT_ID, T07_PROMPT_VERSION } = require("./definition");
+const {
+  T07_PROMPT_ID,
+  T07_PROMPT_VERSION,
+  T07_REVIEW_PROMPT_ID,
+  T07_REVIEW_PROMPT_VERSION,
+} = require("./definition");
 const { T07_OUTPUT_SCHEMA } = require("./schema");
 const { buildT07Input } = require("./prompt");
 const { validateT07Output } = require("./output-validator");
 const { applySubjectIdentityGate } = require("../t02-relevance-class/subject-identity-gate");
+const {
+  T07_PERSPECTIVE_REVIEW_SCHEMA,
+  buildPerspectiveReviewInput,
+  validatePerspectiveReview,
+} = require("./perspective-review");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
@@ -47,9 +57,44 @@ class IssueAnalysisService {
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT07Output(data, { allowedArticleIds, expectedSubjectRelation: subjectRelation }),
     });
+    const review = await this.promptExecutionService.executeActive({
+      promptId: T07_REVIEW_PROMPT_ID,
+      promptVersion: T07_REVIEW_PROMPT_VERSION,
+      model: "mini",
+      input: buildPerspectiveReviewInput({
+        tenantId,
+        companyId,
+        context,
+        evidence,
+        outputLanguage,
+        subjectRelation,
+        candidate: execution.data,
+      }),
+      outputSchema: T07_PERSPECTIVE_REVIEW_SCHEMA,
+      budgetScope: { tenantId, companyId },
+      validateResult: (data) => validatePerspectiveReview(data, {
+        allowedArticleIds,
+        expectedSubjectRelation: subjectRelation,
+      }),
+    });
+    const reviewedAnalysis = review.data.verdict === "corrected"
+      ? review.data.corrected_analysis
+      : execution.data;
     const analysis = await this.analysisStore.create({
       tenantId, companyId, issueId, contextVersion: context.version, inputFingerprint, promptVersion: T07_PROMPT_VERSION,
-      analysis: execution.data, evidence, provenance: { ...execution.provenance, subjectRelation },
+      analysis: reviewedAnalysis,
+      evidence,
+      provenance: {
+        ...execution.provenance,
+        subjectRelation,
+        managementPerspectiveReview: {
+          promptId: T07_REVIEW_PROMPT_ID,
+          promptVersion: T07_REVIEW_PROMPT_VERSION,
+          verdict: review.data.verdict,
+          violations: review.data.violations,
+          provenance: review.provenance,
+        },
+      },
     });
     return { analysis, reused: false };
   }
@@ -111,6 +156,7 @@ function resolveIssueSubjectRelation(fields, evidence) {
     fields,
     title: item.article?.title,
     summary: item.article?.summary,
+    body: item.article?.content,
   }).subjectRelation);
   return relations.sort((a, b) => RELATION_RANK[b] - RELATION_RANK[a])[0] || "unrelated";
 }

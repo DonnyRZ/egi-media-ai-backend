@@ -25,7 +25,7 @@ function context() {
   return { companyId, version: 3, status: "effective", fields: { name: "PT Example Logistics", industry: "Logistics", competitors: [], products: ["Fleet tracking"], topics: [], priorities: [], goals: [], regions: [] } };
 }
 
-function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
+function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequest } = {}) {
   const relevanceDecisionStore = new InMemoryRelevanceDecisionStore();
   const matchDecisionStore = new InMemoryIssueMatchDecisionStore();
   const issueStore = new InMemoryIssueStore({ now: () => Date.parse("2026-07-22T12:00:00.000Z") });
@@ -51,7 +51,17 @@ function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
   const runtime = createT07IssueAnalysisRuntime({
     aiTaskKernel: { execute: async (request) => {
       kernelCalls += 1; onKernelRequest?.(request);
-      return { data: output || validOutput(), model: { alias: "mini", name: "mini-test-model" }, correlation: { requestId: request.requestId, providerRequestId: "req_t07" }, providerResponseId: "resp_t07", usage: { inputTokens: 100, outputTokens: 40, totalTokens: 140 }, latencyMs: 21 };
+      const isReview = request.outputSchema?.name === "management_perspective_review_v1";
+      return {
+        data: isReview
+          ? (reviewOutput || { verdict: "pass", violations: [], corrected_analysis: null })
+          : (output || validOutput()),
+        model: { alias: "mini", name: "mini-test-model" },
+        correlation: { requestId: request.requestId, providerRequestId: "req_t07" },
+        providerResponseId: "resp_t07",
+        usage: { inputTokens: 100, outputTokens: 40, totalTokens: 140 },
+        latencyMs: 21,
+      };
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     cmsSourceGate: { requirePublishedArticle: async ({ articleId }) => sources.get(articleId) },
@@ -78,7 +88,7 @@ test("T07 analyzes only linked evidence, persists cited claims, and does not cre
   const { runtime, issueStore, created, kernelCalls } = buildRuntime({ onKernelRequest: (request) => { input = request.input; } });
   const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
 
-  assert.equal(kernelCalls(), 1);
+  assert.equal(kernelCalls(), 2);
   assert.equal(result.reused, false);
   assert.equal(result.analysis.analysis.claims[0].claim_id, "c1");
   assert.deepEqual(result.analysis.analysis.claims[0].source_article_ids, [articleOne]);
@@ -97,7 +107,26 @@ test("T07 is idempotent for the same issue, context, and linked evidence fingerp
   const second = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
   assert.equal(second.reused, true);
   assert.equal(second.analysis.analysisId, first.analysis.analysisId);
-  assert.equal(kernelCalls(), 1);
+  assert.equal(kernelCalls(), 2);
+});
+
+test("T07 perspective reviewer replaces externally framed analysis before persistence", async () => {
+  const corrected = validOutput();
+  corrected.why_matters = ["Perubahan eksternal ini dapat memengaruhi biaya dan keputusan armada PT Example Logistics."];
+  corrected.impacts = [{
+    text: "Manajemen PT Example Logistics perlu menilai paparan biaya kepatuhan.",
+    source_article_ids: [articleOne],
+  }];
+  const { runtime, created } = buildRuntime({
+    reviewOutput: {
+      verdict: "corrected",
+      violations: ["Candidate framed the external operator's internal operations instead of the dashboard company."],
+      corrected_analysis: corrected,
+    },
+  });
+  const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+  assert.deepEqual(result.analysis.analysis, corrected);
+  assert.equal(result.analysis.provenance.managementPerspectiveReview.verdict, "corrected");
 });
 
 test("T07 rejects an out-of-evidence citation without persisting an analysis", async () => {
@@ -161,8 +190,11 @@ test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted"
       const runtime = createT07IssueAnalysisRuntime({
         aiTaskKernel: { execute: async (request) => {
           kernelCalls += 1;
+          const isReview = request.outputSchema?.name === "management_perspective_review_v1";
           return {
-            data: {
+            data: isReview ? {
+              verdict: "pass", violations: [], corrected_analysis: null,
+            } : {
               what_happened: ["Peristiwa crawl."], why_matters: ["Perlu dilacak."],
               impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
               claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
@@ -182,7 +214,7 @@ test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted"
       });
 
       const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
-      assert.equal(kernelCalls, 1);
+      assert.equal(kernelCalls, 2);
       assert.equal(result.reused, false);
       assert.equal(result.analysis.evidence[0].sourceArticleId, crawlId);
       assert.equal(result.analysis.evidence[0].updatedAt, null);

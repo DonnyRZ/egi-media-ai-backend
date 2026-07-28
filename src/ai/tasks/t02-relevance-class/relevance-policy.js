@@ -1,6 +1,6 @@
 "use strict";
 
-/** Relevance classes that may continue into issue matching / mutation (still need subject_relation). */
+/** Relevance classes that may continue into issue matching / mutation. */
 const CONTINUING_RELEVANCE = Object.freeze(["high", "medium"]);
 
 /** All valid T02 relevance classes. */
@@ -15,23 +15,25 @@ function isContinuingRelevance(relevance) {
 
 /**
  * Issue formation policy:
- * - self → may form issues (when relevance is high/medium)
- * - competitor → only when company_context.competitors is non-empty (opt-in)
- * - market / unrelated → never form issues
+ * - self / competitor / market → may form issues when relevance is high/medium
+ * - unrelated → never forms an issue
+ *
+ * subject_relation controls analysis framing, not whether a material external
+ * signal is useful to management. Unlisted peers are classified as market.
  */
-function shouldFormIssue({ relevance, subjectRelation, competitorOptIn = false }) {
+function shouldFormIssue({ relevance, subjectRelation }) {
   if (!isContinuingRelevance(relevance)) return false;
-  if (subjectRelation === "self") return true;
-  if (subjectRelation === "competitor") return competitorOptIn === true;
-  return false;
+  return subjectRelation === "self"
+    || subjectRelation === "competitor"
+    || subjectRelation === "market";
 }
 
-function branchForDecision({ relevance, subjectRelation = null, competitorOptIn = false } = {}) {
-  // Legacy rows without subject_relation: fail closed on continue so market leaks cannot reopen.
+function branchForDecision({ relevance, subjectRelation = null } = {}) {
+  // Legacy rows without subject_relation remain fail-closed.
   if (subjectRelation == null) {
     return "stop";
   }
-  return shouldFormIssue({ relevance, subjectRelation, competitorOptIn }) ? "continue" : "stop";
+  return shouldFormIssue({ relevance, subjectRelation }) ? "continue" : "stop";
 }
 
 /** @deprecated Prefer branchForDecision — relevance alone must not open issues. */

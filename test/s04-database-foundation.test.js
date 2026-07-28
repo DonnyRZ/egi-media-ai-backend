@@ -65,5 +65,6 @@ test("S04 migration file discovery is deterministic", () => {
     "0012_persistent_auth_accounts.sql",
     "0013_company_scope_primary_key.sql",
     "0014_company_context_upload_requests.sql",
+    "0015_process_settings.sql",
   ]);
 });

@@ -6,25 +6,23 @@ const { T02_OUTPUT_SCHEMA } = require("./schema");
 const { buildT02Input } = require("./prompt");
 const { validateT02Output } = require("./output-validator");
 const { isContinuingRelevance, shouldFormIssue } = require("./relevance-policy");
-const { applyContextOverlapGate } = require("./context-overlap-gate");
 const { applySubjectIdentityGate } = require("./subject-identity-gate");
 
 const RELEVANCE_RANK = Object.freeze({ none: 0, low: 1, medium: 2, high: 3 });
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
 
 function resolveT02InputOptions(env = process.env) {
-  // Default ON: identity recall needs body (name/brand/person often absent from title/summary).
-  // Set T02_INCLUDE_BODY_SNIPPET=false to disable.
-  const rawBody = env.T02_INCLUDE_BODY_SNIPPET;
-  const includeBodySnippet = rawBody == null || rawBody === ""
-    ? true
-    : (String(rawBody).toLowerCase() === "true" || String(rawBody) === "1");
-  const bodySnippetChars = Number.parseInt(env.T02_BODY_SNIPPET_CHARS || "2500", 10);
+  // Body is always available to the deterministic relation gate. Sending it to
+  // the model remains explicit to preserve fingerprint/backward compatibility
+  // and avoid unnecessary tokens.
+  const includeBodySnippet = String(env.T02_INCLUDE_BODY_SNIPPET || "").toLowerCase() === "true"
+    || String(env.T02_INCLUDE_BODY_SNIPPET || "") === "1";
+  const bodySnippetChars = Number.parseInt(env.T02_BODY_SNIPPET_CHARS || "1500", 10);
   const dualCall = String(env.T02_DUAL_CALL || "true").toLowerCase() !== "false";
   const consensusCalls = Number.parseInt(env.T02_CONSENSUS_CALLS || (dualCall ? "3" : "1"), 10);
   return {
     includeBodySnippet,
-    bodySnippetChars: Number.isInteger(bodySnippetChars) && bodySnippetChars > 0 ? bodySnippetChars : 2500,
+    bodySnippetChars: Number.isInteger(bodySnippetChars) && bodySnippetChars > 0 ? bodySnippetChars : 1500,
     useRubric: String(env.T02_USE_RUBRIC || "true").toLowerCase() !== "false",
     dualCall,
     consensusCalls: Number.isInteger(consensusCalls) && consensusCalls > 0 ? Math.min(consensusCalls, 3) : 1,
@@ -142,8 +140,7 @@ class RelevanceClassificationService {
       summary: source.article?.summary,
       body: bodyForGate,
     });
-    // Overlap gate is secondary: only applies when identity still allows issue formation.
-    let output = {
+    const output = {
       relevance: identity.relevance,
       confidence: identity.confidence,
       subjectRelation: identity.subjectRelation,
@@ -156,38 +153,10 @@ class RelevanceClassificationService {
       },
       contextOverlapGate: { gated: false, reason: null, hits: null, matched: [] },
     };
-    if (shouldFormIssue({
-      relevance: output.relevance,
-      subjectRelation: output.subjectRelation,
-      competitorOptIn: output.competitorOptIn,
-    })) {
-      // Overlap is only for residual continues without lexical entity proof.
-      // Lexical self/competitor hits already prove identity — do not demote them
-      // for missing industry tokens (that caused false signal misses).
-      const hasLexicalIdentity = (output.identityGate.selfHits || []).length > 0
-        || (output.identityGate.competitorHits || []).length > 0;
-      if (!hasLexicalIdentity) {
-      const overlap = applyContextOverlapGate({
-        relevance: output.relevance,
-        confidence: output.confidence,
-        fields: context.fields,
-        title: source.article?.title,
-        summary: source.article?.summary,
-      });
-      output = {
-        ...output,
-        relevance: overlap.relevance,
-        confidence: overlap.confidence,
-        contextOverlapGate: {
-          gated: Boolean(overlap.gated),
-          reason: overlap.reason || null,
-          hits: overlap.hits ?? null,
-          matched: overlap.matched || [],
-        },
-      };
-      }
-      // If overlap demotes relevance, issue formation stops; keep subject_relation.
-    }
+    // Do not apply a second lexical materiality gate here. T02 consensus decides
+    // relevance; the identity gate already uses lexical overlap to distinguish
+    // market from unrelated. A second token gate caused semantic false negatives
+    // for regulations and competitor moves expressed with different wording.
 
     const provenance = {
       ...passes[0].provenance,
@@ -274,7 +243,7 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippetChars = chars;
   }
   // Bump when identity/subject_relation gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v8-identity-body-aliases";
+  base.contextOverlapGate = "v9-management-market-signals";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 

@@ -117,6 +117,6 @@ test("S28 generated Swagger examples are executable as contract requests", () =>
   for (const [routePath, item] of Object.entries(document.paths || {})) {
     for (const method of methods) if (item[method]) examples.push(executableExample(item[method], routePath));
   }
-  assert.equal(examples.length, 70);
+  assert.equal(examples.length, 74);
   assert.ok(examples.every((example) => typeof example.path === "string" && example.path.startsWith("/api/v1/")));
 });

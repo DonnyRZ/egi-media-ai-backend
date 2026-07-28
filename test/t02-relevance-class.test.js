@@ -151,7 +151,7 @@ test("T02 reuses the same article snapshot × company × context version decisio
   assert.equal(runtime.decisionStore.list().length, 1);
 });
 
-test("T02 identity gate blocks same-industry peer promo without company name", async () => {
+test("T02 keeps a material peer promo as market intelligence", async () => {
   const { runtime } = buildRuntime({
     output: { relevance: "medium", confidence: 0.7, subject_relation: "self" },
     contextResult: {
@@ -172,8 +172,9 @@ test("T02 identity gate blocks same-industry peer promo without company name", a
   });
   const result = await runtime.service.classify({ companyId, articleId, locale: "id" });
   assert.equal(result.decision.subjectRelation, "market");
-  assert.equal(result.shouldContinue, false);
-  assert.equal(result.decision.branch, "stop");
+  assert.equal(result.decision.relevance, "medium");
+  assert.equal(result.shouldContinue, true);
+  assert.equal(result.decision.branch, "continue");
 });
 
 test("T02 fails closed for invalid output without persisting a decision", async () => {

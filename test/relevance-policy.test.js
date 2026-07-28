@@ -17,17 +17,17 @@ test("only high and medium are continuing relevance classes", () => {
   assert.equal(isContinuingRelevance("none"), false);
 });
 
-test("issue formation requires identity subject_relation, not relevance alone", () => {
-  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "market" }), false);
+test("material self, competitor, and market signals may form issues", () => {
+  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "market" }), true);
   assert.equal(shouldFormIssue({ relevance: "high", subjectRelation: "unrelated" }), false);
   assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "self" }), true);
-  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: false }), false);
+  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: false }), true);
   assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: true }), true);
   assert.equal(shouldFormIssue({ relevance: "low", subjectRelation: "self" }), false);
 });
 
-test("branchForDecision stops market even when relevance is medium", () => {
-  assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "market" }), "stop");
+test("branchForDecision continues material market intelligence and stops unrelated", () => {
+  assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "market" }), "continue");
   assert.equal(branchForDecision({ relevance: "high", subjectRelation: "self" }), "continue");
   assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: true }), "continue");
   assert.equal(branchForDecision({ relevance: "medium", subjectRelation: null }), "stop");

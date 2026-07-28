@@ -59,7 +59,7 @@ const fintechFields = {
   description: "Digital payments and lending",
 };
 
-test("Sutan Raja peer promo is market and never forms an issue (Context A)", () => {
+test("Sutan Raja peer promo is material market intelligence for Context A", () => {
   const gated = applySubjectIdentityGate({
     relevance: "medium",
     confidence: 0.7,
@@ -69,17 +69,17 @@ test("Sutan Raja peer promo is market and never forms an issue (Context A)", () 
     summary: "Sutan Raja Hotel Soreang menghadirkan promo July Mid Year Magic sepanjang Juli. Menginap mulai Rp550 ribu dan diskon direct booking.",
   });
   assert.equal(gated.subjectRelation, "market");
-  assert.equal(gated.relevance, "low");
+  assert.equal(gated.relevance, "medium");
   assert.equal(shouldFormIssue({
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: gated.competitorOptIn,
-  }), false);
+  }), true);
   assert.equal(branchForDecision({
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: gated.competitorOptIn,
-  }), "stop");
+  }), "continue");
 });
 
 test("Rumah Makan Padang peer promo is market for hospitality context", () => {
@@ -96,7 +96,7 @@ test("Rumah Makan Padang peer promo is market for hospitality context", () => {
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: false,
-  }), false);
+  }), true);
 });
 
 test("Arunika self mention remains self and can form issues", () => {
@@ -131,7 +131,7 @@ test("Manufacturing: unlisted peer factory news is market (Context B)", () => {
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: true,
-  }), false);
+  }), true);
 });
 
 test("Manufacturing: listed competitor forms competitor issue when opt-in", () => {
@@ -166,10 +166,10 @@ test("Fintech: another bank promo is market (Context C)", () => {
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: true,
-  }), false);
+  }), true);
 });
 
-test("Body-only legal name recall promotes self", () => {
+test("Body-only legal name corrects relation without overriding relevance", () => {
   const gated = applySubjectIdentityGate({
     relevance: "none",
     confidence: 0.4,
@@ -180,11 +180,12 @@ test("Body-only legal name recall promotes self", () => {
     body: "Dalam pertemuan tertutup, manajemen PT Arunika Hospitality Indonesia memaparkan pipeline pra-pembukaan.",
   });
   assert.equal(gated.subjectRelation, "self");
+  assert.equal(gated.relevance, "none");
   assert.equal(shouldFormIssue({
     relevance: gated.relevance,
     subjectRelation: gated.subjectRelation,
     competitorOptIn: false,
-  }), true);
+  }), false);
 });
 
 test("Brand alias in body recalls self", () => {
@@ -248,7 +249,7 @@ test("Legacy decisions without subject_relation fail closed", () => {
   assert.equal(branchForDecision({ relevance: "high" }), "stop");
 });
 
-test("red-team: scattered token alias must not form self/competitor issues", () => {
+test("red-team: scattered token alias must not become self/competitor", () => {
   const attacks = [
     {
       fields: arunikaFields,
@@ -278,7 +279,7 @@ test("red-team: scattered token alias must not form self/competitor issues", () 
   ];
   for (const attack of attacks) {
     const gated = applySubjectIdentityGate({
-      relevance: "medium",
+      relevance: "low",
       confidence: 0.7,
       subjectRelation: "market",
       fields: attack.fields,

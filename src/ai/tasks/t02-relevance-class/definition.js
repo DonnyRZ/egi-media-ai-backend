@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.4.0";
+const T02_PROMPT_VERSION = "1.5.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT02PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.4",
+    inputSchemaVersion: "1.5",
     outputSchemaVersion: "2.0",
-    changeSummary: "Identity recall: brands_aliases/key_people + body; market peers still never form issues",
+    changeSummary: "Separate subject identity from management relevance; material external market signals may form issues",
     approvedBy: null,
-    rollbackVersion: "1.3.0",
+    rollbackVersion: "1.4.0",
   };
 }
 

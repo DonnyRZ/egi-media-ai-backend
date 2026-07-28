@@ -8,16 +8,6 @@ logs
 coverage
 .data/
 
-# Offline T02 eval artifacts (local harness outputs)
-eval/t02/*.log
-eval/t02/pool_raw.json
-eval/t02/article_pool.json
-eval/t02/result_*.json
-eval/t02/E*_decision.json
-eval/t02/FINAL_decision.json
-eval/t02/harness_run.log
-eval/t02/v2/result_*.json
-eval/t02/v2/*.log
-eval/t02/v3/result_*.json
-eval/t02/v3/*.log
+# Management-intelligence audit outputs contain raw model responses.
+eval/management-intelligence/live-result.json
 

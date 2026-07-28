@@ -41,7 +41,7 @@ function crawlRow(overrides = {}) {
     normalized_url: "https://news.detik.com/berita/artikel-asli?utm=1",
     title: "Judul media",
     summary: "Ringkasan media",
-    content_text: "Isi lengkap artikel media.",
+    content_text: "Isi lengkap artikel media yang memuat konteks, kronologi, fakta pendukung, pihak terkait, dampak, dan tindak lanjut. ".repeat(6),
     thumbnail_url: "https://cdn.detik.com/thumb.jpg",
     published_at: "2026-07-26T10:00:00.000Z",
     collected_at: "2026-07-26T11:00:00.000Z",
@@ -209,7 +209,7 @@ test("F4 crawl reference resolves to a CMS-shaped source citing the original med
     id: CRAWL_ID,
     title: "Judul media",
     summary: "Ringkasan media",
-    content: "Isi lengkap artikel media.",
+    content: crawlRow().content_text,
     status: "published",
     publishedAt: "2026-07-26T10:00:00.000Z",
     updatedAt: null,
@@ -365,7 +365,7 @@ test("F4 T02 classifies a crawl-sourced article through the same service entry p
   const runtime = createT02RelevanceRuntime({
     aiTaskKernel: {
       execute: async (request) => ({
-        data: { relevance: "high", confidence: 0.77 },
+        data: { relevance: "high", confidence: 0.77, subject_relation: "market" },
         model: { alias: "nano", name: "nano-test-model" },
         correlation: { requestId: request.requestId, providerRequestId: "req_t02" },
         providerResponseId: "resp_t02",

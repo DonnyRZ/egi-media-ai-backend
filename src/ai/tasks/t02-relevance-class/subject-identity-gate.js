@@ -179,52 +179,16 @@ function applySubjectIdentityGate({
   let gated = false;
   let reason = null;
 
-  const llmRelevance = relevance;
-  const llmRelation = SUBJECT_RELATIONS.includes(subjectRelation) ? subjectRelation : "unrelated";
-
   if (selfHits.hits > 0) {
-    // Lexical identity evidence → relation is self (recall vs LLM "market").
+    // Identity evidence corrects relation only. Relevance remains the model's
+    // materiality judgment; merely naming a company must not force an issue.
     nextRelation = "self";
-    if (!isContinuingRelevance(nextRelevance)) {
-      const strongHit = selfHits.matched.some((alias) => {
-        const toks = distinctiveTokens(alias);
-        return toks.length >= 2 || String(alias).trim().length >= 12;
-      });
-      // Restore continue when LLM intended entity/continue, or strong multi-token/legal-name hit.
-      // Weak single-token / passing mentions with LLM none stay stopped.
-      if (
-        isContinuingRelevance(llmRelevance)
-        || llmRelation === "self"
-        || llmRelation === "competitor"
-        || llmRelation === "market"
-        || strongHit
-      ) {
-        nextRelevance = "medium";
-        nextConfidence = Math.max(nextConfidence, 0.55);
-        reason = "lexical_self_promotes_continue";
-      }
-    }
   } else if (competitorHits.hits > 0) {
     nextRelation = "competitor";
-    if (competitorOptIn && !isContinuingRelevance(nextRelevance)) {
-      const strongHit = competitorHits.matched.some((alias) => {
-        const toks = distinctiveTokens(alias);
-        return toks.length >= 2 || String(alias).trim().length >= 12;
-      });
-      if (
-        isContinuingRelevance(llmRelevance)
-        || llmRelation === "competitor"
-        || llmRelation === "self"
-        || llmRelation === "market"
-        || strongHit
-      ) {
-        nextRelevance = "medium";
-        nextConfidence = Math.max(nextConfidence, 0.55);
-        reason = "lexical_competitor_promotes_continue";
-      }
-    }
   } else if (nextRelation === "self" || nextRelation === "competitor") {
-    // LLM claimed entity identity without lexical entity evidence → demote (precision).
+    // A claimed entity without lexical evidence is an external market signal
+    // when it materially overlaps context. Keep its relevance; relation drives
+    // the correct management framing downstream.
     gated = true;
     if (industryOverlapPresent(fields, title, summary)) {
       nextRelation = "market";
@@ -233,15 +197,15 @@ function applySubjectIdentityGate({
       nextRelation = "unrelated";
       reason = "claimed_entity_without_name_match_unrelated";
     }
-    if (isContinuingRelevance(nextRelevance)) {
-      nextRelevance = nextRelation === "market" ? "low" : "none";
+    if (nextRelation === "unrelated" && isContinuingRelevance(nextRelevance)) {
+      nextRelevance = "none";
       nextConfidence = Math.min(nextConfidence, 0.49);
     }
   } else if (nextRelation === "market" || nextRelation === "unrelated") {
-    // Keep LLM market only when industry overlap exists; otherwise unrelated.
-    if (nextRelation === "market" && !industryOverlapPresent(fields, title, summary)) {
-      nextRelation = "unrelated";
-    } else if (nextRelation === "unrelated" && industryOverlapPresent(fields, title, summary)) {
+    // Preserve a consensus market classification. Semantic regulations and
+    // macro signals often use no literal product token. Lexical overlap may
+    // upgrade unrelated→market, but absence of overlap must not erase market.
+    if (nextRelation === "unrelated" && industryOverlapPresent(fields, title, summary)) {
       nextRelation = "market";
     }
   } else if (industryOverlapPresent(fields, title, summary)) {
@@ -250,19 +214,22 @@ function applySubjectIdentityGate({
     nextRelation = "unrelated";
   }
 
-  if ((nextRelation === "market" || nextRelation === "unrelated") && isContinuingRelevance(nextRelevance)) {
+  // Only unrelated content is blocked. A high/medium market signal is useful
+  // management intelligence and must continue.
+  if (nextRelation === "unrelated" && isContinuingRelevance(nextRelevance)) {
     gated = true;
-    reason = reason || (nextRelation === "market" ? "market_subject_blocks_issue" : "unrelated_subject_blocks_issue");
-    nextRelevance = nextRelation === "market" ? "low" : "none";
+    reason = reason || "unrelated_subject_blocks_issue";
+    nextRelevance = "none";
     nextConfidence = Math.min(nextConfidence, 0.49);
   }
 
+  // An unlisted competitor is a market signal, not irrelevant content.
   if (nextRelation === "competitor" && !competitorOptIn) {
     gated = true;
     reason = "competitor_without_opt_in_list";
     nextRelation = industryOverlapPresent(fields, title, summary) ? "market" : "unrelated";
-    if (isContinuingRelevance(nextRelevance)) {
-      nextRelevance = nextRelation === "market" ? "low" : "none";
+    if (nextRelation === "unrelated" && isContinuingRelevance(nextRelevance)) {
+      nextRelevance = "none";
       nextConfidence = Math.min(nextConfidence, 0.49);
     }
   }

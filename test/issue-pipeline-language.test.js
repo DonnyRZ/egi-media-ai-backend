@@ -72,8 +72,11 @@ function assertOutputLanguage(request, expected) {
 const kernelOk = (data, onKernelRequest) => ({
   execute: async (request) => {
     onKernelRequest?.(request);
+    const responseData = request.outputSchema?.name === "management_perspective_review_v1"
+      ? { verdict: "pass", violations: [], corrected_analysis: null }
+      : data;
     return {
-      data,
+      data: responseData,
       model: { alias: "nano", name: "nano-test-model" },
       correlation: { requestId: request.requestId, providerRequestId: "req_lang" },
       providerResponseId: "resp_lang",
