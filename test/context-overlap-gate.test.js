@@ -26,15 +26,19 @@ test("context overlap gate downgrades continuing relevance without field hooks",
   assert.equal(gated.reason, "no_company_context_field_overlap");
 });
 
-test("context overlap gate keeps continuing relevance when hooks exist", () => {
-  const kept = applyContextOverlapGate({
+test("context overlap gate ignores bare country/region tokens from company name", () => {
+  const gated = applyContextOverlapGate({
     relevance: "medium",
     confidence: 0.7,
-    fields,
-    title: "Hotel promo July Mid Year Magic",
-    summary: "Resort dining package for guest experience in Jakarta.",
+    fields: {
+      ...fields,
+      name: "PT Example Hospitality Indonesia",
+      description: "Based in Indonesia",
+      regions: ["Indonesia", "Jakarta"],
+    },
+    title: "Pemkot Serang tanam mangrove di pesisir Indonesia",
+    summary: "Aksi lingkungan di kawasan pesisir tanpa tautan hotel.",
   });
-  assert.equal(kept.relevance, "medium");
-  assert.equal(kept.gated, false);
-  assert.ok(kept.hits >= 1);
+  assert.equal(gated.relevance, "low");
+  assert.equal(gated.gated, true);
 });

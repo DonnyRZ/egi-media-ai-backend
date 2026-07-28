@@ -18,6 +18,8 @@ function tokenize(value) {
 }
 
 function collectContextTokens(fields = {}, { includeRegions = false } = {}) {
+  // Intentionally exclude `name` / `description`: legal names often contain country
+  // tokens (e.g. "Indonesia") that would false-pass nearly every local article.
   const bags = []
     .concat(
       fields.products || [],
@@ -29,11 +31,18 @@ function collectContextTokens(fields = {}, { includeRegions = false } = {}) {
       fields.competitors || [],
       fields.risks || [],
     )
-    .concat([fields.industry, fields.sub_industry, fields.description, fields.name].filter(Boolean));
+    .concat([fields.industry, fields.sub_industry].filter(Boolean));
   if (includeRegions) bags.push(...(fields.regions || []));
+  const regionTokens = new Set();
+  for (const region of fields.regions || []) {
+    for (const token of tokenize(String(region))) regionTokens.add(token);
+  }
   const tokens = new Set();
   for (const item of bags) {
-    for (const token of tokenize(String(item))) tokens.add(token);
+    for (const token of tokenize(String(item))) {
+      if (regionTokens.has(token)) continue; // drop region tokens even when embedded in other fields
+      tokens.add(token);
+    }
   }
   return tokens;
 }
