@@ -17,17 +17,7 @@ function tokenize(value) {
     .filter((t) => t.length >= 4);
 }
 
-function collectStrongContextTokens(fields = {}) {
-  // Strong hooks only: industry / products / topics / priorities / sub_industry.
-  // Exclude name, description, regions, customers (often contain generic words like
-  // "masyarakat", "Indonesia", "keluarga" that false-pass local news).
-  const bags = []
-    .concat(fields.products || [], fields.topics || [], fields.priorities || [], fields.goals || [])
-    .concat([fields.industry, fields.sub_industry].filter(Boolean));
-  const regionTokens = new Set();
-  for (const region of fields.regions || []) {
-    for (const token of tokenize(String(region))) regionTokens.add(token);
-  }
+function tokensFrom(bags, regionTokens) {
   const tokens = new Set();
   for (const item of bags) {
     for (const token of tokenize(String(item))) {
@@ -36,6 +26,14 @@ function collectStrongContextTokens(fields = {}) {
     }
   }
   return tokens;
+}
+
+function regionTokenSet(fields = {}) {
+  const regionTokens = new Set();
+  for (const region of fields.regions || []) {
+    for (const token of tokenize(String(region))) regionTokens.add(token);
+  }
+  return regionTokens;
 }
 
 function countOverlap(articleText, contextTokens) {
@@ -55,25 +53,46 @@ function applyContextOverlapGate({ relevance, confidence, fields, title, summary
   if (!isContinuingRelevance(relevance)) {
     return { relevance, confidence, gated: false, reason: null };
   }
-  const contextTokens = collectStrongContextTokens(fields);
-  const { hits, matched } = countOverlap(`${title || ""}\n${summary || ""}`, contextTokens);
-  if (hits >= 2) {
-    return { relevance, confidence, gated: false, reason: null, hits, matched };
+  const regions = regionTokenSet(fields);
+  const productIndustry = tokensFrom(
+    [].concat(fields.products || [], [fields.industry, fields.sub_industry].filter(Boolean)),
+    regions,
+  );
+  const topicPriority = tokensFrom(
+    [].concat(fields.topics || [], fields.priorities || [], fields.goals || []),
+    regions,
+  );
+  const text = `${title || ""}\n${summary || ""}`;
+  const pi = countOverlap(text, productIndustry);
+  const tp = countOverlap(text, topicPriority);
+  // Product/industry: one solid hook is enough. Topics/priorities alone need two
+  // (avoids single generic tokens like "energi" / "efisiensi" opening issues).
+  if (pi.hits >= 1 || tp.hits >= 2) {
+    return {
+      relevance,
+      confidence,
+      gated: false,
+      reason: null,
+      hits: pi.hits + tp.hits,
+      matched: [...pi.matched, ...tp.matched].slice(0, 8),
+    };
   }
   return {
     relevance: "low",
     confidence: Math.min(typeof confidence === "number" ? confidence : 0.5, 0.49),
     gated: true,
     reason: "no_company_context_field_overlap",
-    hits,
-    matched,
+    hits: pi.hits + tp.hits,
+    matched: [...pi.matched, ...tp.matched].slice(0, 8),
   };
 }
 
 module.exports = {
   tokenize,
-  collectContextTokens: collectStrongContextTokens,
-  collectStrongContextTokens,
+  collectContextTokens: (fields) => tokensFrom(
+    [].concat(fields.products || [], fields.topics || [], fields.priorities || [], fields.goals || [], [fields.industry, fields.sub_industry].filter(Boolean)),
+    regionTokenSet(fields),
+  ),
   countOverlap,
   applyContextOverlapGate,
 };

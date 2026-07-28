@@ -53,10 +53,10 @@ test("context overlap gate keeps continuing relevance when product/topic hooks e
   });
   assert.equal(kept.relevance, "medium");
   assert.equal(kept.gated, false);
-  assert.ok(kept.hits >= 2);
+  assert.ok(kept.hits >= 1);
 });
 
-test("single generic token hit is not enough to continue", () => {
+test("single generic priority token is not enough to continue", () => {
   const gated = applyContextOverlapGate({
     relevance: "high",
     confidence: 0.8,
