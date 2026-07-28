@@ -63,7 +63,7 @@ function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequ
         latencyMs: 21,
       };
     } },
-    openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
+    openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model", t07TimeoutMs: 90000 },
     cmsSourceGate: { requirePublishedArticle: async ({ articleId }) => sources.get(articleId) },
     relevanceDecisionStore: propagateRelation ? relevanceDecisionStore : null,
     issueStore, getEffectiveContext: async () => context(),
@@ -86,10 +86,15 @@ function validOutput() {
 
 test("T07 analyzes only linked evidence, persists cited claims, and does not create priority or alert state", async () => {
   let input;
-  const { runtime, issueStore, created, kernelCalls } = buildRuntime({ onKernelRequest: (request) => { input = request.input; } });
+  const timeouts = [];
+  const { runtime, issueStore, created, kernelCalls } = buildRuntime({ onKernelRequest: (request) => {
+    input = request.input;
+    timeouts.push(request.timeoutMs);
+  } });
   const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
 
   assert.equal(kernelCalls(), 2);
+  assert.deepEqual(timeouts, [90000, 90000]);
   assert.equal(result.reused, false);
   assert.equal(result.analysis.analysis.claims[0].claim_id, "c1");
   assert.deepEqual(result.analysis.analysis.claims[0].source_article_ids, [articleOne]);

@@ -21,13 +21,13 @@ const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
 
 class IssueAnalysisService {
-  constructor({ cmsSourceGate, issueStore, relevanceDecisionStore = null, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, relevanceDecisionStore = null, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault, timeoutMs = null }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T07 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.listArticles) throw new AiConfigurationError("T07 requires issue evidence persistence");
     if (typeof getEffectiveContext !== "function") throw new AiConfigurationError("T07 requires effective Company Context reader");
     if (!analysisStore?.get || !analysisStore?.create) throw new AiConfigurationError("T07 requires analysis persistence");
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T07 requires prompt execution service");
-    Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
+    Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany, timeoutMs });
   }
 
   async analyze({ tenantId, companyId, issueId }) {
@@ -59,6 +59,7 @@ class IssueAnalysisService {
     const execution = await this.promptExecutionService.executeActive({
       promptId: T07_PROMPT_ID, promptVersion: T07_PROMPT_VERSION, model: "mini",
       input: buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage, subjectRelation }), outputSchema: T07_OUTPUT_SCHEMA,
+      timeoutMs: this.timeoutMs,
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT07Output(data, { allowedArticleIds, expectedSubjectRelation: subjectRelation }),
     });
@@ -76,6 +77,7 @@ class IssueAnalysisService {
         candidate: execution.data,
       }),
       outputSchema: T07_PERSPECTIVE_REVIEW_SCHEMA,
+      timeoutMs: this.timeoutMs,
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validatePerspectiveReview(data, {
         allowedArticleIds,

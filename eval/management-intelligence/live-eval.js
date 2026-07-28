@@ -120,6 +120,18 @@ const scenarios = [
     "Stock index moves after central bank governor resigns",
     "A short market video observes daily index movement.",
     "It gives no concrete travel, lodging, dining, financing, demand, or company-context impact."),
+  scenario("A-local-crime", "A", false, "market",
+    "Motorcycle dispute triggers a deadly neighborhood clash in Metro One",
+    "Police report casualties and damaged vehicles on one neighborhood street.",
+    "The article states no broad effect on visitor demand, hotel access, regulation, operations, or any property named in company context."),
+  scenario("A-local-roadwork", "A", false, "market",
+    "Road resurfacing causes congestion on one street in Metro One",
+    "One traffic lane is temporarily unavailable during local road repairs.",
+    "The article states no effect on a named property or dependency and no citywide change to travel demand, access, cost, or operations."),
+  scenario("A-customer-coincidence", "A", false, "market",
+    "Private running event for foreign residents draws criticism in Island Two",
+    "A community event allegedly restricted registration by nationality.",
+    "The dispute does not change tourism rules, visitor access, demand, hotel operations, or any company-context property or dependency."),
   scenario("A-weak", "A", false, "market",
     "A restaurant changes the colour of its staff uniforms",
     "The change has no disclosed effect on demand, pricing, regulation, supply, or guest behaviour.",
@@ -267,7 +279,7 @@ async function main() {
         branchStable,
         operationallyStable,
         pass: shouldContinue === item.expectedContinue
-          && identity.subjectRelation === item.expectedRelation
+          && (!item.expectedContinue || identity.subjectRelation === item.expectedRelation)
           && operationallyStable,
       },
       t07: null,

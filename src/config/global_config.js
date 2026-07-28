@@ -22,6 +22,7 @@ const config = {
     nanoModel: process.env.OPENAI_NANO_MODEL,
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
     t01TimeoutMs: Number(process.env.OPENAI_T01_TIMEOUT_MS || 120000),
+    t07TimeoutMs: Number(process.env.OPENAI_T07_TIMEOUT_MS || 90000),
   },
   auth: {
     accessTokenSecret: process.env.AUTH_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET,
