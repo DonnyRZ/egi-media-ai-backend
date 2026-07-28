@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.2.0";
+const T02_PROMPT_VERSION = "1.3.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT02PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.2",
-    outputSchemaVersion: "1.0",
-    changeSummary: "T02 on mini; rubric tightened; only high/medium continue; optional body snippet; deterministic seed",
+    inputSchemaVersion: "1.3",
+    outputSchemaVersion: "2.0",
+    changeSummary: "Add subject_relation (self|competitor|market|unrelated); identity gate; only self/listed-competitor form issues",
     approvedBy: null,
-    rollbackVersion: "1.1.0",
+    rollbackVersion: "1.2.0",
   };
 }
 

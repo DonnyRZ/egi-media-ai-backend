@@ -7,16 +7,20 @@ const SYSTEM_POLICY = [
   "Write what_happened and why_matters as short discrete points (one idea per array item), not long paragraphs.",
   "Write impacts, risks, and watch as concise cited points; avoid merging multiple ideas into one item.",
   "Every impact, risk, watch item, and claim must cite one or more supplied source article IDs.",
+  "State subject_relation (self|competitor|market|unrelated) using company_context fields and evidence — never invent brands.",
+  "If subject_relation is market or unrelated: do NOT write an internal operations brief for this company; describe the external market/peer item factually and note it is not about this company.",
+  "If subject_relation is competitor: frame as competitor intelligence only when competitors are listed in company_context; never as this company's internal ops.",
   "Do not invent article IDs or URLs. Do not output priority, ranking, alert, recipient, email, delivery decision, or claim labels.",
   "Return only the required JSON Schema.",
 ].join(" ");
 
-function buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage }) {
+function buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage, subjectRelation }) {
   const trustedContext = applyOutputLanguage({
     tenant_id: tenantId,
     company_id: companyId,
     issue: { issue_id: issue.issueId, status: issue.status, title: issue.title, one_liner: issue.oneLiner },
     company_context: { version: context.version, fields: context.fields },
+    subject_relation: subjectRelation,
     allowed_articles: evidence.map((item) => ({
       source_article_id: item.sourceArticleId, locale: item.requestedLocale, canonical_citation_url: item.canonicalUrl,
       published_at: item.article.publishedAt, updated_at: item.article.updatedAt,
@@ -24,9 +28,10 @@ function buildT07Input({ tenantId, companyId, issue, context, evidence, outputLa
   }, resolveAiOutputLanguage(outputLanguage));
   const taskContract = {
     task_id: `${T07_PROMPT_ID}@${T07_PROMPT_VERSION}`,
-    objective: "Analyze one issue using only its linked article evidence as concise points: what happened, why it matters, impacts, risks, watch items, and cited claims.",
+    objective: "Analyze one issue using only its linked article evidence as concise points: what happened, why it matters, impacts, risks, watch items, cited claims, and subject_relation.",
     citation_rule: "source_article_ids must be drawn only from allowed_articles. URLs are backend-generated and must not be output.",
     style_rule: "what_happened and why_matters are string arrays of short points (1-6). Prefer 2-4 points. No paragraph essays.",
+    subject_relation_rule: "Echo the trusted subject_relation. For market/unrelated, never write as if this company is the subject of internal ops actions.",
     forbidden: ["priority", "ranking", "Top 5", "alert", "email", "recipient", "delivery decision", "claim labels", "new evidence"],
     rules: [outputLanguageContractRule()],
   };
@@ -42,7 +47,7 @@ function buildT07Input({ tenantId, companyId, issue, context, evidence, outputLa
       `<TASK_CONTRACT>${JSON.stringify(taskContract)}</TASK_CONTRACT>`,
       `<TRUSTED_CONTEXT>${JSON.stringify(trustedContext)}</TRUSTED_CONTEXT>`,
       `<UNTRUSTED_EVIDENCE_PACK>${JSON.stringify(untrustedEvidence)}</UNTRUSTED_EVIDENCE_PACK>`,
-      "<OUTPUT_REQUIREMENT>Return only what_happened, why_matters, impacts, risks, watch, and claims in the required JSON Schema.</OUTPUT_REQUIREMENT>",
+      "<OUTPUT_REQUIREMENT>Return only what_happened, why_matters, impacts, risks, watch, claims, and subject_relation in the required JSON Schema.</OUTPUT_REQUIREMENT>",
     ].join("\n") },
   ];
 }

@@ -17,10 +17,10 @@ const citedItem = {
 };
 
 const T07_OUTPUT_SCHEMA = Object.freeze({
-  name: "issue_analysis_v2",
+  name: "issue_analysis_v3",
   schema: {
     type: "object", additionalProperties: false,
-    required: ["what_happened", "why_matters", "impacts", "risks", "watch", "claims"],
+    required: ["what_happened", "why_matters", "impacts", "risks", "watch", "claims", "subject_relation"],
     properties: {
       // Discrete points (not paragraphs) for the issue drawer and downstream packers.
       what_happened: { type: "array", minItems: 1, maxItems: 6, items: pointText },
@@ -35,6 +35,7 @@ const T07_OUTPUT_SCHEMA = Object.freeze({
           properties: { claim_id: { type: "string", minLength: 1, maxLength: 64 }, ...citedItem.properties },
         },
       },
+      subject_relation: { type: "string", enum: ["self", "competitor", "market", "unrelated"] },
     },
   },
 });

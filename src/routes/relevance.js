@@ -38,7 +38,19 @@ function requireIdempotencyKey(req, res, next) {
 }
 
 function serializeDecision(value) {
-  return { decision_id: value.decisionId, article_id: value.articleId, company_id: value.companyId, context_version: value.contextVersion, relevance: value.relevance, confidence: value.confidence, branch: value.branch, source: value.source, created_at: value.createdAt };
+  return {
+    decision_id: value.decisionId,
+    article_id: value.articleId,
+    company_id: value.companyId,
+    context_version: value.contextVersion,
+    relevance: value.relevance,
+    confidence: value.confidence,
+    subject_relation: value.subjectRelation ?? null,
+    competitor_opt_in: value.competitorOptIn === true,
+    branch: value.branch,
+    source: value.source,
+    created_at: value.createdAt,
+  };
 }
 function serializeRationale(value) { return { rationale_id: value.rationaleId, decision_id: value.decisionId, company_id: value.companyId, prompt_version: value.promptVersion, rationale: value.rationale, created_at: value.createdAt }; }
 function success(res, data, req) { return res.status(200).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); }

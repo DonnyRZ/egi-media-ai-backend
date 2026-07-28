@@ -6,9 +6,13 @@ const { createT02RelevanceRuntime } = require("./runtime");
 const {
   CONTINUING_RELEVANCE,
   ALL_RELEVANCE,
+  SUBJECT_RELATIONS,
   isContinuingRelevance,
+  shouldFormIssue,
+  branchForDecision,
   branchForRelevance,
 } = require("./relevance-policy");
+const { applySubjectIdentityGate } = require("./subject-identity-gate");
 
 module.exports = {
   createT02PromptDefinition,
@@ -20,6 +24,10 @@ module.exports = {
   createT02RelevanceRuntime,
   CONTINUING_RELEVANCE,
   ALL_RELEVANCE,
+  SUBJECT_RELATIONS,
   isContinuingRelevance,
+  shouldFormIssue,
+  branchForDecision,
   branchForRelevance,
+  applySubjectIdentityGate,
 };

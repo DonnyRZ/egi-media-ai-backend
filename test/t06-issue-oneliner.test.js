@@ -29,7 +29,7 @@ function buildRuntime({ output = { one_liner: "Regulasi baru berpotensi memengar
   const initialSource = source();
   const relevanceDecision = relevanceDecisionStore.create({
     articleId, companyId, contextVersion: 3, inputFingerprint: fingerprint({ source: initialSource, contextVersion: 3 }), source: initialSource,
-    output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02-run" },
+    output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02-run" },
   });
   const matchDecision = matchDecisionStore.create({
     tenantId, companyId, relevanceDecisionId: relevanceDecision.decisionId, promptVersion: "1.0.0",

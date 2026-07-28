@@ -12,14 +12,14 @@ function context() {
     version: 3,
     status: "effective",
     fields: {
-      name: "PT Example", industry: "Logistics", sub_industry: null, description: null,
+      name: "PT Example Logistics", industry: "Logistics", sub_industry: null, description: null,
       products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],
       priorities: ["Reduce costs"], goals: [], risks: [], topics: [], dependencies: [],
     },
   };
 }
 
-function source() {
+function source(overrides = {}) {
   return {
     sourceArticleId: articleId,
     requestedLocale: "id",
@@ -27,17 +27,24 @@ function source() {
     canonicalUrl: `https://portal.example/id/articles/${articleId}`,
     article: {
       id: articleId,
-      title: "New logistics regulation",
-      summary: "A new regulation affects fleet operators.",
+      title: "PT Example Logistics faces new fleet regulation",
+      summary: "A new regulation affects PT Example Logistics fleet tracking operators.",
       content: "This full article body must not be sent to T02.",
       status: "published",
       publishedAt: "2026-07-22T10:00:00.000Z",
       updatedAt: "2026-07-22T11:00:00.000Z",
+      ...overrides,
     },
   };
 }
 
-function buildRuntime({ output = { relevance: "none", confidence: 0.91 }, contextResult = context(), cmsError, onKernelRequest } = {}) {
+function buildRuntime({
+  output = { relevance: "none", confidence: 0.91, subject_relation: "unrelated" },
+  contextResult = context(),
+  cmsError,
+  onKernelRequest,
+  articleSource = null,
+} = {}) {
   let kernelCalls = 0;
   const runtime = createT02RelevanceRuntime({
     aiTaskKernel: {
@@ -58,7 +65,7 @@ function buildRuntime({ output = { relevance: "none", confidence: 0.91 }, contex
     cmsSourceGate: {
       requirePublishedArticle: async () => {
         if (cmsError) throw cmsError;
-        return source();
+        return articleSource || source();
       },
     },
     getEffectiveContext: async () => contextResult,
@@ -83,7 +90,7 @@ test("T02 classifies one article for one effective context and stops on none", a
   assert.equal(result.reused, false);
   assert.match(input[1].content, /<TRUSTED_CONTEXT>/);
   assert.match(input[1].content, /<UNTRUSTED_ARTICLE_DATA>/);
-  assert.match(input[1].content, /New logistics regulation/);
+  assert.match(input[1].content, /PT Example Logistics faces new fleet regulation/);
   assert.match(input[1].content, /classification_rubric/);
   assert.doesNotMatch(input[1].content, /This full article body must not be sent to T02/);
   assert.equal(runtime.decisionStore.list().length, 1);
@@ -92,25 +99,31 @@ test("T02 classifies one article for one effective context and stops on none", a
 test("T02 dual-call merge prefers the more conservative relevance class", () => {
   const { mergeRelevanceOutputs } = require("../src/ai/tasks/t02-relevance-class/service");
   assert.deepEqual(
-    mergeRelevanceOutputs({ relevance: "medium", confidence: 0.8 }, { relevance: "none", confidence: 0.6 }),
-    { relevance: "none", confidence: 0.6 },
-  );
-  assert.deepEqual(
-    mergeRelevanceOutputs({ relevance: "high", confidence: 0.9 }, { relevance: "high", confidence: 0.7 }),
-    { relevance: "high", confidence: 0.7 },
+    mergeRelevanceOutputs(
+      { relevance: "medium", confidence: 0.8, subject_relation: "self" },
+      { relevance: "none", confidence: 0.6, subject_relation: "unrelated" },
+    ),
+    { relevance: "none", confidence: 0.6, subject_relation: "unrelated" },
   );
   assert.deepEqual(
     mergeRelevanceOutputs(
-      { relevance: "low", confidence: 0.5 },
-      { relevance: "low", confidence: 0.4 },
-      { relevance: "none", confidence: 0.6 },
+      { relevance: "high", confidence: 0.9, subject_relation: "self" },
+      { relevance: "high", confidence: 0.7, subject_relation: "self" },
     ),
-    { relevance: "none", confidence: 0.4 },
+    { relevance: "high", confidence: 0.7, subject_relation: "self" },
+  );
+  assert.deepEqual(
+    mergeRelevanceOutputs(
+      { relevance: "low", confidence: 0.5, subject_relation: "market" },
+      { relevance: "low", confidence: 0.4, subject_relation: "market" },
+      { relevance: "none", confidence: 0.6, subject_relation: "unrelated" },
+    ),
+    { relevance: "none", confidence: 0.4, subject_relation: "market" },
   );
 });
 
 test("T02 stops on low relevance so low does not create issues", async () => {
-  const { runtime } = buildRuntime({ output: { relevance: "low", confidence: 0.4 } });
+  const { runtime } = buildRuntime({ output: { relevance: "low", confidence: 0.4, subject_relation: "market" } });
   const result = await runtime.service.classify({ companyId, articleId, locale: "id" });
   assert.equal(result.decision.relevance, "low");
   assert.equal(result.decision.branch, "stop");
@@ -118,19 +131,47 @@ test("T02 stops on low relevance so low does not create issues", async () => {
 });
 
 test("T02 reuses the same article snapshot × company × context version decision", async () => {
-  const { runtime, kernelCalls } = buildRuntime({ output: { relevance: "high", confidence: 0.8 } });
+  const { runtime, kernelCalls } = buildRuntime({
+    output: { relevance: "high", confidence: 0.8, subject_relation: "self" },
+  });
 
   const first = await runtime.service.classify({ companyId, articleId, locale: "id" });
   const second = await runtime.service.classify({ companyId, articleId, locale: "id" });
 
+  assert.equal(first.decision.subjectRelation, "self");
   assert.equal(first.shouldContinue, true);
   assert.equal(second.reused, true);
   assert.equal(kernelCalls(), 1);
   assert.equal(runtime.decisionStore.list().length, 1);
 });
 
+test("T02 identity gate blocks same-industry peer promo without company name", async () => {
+  const { runtime } = buildRuntime({
+    output: { relevance: "medium", confidence: 0.7, subject_relation: "self" },
+    contextResult: {
+      ...context(),
+      fields: {
+        ...context().fields,
+        name: "PT Arunika Hospitality Indonesia (Arunika Hospitality Group)",
+        industry: "Hospitality operations",
+        products: ["Luxury hotel management", "Resort dining"],
+        topics: ["Guest experience"],
+        priorities: ["Direct booking growth"],
+      },
+    },
+    articleSource: source({
+      title: "Sutan Raja Hotel Convention Centre Soreang Luncurkan Promo July Mid Year Magic",
+      summary: "Sutan Raja Hotel Soreang promo July Mid Year Magic with direct booking discount.",
+    }),
+  });
+  const result = await runtime.service.classify({ companyId, articleId, locale: "id" });
+  assert.equal(result.decision.subjectRelation, "market");
+  assert.equal(result.shouldContinue, false);
+  assert.equal(result.decision.branch, "stop");
+});
+
 test("T02 fails closed for invalid output without persisting a decision", async () => {
-  const { runtime } = buildRuntime({ output: { relevance: "high", confidence: 1.2 } });
+  const { runtime } = buildRuntime({ output: { relevance: "high", confidence: 1.2, subject_relation: "self" } });
 
   await assert.rejects(
     runtime.service.classify({ companyId, articleId, locale: "id" }),

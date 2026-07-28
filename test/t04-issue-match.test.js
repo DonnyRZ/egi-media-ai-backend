@@ -37,7 +37,7 @@ function buildRuntime({ output = { decision: "update", candidate_issue_id: activ
   const relevanceDecision = decisionStore.create({
     articleId, companyId, contextVersion: 3,
     inputFingerprint: fingerprint({ source: initialSource, contextVersion: 3 }),
-    source: initialSource, output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "run-t02" },
+    source: initialSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "run-t02" },
   });
   let kernelCalls = 0;
   const runtime = createT04IssueMatchRuntime({

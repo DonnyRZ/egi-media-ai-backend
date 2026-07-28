@@ -11,18 +11,27 @@ const SYSTEM_POLICY = [
 ].join(" ");
 
 const CLASSIFICATION_RUBRIC = {
-  high: "Direct, material impact on the company's named industry, products, customers, regions, priorities, goals, risks, topics, or dependencies. Concrete operational, competitive, regulatory, reputational, or demand signal for this company.",
-  medium: "Clear overlap with one or more company context fields, but indirect or secondary. Enough specificity that an analyst would monitor it for this company.",
-  low: "Only weak, tangential, or generic overlap (e.g. broad macro/news with no company-context hook). Must NOT create an issue candidate.",
+  high: "Direct, material signal about the company's own named entities from company_context_fields (name/brands/products as named), with concrete operational, competitive, regulatory, reputational, or demand impact for this company.",
+  medium: "Clear about this company's own named entities, but secondary/indirect impact. Still entity-anchored to this company — not merely same industry.",
+  low: "Weak or tangential: same industry/region/theme overlap without this company's named entities, OR generic macro news without an entity hook. Must NOT create an issue candidate.",
   none: "No meaningful overlap with the supplied company context fields. Celebrity, sports, unrelated politics, pure entertainment, or other domains outside the context.",
+  subject_relation: {
+    self: "Article is primarily about this company's named entity, brands, properties, executives, or uniquely named offerings as listed in company_context_fields (especially name).",
+    competitor: "Article is primarily about an entity listed in company_context_fields.competitors. If competitors is empty, never use competitor.",
+    market: "Same industry, category, region, or theme overlap with company_context_fields, but NOT about this company and NOT about a listed competitor (e.g. a peer firm's promo, an unlisted rival's news, sector roundup).",
+    unrelated: "Outside the supplied company context — no entity match and no meaningful industry/topic overlap.",
+  },
   rules: [
-    "Match against company_context_fields only — never assume an industry or brand that is not in those fields.",
-    "Empty, placeholder, or near-empty title/summary without a concrete context hook → none.",
-    "Keyword coincidence alone (one shared word without topical fit) → none or low.",
-    "Generic macro/tourism/traffic/labor stats without a concrete product/topic/priority hook → low or none, never medium/high.",
+    "Match against company_context_fields only — never assume an industry, brand, or competitor that is not in those fields.",
+    "Ask first: who is the article about? Entity identity (subject_relation) gates issue creation; industry-token overlap alone is never enough for self.",
+    "Same-industry peer news or competitor-looking firms NOT listed in competitors → subject_relation=market, relevance=low (never medium/high).",
+    "If competitors is empty, subject_relation must never be competitor.",
+    "Empty, placeholder, or near-empty title/summary without a concrete context hook → none + unrelated.",
+    "Keyword coincidence alone (one shared industry word without this company's named entity) → market or unrelated with low/none — never self.",
+    "Generic macro/sector/labor/traffic stats without a named company-context entity → low/none with market or unrelated, never medium/high self.",
+    "When uncertain between self and market, prefer market.",
     "When uncertain between medium and low, prefer low.",
     "When uncertain between low and none, prefer none.",
-    "When uncertain between medium and none, prefer none.",
   ],
 };
 
@@ -46,10 +55,14 @@ function buildT02Input({ companyId, context, source, options = {} }) {
   };
   const taskContract = {
     task_id: `${T02_PROMPT_ID}@${T02_PROMPT_VERSION}`,
-    objective: "Classify relevance of exactly one article for exactly one company context.",
-    allowed_output: { relevance: ["high", "medium", "low", "none"], confidence: "number from 0 through 1" },
+    objective: "Classify relevance and subject_relation of exactly one article for exactly one company context.",
+    allowed_output: {
+      relevance: ["high", "medium", "low", "none"],
+      confidence: "number from 0 through 1",
+      subject_relation: ["self", "competitor", "market", "unrelated"],
+    },
     forbidden: ["issue creation", "priority", "Top 5 ranking", "alert decision", "email", "business approval"],
-    pipeline_note: "Only high and medium continue to issue formation; low and none stop.",
+    pipeline_note: "Only high/medium with subject_relation=self (or competitor when competitors list is non-empty) continue to issue formation. market and unrelated never create issues.",
   };
   if (useRubric) {
     taskContract.classification_rubric = CLASSIFICATION_RUBRIC;
@@ -73,7 +86,7 @@ function buildT02Input({ companyId, context, source, options = {} }) {
         `<TASK_CONTRACT>${JSON.stringify(taskContract)}</TASK_CONTRACT>`,
         `<TRUSTED_CONTEXT>${JSON.stringify(trustedContext)}</TRUSTED_CONTEXT>`,
         `<UNTRUSTED_ARTICLE_DATA>${JSON.stringify(untrustedArticle)}</UNTRUSTED_ARTICLE_DATA>`,
-        "<OUTPUT_REQUIREMENT>Return only relevance and confidence in the required JSON Schema.</OUTPUT_REQUIREMENT>",
+        "<OUTPUT_REQUIREMENT>Return only relevance, confidence, and subject_relation in the required JSON Schema.</OUTPUT_REQUIREMENT>",
       ].join("\n"),
     },
   ];

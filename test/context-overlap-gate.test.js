@@ -43,7 +43,7 @@ test("context overlap gate ignores country name and generic community words", ()
   assert.equal(gated.gated, true);
 });
 
-test("context overlap gate keeps continuing relevance when product/topic hooks exist", () => {
+test("context overlap gate keeps lexical hooks when product/topic tokens exist (identity gate is separate)", () => {
   const kept = applyContextOverlapGate({
     relevance: "medium",
     confidence: 0.7,

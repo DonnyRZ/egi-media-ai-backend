@@ -5,7 +5,7 @@ const { T05_OUTPUT_SCHEMA } = require("./schema");
 const { buildT05Input } = require("./prompt");
 const { validateT05Output } = require("./output-validator");
 const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
-const { isContinuingRelevance } = require("../t02-relevance-class/relevance-policy");
+const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
@@ -78,10 +78,15 @@ class IssueTitleService {
   }
 
   _validateRelevanceDecision(relevanceDecision, { companyId, matchDecision }) {
+    const formsIssue = relevanceDecision && shouldFormIssue({
+      relevance: relevanceDecision.relevance,
+      subjectRelation: relevanceDecision.subjectRelation,
+      competitorOptIn: relevanceDecision.competitorOptIn === true,
+    });
     if (!relevanceDecision || relevanceDecision.companyId !== companyId
       || relevanceDecision.decisionId !== matchDecision.relevanceDecisionId
-      || !isContinuingRelevance(relevanceDecision.relevance)) {
-      throw new AiConfigurationError("T05 requires the continuing T02 decision linked by T04");
+      || !formsIssue) {
+      throw new AiConfigurationError("T05 requires the identity-gated continuing T02 decision linked by T04");
     }
   }
 

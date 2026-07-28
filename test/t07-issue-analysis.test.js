@@ -22,7 +22,7 @@ function source(articleId, { updatedAt = "2026-07-22T11:00:00.000Z", content = "
 }
 
 function context() {
-  return { companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" } };
+  return { companyId, version: 3, status: "effective", fields: { name: "PT Example Logistics", industry: "Logistics", competitors: [], products: ["Fleet tracking"], topics: [], priorities: [], goals: [], regions: [] } };
 }
 
 function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
@@ -37,7 +37,9 @@ function buildRuntime({ output, sourceOverrides = {}, onKernelRequest } = {}) {
   for (const [articleId, sourceValue] of Object.entries(sourceOverrides)) sources.set(articleId, sourceValue);
   const makeRelevance = (articleId, version) => relevanceDecisionStore.create({
     articleId, companyId, contextVersion: 3, inputFingerprint: `fingerprint-${articleId}-${version}`,
-    source: initialSources.get(articleId), output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+    source: initialSources.get(articleId),
+    output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false },
+    provenance: { runId: "t02" },
   });
   const firstRelevance = makeRelevance(articleOne, 1);
   const firstMatch = matchDecisionStore.create({ tenantId, companyId, relevanceDecisionId: firstRelevance.decisionId, promptVersion: "1.0.0", output: { decision: "new", candidate_issue_id: null, reason_code: "new_event" }, provenance: { runId: "t04" } });
@@ -67,6 +69,7 @@ function validOutput() {
     risks: [{ text: "Biaya penyesuaian dapat meningkat.", source_article_ids: [articleTwo] }],
     watch: [{ text: "Pantau panduan pelaksanaan regulator.", source_article_ids: [articleOne] }],
     claims: [{ claim_id: "c1", text: "Regulasi menyasar operator logistik.", source_article_ids: [articleOne] }],
+    subject_relation: "unrelated",
   };
 }
 
@@ -139,7 +142,7 @@ test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted"
       };
       const relevance = relevanceDecisionStore.create({
         articleId: crawlId, companyId, contextVersion: 3, inputFingerprint: `fp-${name}`,
-        source: crawlSource, output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+        source: crawlSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02" },
       });
       const match = matchDecisionStore.create({
         tenantId, companyId, relevanceDecisionId: relevance.decisionId, promptVersion: "1.0.0",
@@ -163,6 +166,7 @@ test("T07 accepts crawl evidence when linked sourceUpdatedAt is null or omitted"
               what_happened: ["Peristiwa crawl."], why_matters: ["Perlu dilacak."],
               impacts: [{ text: "Dampak.", source_article_ids: [crawlId] }], risks: [], watch: [],
               claims: [{ claim_id: "c1", text: "Klaim.", source_article_ids: [crawlId] }],
+              subject_relation: "unrelated",
             },
             model: { alias: "mini", name: "mini-test-model" },
             correlation: { requestId: request.requestId, providerRequestId: "req_t07" },
@@ -203,6 +207,7 @@ test("T07 and T13 schemas accept crawl issue source ids (not UUID-only)", () => 
     risks: [],
     watch: [],
     claims: [{ claim_id: "c1", text: "Klaim berbasis crawl.", source_article_ids: [crawlId] }],
+    subject_relation: "self",
   }), true, ajv.errorsText(validateT07.errors));
 
   const t13ArticleId = T13_OUTPUT_SCHEMA.schema.properties.source_references.items.properties.source_article_id;

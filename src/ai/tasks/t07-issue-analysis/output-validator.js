@@ -1,9 +1,13 @@
 const { AiOutputError } = require("../../provider/provider.errors");
 
-function validateT07Output(data, { allowedArticleIds }) {
-  const required = ["what_happened", "why_matters", "impacts", "risks", "watch", "claims"];
+const ALLOWED_SUBJECT = new Set(["self", "competitor", "market", "unrelated"]);
+
+function validateT07Output(data, { allowedArticleIds, expectedSubjectRelation = null }) {
+  const required = ["what_happened", "why_matters", "impacts", "risks", "watch", "claims", "subject_relation"];
   if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length !== required.length
     || required.some((field) => !Object.hasOwn(data, field))) throw invalid();
+  if (!ALLOWED_SUBJECT.has(data.subject_relation)) throw invalid();
+  if (expectedSubjectRelation && data.subject_relation !== expectedSubjectRelation) throw invalid();
   for (const field of ["what_happened", "why_matters"]) {
     validatePointList(data[field]);
   }
@@ -44,6 +48,7 @@ function normalize(data) {
     why_matters: data.why_matters.map((point) => point.trim()),
     impacts: data.impacts.map(trimItem), risks: data.risks.map(trimItem), watch: data.watch.map(trimItem),
     claims: data.claims.map((claim) => ({ ...trimItem(claim), claim_id: claim.claim_id })),
+    subject_relation: data.subject_relation,
   };
 }
 

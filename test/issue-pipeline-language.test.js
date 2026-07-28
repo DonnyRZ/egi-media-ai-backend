@@ -104,7 +104,7 @@ for (const [label, locale, expected] of [
       contextVersion: 3,
       inputFingerprint: fingerprint({ source, contextVersion: 3 }),
       source,
-      output: { relevance: "high", confidence: 0.9 },
+      output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false },
       provenance: { runId: "t02" },
     });
     let request;
@@ -129,7 +129,7 @@ for (const [label, locale, expected] of [
     const relevanceDecision = relevanceDecisionStore.create({
       articleId, companyId, contextVersion: 3,
       inputFingerprint: fingerprint({ source, contextVersion: 3 }), source,
-      output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+      output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02" },
     });
     const matchDecision = matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId: relevanceDecision.decisionId, promptVersion: "1.0.0",
@@ -157,7 +157,7 @@ for (const [label, locale, expected] of [
     const relevanceDecision = relevanceDecisionStore.create({
       articleId, companyId, contextVersion: 3,
       inputFingerprint: fingerprint({ source, contextVersion: 3 }), source,
-      output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+      output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02" },
     });
     const matchDecision = matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId: relevanceDecision.decisionId, promptVersion: "1.0.0",
@@ -185,7 +185,7 @@ for (const [label, locale, expected] of [
     const issueStore = new InMemoryIssueStore({ now: () => Date.parse("2026-07-22T12:00:00.000Z") });
     const relevanceDecision = relevanceDecisionStore.create({
       articleId, companyId, contextVersion: 3, inputFingerprint: "fp-lang",
-      source, output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02" },
+      source, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02" },
     });
     const matchDecision = matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId: relevanceDecision.decisionId, promptVersion: "1.0.0",
@@ -195,12 +195,13 @@ for (const [label, locale, expected] of [
     let request;
     const runtime = createT07IssueAnalysisRuntime({
       aiTaskKernel: kernelOk({
-        what_happened: "A regulation was announced.",
-        why_matters: "It may affect fleet compliance.",
+        what_happened: ["A regulation was announced."],
+        why_matters: ["It may affect fleet compliance."],
         impacts: [{ text: "Operators must review compliance.", source_article_ids: [articleId] }],
         risks: [],
         watch: [],
         claims: [{ claim_id: "c1", text: "Regulation targets logistics operators.", source_article_ids: [articleId] }],
+        subject_relation: "unrelated",
       }, (value) => { request = value; }),
       openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
       cmsSourceGate: { requirePublishedArticle: async () => source },

@@ -31,7 +31,7 @@ test("S29 accepts the complete backend flow from published article to issue, ale
 
   // Article -> relevance (T02 persisted output, high means the pipeline continues).
   const relevanceStore = new InMemoryRelevanceDecisionStore({ uuid: () => "relevance-s29", now: () => 0 });
-  const relevance = relevanceStore.create({ articleId, companyId, contextVersion: context.version, inputFingerprint: "fingerprint-s29", source, output: { relevance: "high", confidence: 0.98 }, provenance: { task: "T02" } });
+  const relevance = relevanceStore.create({ articleId, companyId, contextVersion: context.version, inputFingerprint: "fingerprint-s29", source, output: { relevance: "high", confidence: 0.98, subject_relation: "self", competitor_opt_in: false }, provenance: { task: "T02" } });
   assert.equal(relevance.branch, "continue");
 
   // Relevance -> issue formation (T04 new), then bounded issue content (T05/T06).

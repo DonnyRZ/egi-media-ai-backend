@@ -4,7 +4,7 @@ const { T04_OUTPUT_SCHEMA } = require("./schema");
 const { buildT04Input } = require("./prompt");
 const { validateT04Output } = require("./output-validator");
 const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
-const { isContinuingRelevance } = require("../t02-relevance-class/relevance-policy");
+const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
 const { ACTIVE_ISSUE_STATUSES } = require("./issue-candidate.store");
 
 class IssueMatchService {
@@ -57,9 +57,13 @@ class IssueMatchService {
   }
 
   _validateRelevanceDecision(decision, companyId) {
-    if (!decision || decision.companyId !== companyId || !isContinuingRelevance(decision.relevance)
-      || decision.branch !== "continue") {
-      throw new AiConfigurationError("T04 requires a continuing (high/medium) T02 decision for the same company");
+    const formsIssue = decision && shouldFormIssue({
+      relevance: decision.relevance,
+      subjectRelation: decision.subjectRelation,
+      competitorOptIn: decision.competitorOptIn === true,
+    });
+    if (!decision || decision.companyId !== companyId || !formsIssue || decision.branch !== "continue") {
+      throw new AiConfigurationError("T04 requires a continuing identity-gated T02 decision for the same company");
     }
   }
 

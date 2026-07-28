@@ -1,5 +1,5 @@
 const { randomUUID } = require("crypto");
-const { branchForRelevance } = require("./relevance-policy");
+const { branchForDecision } = require("./relevance-policy");
 
 class InMemoryRelevanceDecisionStore {
   constructor({ uuid = randomUUID, now = Date.now } = {}) {
@@ -24,6 +24,8 @@ class InMemoryRelevanceDecisionStore {
     const existing = this.decisionsByKey.get(key);
     if (existing) return cloneForRead(existing);
 
+    const subjectRelation = output.subject_relation ?? null;
+    const competitorOptIn = output.competitor_opt_in === true;
     const decision = {
       decisionId: this.uuid(),
       tenantId,
@@ -33,7 +35,13 @@ class InMemoryRelevanceDecisionStore {
       inputFingerprint,
       relevance: output.relevance,
       confidence: output.confidence,
-      branch: branchForRelevance(output.relevance),
+      subjectRelation,
+      competitorOptIn,
+      branch: branchForDecision({
+        relevance: output.relevance,
+        subjectRelation,
+        competitorOptIn,
+      }),
       source: {
         sourceArticleId: source.sourceArticleId,
         canonicalUrl: source.canonicalUrl,

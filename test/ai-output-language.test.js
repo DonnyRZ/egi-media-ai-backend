@@ -139,6 +139,7 @@ test("T07 buildT07Input embeds output_language and language rule", () => {
     issue: { issueId: "i1", status: "active", title: "Title", oneLiner: "One liner" },
     context: { version: 1, fields: { name: "Acme" } },
     evidence: [articleStub],
+    subjectRelation: "self",
   });
   assertProseLanguageContract(messages);
 });

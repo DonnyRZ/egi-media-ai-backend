@@ -5,8 +5,10 @@ const { T07_PROMPT_ID, T07_PROMPT_VERSION } = require("./definition");
 const { T07_OUTPUT_SCHEMA } = require("./schema");
 const { buildT07Input } = require("./prompt");
 const { validateT07Output } = require("./output-validator");
+const { applySubjectIdentityGate } = require("../t02-relevance-class/subject-identity-gate");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
+const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
 
 class IssueAnalysisService {
   constructor({ cmsSourceGate, issueStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
@@ -27,37 +29,33 @@ class IssueAnalysisService {
       throw new AiConfigurationError("T07 requires an effective Company Context for the same company");
     }
     const linkedArticles = await this.issueStore.listArticles({ tenantId, companyId, issueId });
-    // The scoped read is authoritative for the prompt, while the unscoped
-    // integrity check detects a corrupted relation that silently disappeared
-    // from the requested tenant/company view.
     const allLinkedArticles = await this.issueStore.listArticles({ issueId });
     if (!Array.isArray(allLinkedArticles) || allLinkedArticles.length !== linkedArticles.length) {
       throw new AiConfigurationError("T07 refuses incomplete or cross-scope linked issue evidence");
     }
     this._validateLinkedArticles(linkedArticles, { tenantId, companyId, issueId });
     const evidence = await Promise.all(linkedArticles.map((linked) => this._loadEvidence(linked)));
-    const inputFingerprint = fingerprint({ issue, context, evidence });
+    const subjectRelation = resolveIssueSubjectRelation(context.fields, evidence);
+    const inputFingerprint = fingerprint({ issue, context, evidence, subjectRelation });
     const existing = await this.analysisStore.get({ tenantId, companyId, issueId, inputFingerprint, promptVersion: T07_PROMPT_VERSION });
     if (existing) return { analysis: existing, reused: true };
     const allowedArticleIds = new Set(evidence.map((item) => item.sourceArticleId));
     const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T07_PROMPT_ID, promptVersion: T07_PROMPT_VERSION, model: "mini",
-      input: buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage }), outputSchema: T07_OUTPUT_SCHEMA,
+      input: buildT07Input({ tenantId, companyId, issue, context, evidence, outputLanguage, subjectRelation }), outputSchema: T07_OUTPUT_SCHEMA,
       budgetScope: { tenantId, companyId },
-      validateResult: (data) => validateT07Output(data, { allowedArticleIds }),
+      validateResult: (data) => validateT07Output(data, { allowedArticleIds, expectedSubjectRelation: subjectRelation }),
     });
     const analysis = await this.analysisStore.create({
       tenantId, companyId, issueId, contextVersion: context.version, inputFingerprint, promptVersion: T07_PROMPT_VERSION,
-      analysis: execution.data, evidence, provenance: execution.provenance,
+      analysis: execution.data, evidence, provenance: { ...execution.provenance, subjectRelation },
     });
     return { analysis, reused: false };
   }
 
   async _loadEvidence(linked) {
     const source = await this.cmsSourceGate.requirePublishedArticle({ articleId: linked.sourceArticleId, locale: linked.locale });
-    // Crawl sources intentionally pin content via content_hash and set updatedAt=null.
-    // Linked rows may omit the key (JSON undefined) or store null — treat both as the same pin.
     const linkedUpdatedAt = normalizeEvidenceUpdatedAt(linked.sourceUpdatedAt);
     const liveUpdatedAt = normalizeEvidenceUpdatedAt(source.article.updatedAt);
     const idOk = source.sourceArticleId === linked.sourceArticleId;
@@ -105,18 +103,30 @@ class IssueAnalysisService {
   }
 }
 
-function fingerprint({ issue, context, evidence }) {
+function resolveIssueSubjectRelation(fields, evidence) {
+  const relations = evidence.map((item) => applySubjectIdentityGate({
+    relevance: "medium",
+    confidence: 0.5,
+    subjectRelation: "unrelated",
+    fields,
+    title: item.article?.title,
+    summary: item.article?.summary,
+  }).subjectRelation);
+  return relations.sort((a, b) => RELATION_RANK[b] - RELATION_RANK[a])[0] || "unrelated";
+}
+
+function fingerprint({ issue, context, evidence, subjectRelation }) {
   return createHash("sha256").update(JSON.stringify({
     issueId: issue.issueId, issueVersion: issue.version, contextVersion: context.version,
+    subjectRelation,
     evidence: evidence.map((item) => ({ id: item.sourceArticleId, locale: item.requestedLocale, updatedAt: item.article.updatedAt, title: item.article.title, summary: item.article.summary, content: item.article.content })),
   })).digest("hex");
 }
 
-/** Normalize evidence pins so JSON-omitted undefined and explicit null compare equal. */
 function normalizeEvidenceUpdatedAt(value) {
   return value === undefined ? null : value;
 }
 
 function denyByDefault() { throw new AiConfigurationError("T07 requires a tenant/company authorization guard"); }
 
-module.exports = { IssueAnalysisService, fingerprint, normalizeEvidenceUpdatedAt };
+module.exports = { IssueAnalysisService, fingerprint, normalizeEvidenceUpdatedAt, resolveIssueSubjectRelation };

@@ -37,7 +37,7 @@ function buildRuntime({ output = { rationale: "The regulation directly affects t
   const decision = decisionStore.create({
     articleId, companyId, contextVersion: 3,
     inputFingerprint: fingerprint({ source: initialSource, contextVersion: 3 }),
-    source: initialSource, output: { relevance: "high", confidence: 0.9 },
+    source: initialSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false },
     provenance: { runId: "run-t02" },
   });
   let kernelCalls = 0;

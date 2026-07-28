@@ -23,7 +23,7 @@ function buildGate() {
   const analysisStore = new InMemoryIssueAnalysisStore({ now: () => 0 });
   const labelStore = new InMemoryClaimLabelStore({ now: () => 0 });
   const storedSource = source();
-  const relevance = relevanceStore.create({ articleId, companyId, contextVersion: 3, inputFingerprint: "relevance-fp", source: storedSource, output: { relevance: "high", confidence: 0.9 }, provenance: {} });
+  const relevance = relevanceStore.create({ articleId, companyId, contextVersion: 3, inputFingerprint: "relevance-fp", source: storedSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: {} });
   const match = matchStore.create({ tenantId, companyId, relevanceDecisionId: relevance.decisionId, promptVersion: "1.0.0", output: { decision: "new", candidate_issue_id: null, reason_code: "new_event" }, provenance: {} });
   const mutation = issueStore.apply({ tenantId, companyId, matchDecision: match, relevanceDecision: relevance }).mutation;
   let sourceResult = source();
@@ -105,7 +105,7 @@ test("citation gate accepts crawl evidence when updatedAt is intentionally null"
   };
   const relevance = relevanceStore.create({
     articleId: crawlId, companyId, contextVersion: 3, inputFingerprint: "crawl-relevance-fp",
-    source: crawlSource, output: { relevance: "high", confidence: 0.9 }, provenance: {},
+    source: crawlSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: {},
   });
   const match = matchStore.create({
     tenantId, companyId, relevanceDecisionId: relevance.decisionId, promptVersion: "1.0.0",

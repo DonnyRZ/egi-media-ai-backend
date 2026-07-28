@@ -16,4 +16,6 @@ eval/t02/result_*.json
 eval/t02/E*_decision.json
 eval/t02/FINAL_decision.json
 eval/t02/harness_run.log
+eval/t02/v2/result_*.json
+eval/t02/v2/*.log
 

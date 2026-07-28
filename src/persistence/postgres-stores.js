@@ -1,6 +1,6 @@
 const { randomUUID } = require("crypto");
 const { PostgresRecordStore } = require("./postgres-record-store");
-const { branchForRelevance } = require("../ai/tasks/t02-relevance-class/relevance-policy");
+const { branchForDecision } = require("../ai/tasks/t02-relevance-class/relevance-policy");
 
 const json = (value) => JSON.stringify(value ?? {});
 const payload = (row) => row.payload_jsonb || {};
@@ -15,9 +15,31 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
   }
   async getById(decisionId) { return this.findOne({ id: decisionId }); }
   async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
-    const id = this.uuid(); const value = { decisionId:id, tenantId, articleId, companyId, contextVersion, inputFingerprint, source, relevance:output.relevance, confidence:output.confidence, branch:branchForRelevance(output.relevance), provenance, createdAt:new Date().toISOString() };
-    const result = await this.db.query("INSERT INTO ai.article_relevance (id,tenant_id,company_id,article_snapshot_id,context_id,relevance,confidence,payload_jsonb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (tenant_id,company_id,article_snapshot_id,context_id) DO NOTHING RETURNING *", [id, tenantId, companyId, articleId, contextVersion, output.relevance, output.confidence ?? null, json({...value, source, inputFingerprint})]);
-    return result.rows[0] ? mapRelevance(result.rows[0]) : this.get({ tenantId: source.tenantId || "unknown", articleId, companyId, contextVersion, inputFingerprint });
+    const subjectRelation = output.subject_relation ?? null;
+    const competitorOptIn = output.competitor_opt_in === true;
+    const id = this.uuid();
+    const value = {
+      decisionId: id, tenantId, articleId, companyId, contextVersion, inputFingerprint, source,
+      relevance: output.relevance, confidence: output.confidence,
+      subjectRelation, competitorOptIn,
+      branch: branchForDecision({ relevance: output.relevance, subjectRelation, competitorOptIn }),
+      provenance, createdAt: new Date().toISOString(),
+    };
+    const payload = json({ ...value, source, inputFingerprint });
+    // Upsert when fingerprint changes so identity-gate reclassifications replace stale continues.
+    const result = await this.db.query(
+      `INSERT INTO ai.article_relevance (id,tenant_id,company_id,article_snapshot_id,context_id,relevance,confidence,payload_jsonb)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+       ON CONFLICT (tenant_id,company_id,article_snapshot_id,context_id) DO UPDATE SET
+         relevance = EXCLUDED.relevance,
+         confidence = EXCLUDED.confidence,
+         payload_jsonb = EXCLUDED.payload_jsonb
+       WHERE ai.article_relevance.payload_jsonb->>'inputFingerprint' IS DISTINCT FROM EXCLUDED.payload_jsonb->>'inputFingerprint'
+       RETURNING *`,
+      [id, tenantId, companyId, articleId, contextVersion, output.relevance, output.confidence ?? null, payload],
+    );
+    if (result.rows[0]) return mapRelevance(result.rows[0]);
+    return this.get({ tenantId, articleId, companyId, contextVersion, inputFingerprint });
   }
 }
 
@@ -97,13 +119,17 @@ class PostgresReportNarrativeStore {
 function mapRelevance(row) {
   const base = payload(row);
   const relevance = row.relevance;
+  const subjectRelation = base.subjectRelation ?? base.subject_relation ?? null;
+  const competitorOptIn = base.competitorOptIn === true || base.competitor_opt_in === true;
   return {
     ...base,
     decisionId: row.id,
     relevance,
     confidence: row.confidence === null ? null : Number(row.confidence),
-    // Recompute branch so legacy low/continue rows cannot reopen issue formation.
-    branch: branchForRelevance(relevance),
+    subjectRelation,
+    competitorOptIn,
+    // Recompute branch so legacy continue rows and market leaks cannot reopen issue formation.
+    branch: branchForDecision({ relevance, subjectRelation, competitorOptIn }),
     createdAt: row.created_at?.toISOString?.() || row.created_at,
   };
 }

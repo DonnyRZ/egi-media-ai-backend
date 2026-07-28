@@ -37,7 +37,7 @@ function relevance(store, { articleId, contextVersion = 3, updatedAt } = {}) {
   const articleSource = source(articleId, updatedAt);
   return store.create({
     articleId, companyId, contextVersion, inputFingerprint: `fingerprint-${articleId}-${contextVersion}`,
-    source: articleSource, output: { relevance: "high", confidence: 0.9 }, provenance: { runId: "t02-run" },
+    source: articleSource, output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false }, provenance: { runId: "t02-run" },
   });
 }
 
