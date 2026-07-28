@@ -197,3 +197,49 @@ test("Legacy decisions without subject_relation fail closed", () => {
   assert.equal(branchForDecision({ relevance: "medium", subjectRelation: null }), "stop");
   assert.equal(branchForDecision({ relevance: "high" }), "stop");
 });
+
+test("red-team: scattered token alias must not form self/competitor issues", () => {
+  const attacks = [
+    {
+      fields: arunikaFields,
+      title: "Arunika Sari Wins Hotel Hospitality Manager of the Year",
+      summary: "Bali hotel operators praised Arunika Sari for hospitality excellence at a major resort property.",
+    },
+    {
+      fields: manufacturingFields,
+      title: "Low-Earth Orbit Startup Scales Industrial Packing Automation",
+      summary: "A space-tech firm is adapting orbit sensor firmware to automate industrial packing lines at factories.",
+    },
+    {
+      fields: manufacturingFields,
+      title: "Cascade Coffee Expands Logistics Network Across Java",
+      summary: "The Cascade coffee retail brand opened new logistics centers to speed bean distribution.",
+    },
+    {
+      fields: fintechFields,
+      title: "PixelClear Display Maker Enters Consumer Payments Hardware",
+      summary: "PixelClear, known for LED screens, announced a pivot into payments terminals for retail merchants.",
+    },
+    {
+      fields: manufacturingFields,
+      title: "Nexora University Opens Logistics Manufacturing Research Lab",
+      summary: "Nexora University launched a logistics manufacturing research lab focused on factory automation.",
+    },
+  ];
+  for (const attack of attacks) {
+    const gated = applySubjectIdentityGate({
+      relevance: "medium",
+      confidence: 0.7,
+      subjectRelation: "market",
+      fields: attack.fields,
+      title: attack.title,
+      summary: attack.summary,
+    });
+    assert.notEqual(gated.subjectRelation, "self", attack.title);
+    assert.equal(shouldFormIssue({
+      relevance: gated.relevance,
+      subjectRelation: gated.subjectRelation,
+      competitorOptIn: gated.competitorOptIn,
+    }), false, attack.title);
+  }
+});

@@ -65,19 +65,42 @@ function collectCompetitorAliases(fields = {}) {
   return [...aliases];
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasContiguousTokenSequence(textTokens, needleTokens) {
+  if (!needleTokens.length || textTokens.length < needleTokens.length) return false;
+  outer: for (let i = 0; i <= textTokens.length - needleTokens.length; i += 1) {
+    for (let j = 0; j < needleTokens.length; j += 1) {
+      if (textTokens[i + j] !== needleTokens[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Entity alias match: contiguous whole-phrase or ordered contiguous whole-word
+ * distinctive-token sequence. Bag-of-tokens and substring includes are forbidden
+ * (they false-positive peer names that share scattered tokens).
+ */
 function phraseHitsText(phrase, textNorm) {
   const phraseNorm = normalizeText(phrase);
   if (!phraseNorm || phraseNorm.length < 3) return false;
-  if (textNorm.includes(phraseNorm)) return true;
+  // Whole-phrase with word boundaries (spaces already normalized).
+  const phraseRe = new RegExp(`(?:^|\\s)${escapeRegex(phraseNorm)}(?:\\s|$)`);
+  if (phraseRe.test(textNorm)) return true;
+
   const tokens = distinctiveTokens(phrase);
   if (tokens.length === 0) return false;
-  // Single distinctive token (≥6 chars) can match a short company alias.
+  const textTokens = textNorm.split(/\s+/).filter(Boolean);
+  // Single distinctive token (≥6 chars): whole-word only.
   if (tokens.length === 1) {
-    return tokens[0].length >= 6 && textNorm.split(/\s+/).includes(tokens[0]);
+    return tokens[0].length >= 6 && textTokens.includes(tokens[0]);
   }
-  // Multi-token: require all distinctive tokens present (order-independent).
-  const textTokens = new Set(textNorm.split(/\s+/).filter(Boolean));
-  return tokens.every((t) => textTokens.has(t) || textNorm.includes(t));
+  // Multi-token: ordered contiguous whole-word sequence only.
+  return hasContiguousTokenSequence(textTokens, tokens);
 }
 
 function findAliasHits(aliases, title, summary) {

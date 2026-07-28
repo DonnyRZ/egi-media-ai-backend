@@ -261,7 +261,7 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippetChars = chars;
   }
   // Bump when identity/subject_relation gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v6-subject-identity";
+  base.contextOverlapGate = "v7-contiguous-identity";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 
