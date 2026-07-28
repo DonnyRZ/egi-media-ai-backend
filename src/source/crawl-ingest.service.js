@@ -2,6 +2,7 @@
 
 const { CmsSourceGateError } = require("../cms/cms-source.errors");
 const { CRAWL_SOURCE_IDS } = require("../news-feed/channel-registry");
+const { assessArticleContent } = require("../ingest/content-quality-gate");
 
 const DEFAULT_LIMIT = 25;
 
@@ -12,7 +13,7 @@ const DEFAULT_LIMIT = 25;
  * (internal ingest trigger or an operator script) invoke `pollSource`.
  */
 class CrawlIngestService {
-  constructor({ crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now = Date.now }) {
+  constructor({ crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now = Date.now, assessContent = assessArticleContent, logger = null }) {
     if (!crawlArticleReader?.listArticlesSince) {
       throw new CmsSourceGateError("Crawl ingest requires a read-only crawl article reader", {
         code: "CRAWL_SOURCE_CONFIGURATION_INVALID",
@@ -29,7 +30,7 @@ class CrawlIngestService {
     if (typeof enqueueStageJob !== "function") {
       throw new TypeError("Crawl ingest requires a stage job enqueue function");
     }
-    Object.assign(this, { crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now });
+    Object.assign(this, { crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now, assessContent, logger: logger || { info() {}, warn() {} } });
   }
 
   static watermarkName(sourceId) {
@@ -53,11 +54,30 @@ class CrawlIngestService {
 
     const snapshots = [];
     const stageJobs = [];
+    const skipped = [];
     for (const item of page.items) {
       const source = await this.sourceGate.requirePublishedArticle({
         articleId: item.issue_source_id,
         locale,
       });
+      const quality = this.assessContent(source.article);
+      if (!quality.ok) {
+        skipped.push({
+          sourceArticleId: source.sourceArticleId,
+          skipReason: quality.reason,
+          skipDetails: quality.details,
+        });
+        this.logger.info("ingest_content_quality_skipped", {
+          mode: "crawl-poll",
+          tenantId,
+          companyId,
+          sourceId,
+          sourceArticleId: source.sourceArticleId,
+          skipReason: quality.reason,
+          skipDetails: quality.details,
+        });
+        continue;
+      }
       const stored = await this.snapshotStore.upsert({
         sourceArticleId: source.sourceArticleId,
         locale,
@@ -82,7 +102,7 @@ class CrawlIngestService {
       watermark: page.watermark || previous?.watermark || new Date(this.now()).toISOString(),
       cursor: null,
     });
-    return { mode: "crawl-poll", sourceId, count: snapshots.length, snapshots, stageJobs, watermark };
+    return { mode: "crawl-poll", sourceId, count: snapshots.length, skippedCount: skipped.length, skipped, snapshots, stageJobs, watermark };
   }
 }
 
