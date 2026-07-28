@@ -40,6 +40,30 @@ class IssueMatchService {
     const candidates = await this.issueCandidateStore.listActive({ tenantId, companyId });
     this._validateCandidates(candidates, { tenantId, companyId });
     const candidateIssueIds = new Set(candidates.map((candidate) => candidate.issueId));
+    const exactSourceIssue = await this._findExactSourceIssue({
+      tenantId,
+      companyId,
+      candidates,
+      sourceArticleId: relevanceDecision.articleId,
+    });
+    if (exactSourceIssue) {
+      const match = await this.matchDecisionStore.create({
+        tenantId,
+        companyId,
+        relevanceDecisionId,
+        promptVersion: T04_PROMPT_VERSION,
+        output: {
+          decision: "update",
+          candidate_issue_id: exactSourceIssue.issueId,
+          reason_code: "same_event",
+        },
+        provenance: {
+          policy: "exact-source-reuse",
+          sourceArticleId: relevanceDecision.articleId,
+        },
+      });
+      return { match, relevanceDecision, reused: false };
+    }
     const execution = await this.promptExecutionService.executeActive({
       promptId: T04_PROMPT_ID,
       promptVersion: T04_PROMPT_VERSION,
@@ -72,6 +96,22 @@ class IssueMatchService {
       || candidate.companyId !== companyId || !ACTIVE_ISSUE_STATUSES.has(candidate.status))) {
       throw new AiConfigurationError("T04 candidate validation rejected a cross-scope or inactive issue");
     }
+  }
+
+  async _findExactSourceIssue({ tenantId, companyId, candidates, sourceArticleId }) {
+    if (typeof this.issueCandidateStore.listArticles !== "function") return null;
+    for (const candidate of candidates) {
+      const articles = await this.issueCandidateStore.listArticles({
+        tenantId,
+        companyId,
+        issueId: candidate.issueId,
+      });
+      if (Array.isArray(articles) && articles.some((article) => article.relationStatus === "active"
+        && article.sourceArticleId === sourceArticleId)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

@@ -30,6 +30,9 @@ For each iteration:
 
 - unrelated/thin continuation: 0;
 - material peer/competitor/regulation miss: 0;
+- issue/no-issue branch flips across repeated calls: 0;
+- `subject_relation` flips for issue-forming outputs: 0 (the exact market/unrelated
+  label on stopped low/none content is non-operative and is reported separately);
 - non-self analysis addressed to the external entity's management: 0;
 - unsupported dashboard-company facts: 0;
 - all outputs valid and cited;

@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.5.0";
+const T02_PROMPT_VERSION = "1.6.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT02PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.5",
+    inputSchemaVersion: "1.6",
     outputSchemaVersion: "2.0",
-    changeSummary: "Separate subject identity from management relevance; material external market signals may form issues",
+    changeSummary: "Promote concrete peer actions while rejecting generic multi-hop market speculation",
     approvedBy: null,
-    rollbackVersion: "1.4.0",
+    rollbackVersion: "1.5.0",
   };
 }
 

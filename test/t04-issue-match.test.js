@@ -78,6 +78,32 @@ test("T04 selects only a same-tenant/company active candidate and does not mutat
   assert.equal(runtime.matchDecisionStore.list().length, 1);
 });
 
+test("T04 deterministically reuses an active issue already linked to the same source article", async () => {
+  const candidate = issue({ issueId: activeIssueId });
+  const exactSourceStore = {
+    listActive: async () => [candidate],
+    listArticles: async ({ issueId }) => issueId === activeIssueId
+      ? [{ relationStatus: "active", sourceArticleId: articleId }]
+      : [],
+  };
+  const { runtime, relevanceDecision, kernelCalls } = buildRuntime({
+    issueCandidateStore: exactSourceStore,
+    seedIssues: [],
+  });
+
+  const result = await runtime.service.match({
+    tenantId,
+    companyId,
+    relevanceDecisionId: relevanceDecision.decisionId,
+  });
+
+  assert.equal(kernelCalls(), 0);
+  assert.equal(result.match.decision, "update");
+  assert.equal(result.match.candidateIssueId, activeIssueId);
+  assert.equal(result.match.reasonCode, "same_event");
+  assert.equal(result.match.provenance.policy, "exact-source-reuse");
+});
+
 test("T04 excludes selesai and other-tenant issues; selesai policy defaults to new without reopen", async () => {
   let input;
   const { runtime, relevanceDecision, kernelCalls } = buildRuntime({
