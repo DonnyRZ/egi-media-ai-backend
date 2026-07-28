@@ -394,6 +394,7 @@ class Server {
       const t07 = t07IssueAnalysis.createT07IssueAnalysisRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
+        relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
         getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),

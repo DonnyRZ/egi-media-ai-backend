@@ -14,6 +14,15 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
     return result.rows[0] ? mapRelevance(result.rows[0]) : null;
   }
   async getById(decisionId) { return this.findOne({ id: decisionId }); }
+  async getLatest({ tenantId, articleId, companyId, contextVersion }) {
+    const result = await this.db.query(
+      `SELECT * FROM ai.article_relevance
+       WHERE tenant_id=$1 AND company_id=$2 AND article_snapshot_id=$3 AND context_id=$4
+       ORDER BY created_at DESC LIMIT 1`,
+      [tenantId, companyId, articleId, contextVersion],
+    );
+    return result.rows[0] ? mapRelevance(result.rows[0]) : null;
+  }
   async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
     const subjectRelation = output.subject_relation ?? null;
     const competitorOptIn = output.competitor_opt_in === true;

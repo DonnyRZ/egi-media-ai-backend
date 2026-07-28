@@ -21,13 +21,13 @@ const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
 
 class IssueAnalysisService {
-  constructor({ cmsSourceGate, issueStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, relevanceDecisionStore = null, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T07 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.listArticles) throw new AiConfigurationError("T07 requires issue evidence persistence");
     if (typeof getEffectiveContext !== "function") throw new AiConfigurationError("T07 requires effective Company Context reader");
     if (!analysisStore?.get || !analysisStore?.create) throw new AiConfigurationError("T07 requires analysis persistence");
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T07 requires prompt execution service");
-    Object.assign(this, { cmsSourceGate, issueStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
+    Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
   async analyze({ tenantId, companyId, issueId }) {
@@ -45,7 +45,12 @@ class IssueAnalysisService {
     }
     this._validateLinkedArticles(linkedArticles, { tenantId, companyId, issueId });
     const evidence = await Promise.all(linkedArticles.map((linked) => this._loadEvidence(linked)));
-    const subjectRelation = resolveIssueSubjectRelation(context.fields, evidence);
+    const subjectRelation = await this._resolveSubjectRelation({
+      tenantId,
+      companyId,
+      context,
+      evidence,
+    });
     const inputFingerprint = fingerprint({ issue, context, evidence, subjectRelation });
     const existing = await this.analysisStore.get({ tenantId, companyId, issueId, inputFingerprint, promptVersion: T07_PROMPT_VERSION });
     if (existing) return { analysis: existing, reused: true };
@@ -140,6 +145,25 @@ class IssueAnalysisService {
       return this.resolveOutputLanguage({ tenantId, companyId });
     }
     return loadCompanyOutputLanguage({ companyStore: this.companyStore, tenantId, companyId });
+  }
+
+  async _resolveSubjectRelation({ tenantId, companyId, context, evidence }) {
+    if (typeof this.relevanceDecisionStore?.getLatest === "function") {
+      const decisions = await Promise.all(evidence.map((item) => this.relevanceDecisionStore.getLatest({
+        tenantId,
+        companyId,
+        articleId: item.sourceArticleId,
+        contextVersion: context.version,
+      })));
+      const relations = decisions
+        .filter((decision) => decision && ["high", "medium"].includes(decision.relevance))
+        .map((decision) => decision.subjectRelation)
+        .filter((relation) => Object.hasOwn(RELATION_RANK, relation));
+      if (relations.length > 0) {
+        return relations.sort((a, b) => RELATION_RANK[b] - RELATION_RANK[a])[0];
+      }
+    }
+    return resolveIssueSubjectRelation(context.fields, evidence);
   }
 
   async _authorizeCompany({ tenantId, companyId }) {

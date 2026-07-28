@@ -25,7 +25,7 @@ function context() {
   return { companyId, version: 3, status: "effective", fields: { name: "PT Example Logistics", industry: "Logistics", competitors: [], products: ["Fleet tracking"], topics: [], priorities: [], goals: [], regions: [] } };
 }
 
-function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequest } = {}) {
+function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequest, propagateRelation = false, relevanceSubject = "self" } = {}) {
   const relevanceDecisionStore = new InMemoryRelevanceDecisionStore();
   const matchDecisionStore = new InMemoryIssueMatchDecisionStore();
   const issueStore = new InMemoryIssueStore({ now: () => Date.parse("2026-07-22T12:00:00.000Z") });
@@ -36,9 +36,9 @@ function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequ
   const sources = new Map(initialSources);
   for (const [articleId, sourceValue] of Object.entries(sourceOverrides)) sources.set(articleId, sourceValue);
   const makeRelevance = (articleId, version) => relevanceDecisionStore.create({
-    articleId, companyId, contextVersion: 3, inputFingerprint: `fingerprint-${articleId}-${version}`,
+    tenantId, articleId, companyId, contextVersion: 3, inputFingerprint: `fingerprint-${articleId}-${version}`,
     source: initialSources.get(articleId),
-    output: { relevance: "high", confidence: 0.9, subject_relation: "self", competitor_opt_in: false },
+    output: { relevance: "high", confidence: 0.9, subject_relation: relevanceSubject, competitor_opt_in: false },
     provenance: { runId: "t02" },
   });
   const firstRelevance = makeRelevance(articleOne, 1);
@@ -65,6 +65,7 @@ function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequ
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     cmsSourceGate: { requirePublishedArticle: async ({ articleId }) => sources.get(articleId) },
+    relevanceDecisionStore: propagateRelation ? relevanceDecisionStore : null,
     issueStore, getEffectiveContext: async () => context(),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.analyze",
   });
@@ -127,6 +128,23 @@ test("T07 perspective reviewer replaces externally framed analysis before persis
   const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
   assert.deepEqual(result.analysis.analysis, corrected);
   assert.equal(result.analysis.provenance.managementPerspectiveReview.verdict, "corrected");
+});
+
+test("T07 propagates T02 subject relation instead of reclassifying issue evidence", async () => {
+  const output = validOutput();
+  output.subject_relation = "market";
+  let generationRequest;
+  const { runtime, created } = buildRuntime({
+    output,
+    propagateRelation: true,
+    relevanceSubject: "market",
+    onKernelRequest: (request) => {
+      if (request.outputSchema?.name === "issue_analysis_v3") generationRequest = request;
+    },
+  });
+  const result = await runtime.service.analyze({ tenantId, companyId, issueId: created.issueId });
+  assert.equal(result.analysis.analysis.subject_relation, "market");
+  assert.match(generationRequest.input[1].content, /"subject_relation":"market"/);
 });
 
 test("T07 rejects an out-of-evidence citation without persisting an analysis", async () => {

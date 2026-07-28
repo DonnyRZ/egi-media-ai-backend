@@ -19,6 +19,16 @@ class InMemoryRelevanceDecisionStore {
     return decision ? cloneForRead(decision) : null;
   }
 
+  getLatest({ tenantId = null, articleId, companyId, contextVersion }) {
+    const matches = [...this.decisionsByKey.values()]
+      .filter((decision) => (tenantId == null || decision.tenantId === tenantId)
+        && decision.articleId === articleId
+        && decision.companyId === companyId
+        && decision.contextVersion === contextVersion)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    return matches[0] ? cloneForRead(matches[0]) : null;
+  }
+
   create({ tenantId = null, articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
     const key = this._key({ tenantId, articleId, companyId, contextVersion, inputFingerprint });
     const existing = this.decisionsByKey.get(key);
