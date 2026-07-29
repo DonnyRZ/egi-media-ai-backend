@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.8.0";
+const T02_PROMPT_VERSION = "1.9.2";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT02PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.8",
+    inputSchemaVersion: "1.9",
     outputSchemaVersion: "2.0",
-    changeSummary: "Require an observable event and direct context effect for external market relevance",
+    changeSummary: "Deterministic market materiality gate; topic/priority coincidence alone cannot continue",
     approvedBy: null,
-    rollbackVersion: "1.7.0",
+    rollbackVersion: "1.8.0",
   };
 }
 

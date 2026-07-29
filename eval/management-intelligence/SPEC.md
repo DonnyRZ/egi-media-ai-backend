@@ -36,5 +36,9 @@ For each iteration:
 - non-self analysis addressed to the external entity's management: 0;
 - unsupported dashboard-company facts: 0;
 - all outputs valid and cited;
-- no tenant or industry hard-coding under `src/ai/`.
+- no tenant or industry hard-coding under `src/ai/`;
+- production false positives in `production-cases.json` (FP-*): 0 continues;
+- production true positives (TP-*): 0 stops;
+- live eval must use production-matching T02 input options (`includeBodySnippet` false
+  unless production enables it). Success on synthetic scenarios alone is insufficient.
 

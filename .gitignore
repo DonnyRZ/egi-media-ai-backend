@@ -10,4 +10,6 @@ coverage
 
 # Management-intelligence audit outputs contain raw model responses.
 eval/management-intelligence/live-result.json
+eval/management-intelligence/replay-result.json
+eval/management-intelligence/*-stdout.txt
 

@@ -7,6 +7,7 @@ const { buildT02Input } = require("./prompt");
 const { validateT02Output } = require("./output-validator");
 const { isContinuingRelevance, shouldFormIssue } = require("./relevance-policy");
 const { applySubjectIdentityGate } = require("./subject-identity-gate");
+const { applyMarketMaterialityGate } = require("./market-materiality-gate");
 
 const RELEVANCE_RANK = Object.freeze({ none: 0, low: 1, medium: 2, high: 3 });
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
@@ -140,9 +141,19 @@ class RelevanceClassificationService {
       summary: source.article?.summary,
       body: bodyForGate,
     });
-    const output = {
+    // Market materiality gate: topic/priority coincidence alone must not continue.
+    // Peer commercial actions and region+project/regulation hooks remain valid.
+    const materiality = applyMarketMaterialityGate({
       relevance: identity.relevance,
       confidence: identity.confidence,
+      subjectRelation: identity.subjectRelation,
+      fields: context.fields,
+      title: source.article?.title,
+      summary: source.article?.summary,
+    });
+    const output = {
+      relevance: materiality.relevance,
+      confidence: materiality.confidence,
       subjectRelation: identity.subjectRelation,
       competitorOptIn: identity.competitorOptIn,
       identityGate: {
@@ -151,12 +162,14 @@ class RelevanceClassificationService {
         selfHits: identity.selfHits || [],
         competitorHits: identity.competitorHits || [],
       },
+      marketMaterialityGate: {
+        gated: Boolean(materiality.gated),
+        reason: materiality.reason || null,
+        hook: materiality.hook || null,
+        matched: materiality.matched || [],
+      },
       contextOverlapGate: { gated: false, reason: null, hits: null, matched: [] },
     };
-    // Do not apply a second lexical materiality gate here. T02 consensus decides
-    // relevance; the identity gate already uses lexical overlap to distinguish
-    // market from unrelated. A second token gate caused semantic false negatives
-    // for regulations and competitor moves expressed with different wording.
 
     const provenance = {
       ...passes[0].provenance,
@@ -164,6 +177,7 @@ class RelevanceClassificationService {
       passes: passes.map((p) => p.data),
       merged: { relevance: merged.relevance, confidence: merged.confidence, subject_relation: merged.subject_relation },
       identityGate: output.identityGate,
+      marketMaterialityGate: output.marketMaterialityGate,
       contextOverlapGate: output.contextOverlapGate,
     };
     const persistedOutput = {
@@ -243,7 +257,7 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippetChars = chars;
   }
   // Bump when identity/subject_relation gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v12-observable-direct-effect";
+  base.contextOverlapGate = "v14-market-materiality-gate";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 

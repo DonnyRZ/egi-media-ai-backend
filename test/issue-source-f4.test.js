@@ -380,8 +380,8 @@ test("F4 T02 classifies a crawl-sourced article through the same service entry p
       version: 3,
       status: "effective",
       fields: {
-        name: "PT Example", industry: "Logistics", sub_industry: null, description: null,
-        products: [], customers: [], regions: [], competitors: [],
+        name: "PT Example", industry: "Media logistics", sub_industry: null, description: null,
+        products: ["Media distribution", "Fleet tracking"], customers: [], regions: [], competitors: [],
         brands_aliases: [],
         key_people: [],
         priorities: [], goals: [], risks: [], topics: [], dependencies: [],

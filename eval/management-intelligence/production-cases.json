@@ -1,0 +1,563 @@
+{
+  "generatedAt": "2026-07-28T16:30:00.000Z",
+  "notes": "Frozen production inputs for root-cause audit. Production T02_INCLUDE_BODY_SNIPPET=false; body captured only for ablation.",
+  "productionEnv": {
+    "T02_INCLUDE_BODY_SNIPPET": "false",
+    "T02_DUAL_CALL": "true",
+    "T02_CONSENSUS_CALLS": "3",
+    "OPENAI_MINI_MODEL": "gpt-5-mini-2025-08-07",
+    "OPENAI_NANO_MODEL": "gpt-5-nano-2025-08-07"
+  },
+  "context": {
+    "companyId": "company-arunika-audit",
+    "version": 1,
+    "status": "effective",
+    "fields": {
+      "name": "PT Arunika Hospitality Indonesia (Arunika Hospitality Group)",
+      "goals": [
+        "Menjadi salah satu grup perhotelan mewah paling terhormat di Indonesia",
+        "Menyediakan pengalaman tamu yang personal dan berkesan",
+        "Memperkuat karakter Indonesia dalam desain, layanan, dan kuliner",
+        "Menciptakan nilai berkelanjutan bagi tamu, karyawan, mitra, dan investor",
+        "Mendukung pengembangan profesional talenta perhotelan Indonesia"
+      ],
+      "risks": [],
+      "topics": [
+        "Operasi hotel dan layanan tamu",
+        "Konsep kuliner dan manajemen restoran",
+        "Pengembangan properti dan pra-pembukaan",
+        "Acara, konferensi, dan layanan katering",
+        "Keberlanjutan operasional dan rantai pasok lokal",
+        "Pelatihan, pengembangan SDM, dan sertifikasi layanan"
+      ],
+      "regions": [
+        "Indonesia",
+        "Jakarta",
+        "Bali",
+        "Bandung",
+        "Yogyakarta",
+        "Surabaya",
+        "Asia Tenggara (ekspansi regional)"
+      ],
+      "industry": "Perhotelan (Hotel, Restoran, Food & Beverage)",
+      "products": [
+        "Hotel mewah, hotel butik, dan hotel bisnis",
+        "Resor pantai dan resor destinasi",
+        "Restoran (fine dining, all-day dining, specialty, rooftop, kafe)",
+        "Konsep kuliner regional dan layanan katering",
+        "Layanan manajemen hotel (operasi, revenue management, pra-pembukaan)",
+        "Layanan manajemen restoran (konsep, operasional, pengadaan)",
+        "Layanan pengembangan dan advisory (studi kelayakan, positioning, desain koordinasi)",
+        "Layanan acara dan katering (pernikahan, konferensi, acara korporat)",
+        "Program pelatihan dan pengembangan SDM"
+      ],
+      "customers": [
+        "Pelancong bisnis",
+        "Wisatawan rekreasi mewah",
+        "Tamu korporat dan akun perusahaan",
+        "Institusi pemerintah dan komunitas diplomatik",
+        "Pengunjung internasional",
+        "Keluarga dan masyarakat lokal",
+        "Klien acara pernikahan dan acara pribadi",
+        "Pelanggan restoran dan lifestyle"
+      ],
+      "key_people": [],
+      "priorities": [
+        "Ekspansi portofolio hotel di kota-kota utama Indonesia",
+        "Mengembangkan resor mewah di destinasi wisata terpilih",
+        "Memperkenalkan konsep restoran dan lifestyle baru",
+        "Mengamankan perjanjian manajemen hotel dengan pemilik properti",
+        "Memperkuat pemesanan langsung dan layanan digital tamu",
+        "Mengembangkan program loyalitas dan keanggotaan korporat",
+        "Membangun kemitraan strategis dengan investor dan pengembang",
+        "Integrasi praktik keberlanjutan (mengurangi plastik sekali pakai, efisiensi energi/air, dukungan pemasok lokal)"
+      ],
+      "competitors": [],
+      "description": "Perusahaan perhotelan yang berbasis di Jakarta, didirikan pada 2016, mengembangkan, mengelola, dan mengoperasikan hotel mewah, resor, dan restoran di Indonesia. Grup ini menekankan pengalaman tamu yang dipersonalisasi, karakter Indonesia dalam layanan dan kuliner, serta pertumbuhan yang berkelanjutan melalui ekspansi portofolio dan kemitraan strategis.",
+      "dependencies": [
+        "Pemilik properti (perjanjian manajemen hotel)",
+        "Investor dan pengembang untuk ekspansi dan pembangunan resor",
+        "Pemasok lokal dan petani untuk rantai pasok kuliner",
+        "Tenaga kerja terlatih dan program pengembangan SDM"
+      ],
+      "sub_industry": "Pengembangan dan manajemen hotel, pengoperasian restoran dan konsep kuliner, pengembangan resor, layanan advisory perhotelan",
+      "brands_aliases": [
+        "Arunika Grand Bali",
+        "Casa Arunika Jakarta",
+        "Arunika Culinary Lab"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "FP-1",
+      "expectedContinue": false,
+      "reason": "Unrelated vendor product metric; no hotel dependency or operating standard",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.7,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "medium",
+            "confidence": 0.79,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.7,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.75,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.7,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:media_indonesia:fa3f128e907f9426bc86bc594255299fcacdd7b3eac654119ef8cfd40198b97c",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/FP-1",
+        "article": {
+          "title": "Keamanan dan Efisiensi Energi Jadi Prioritas Pengguna Water Heater",
+          "summary": "Di internal Wasserpemanas air listrik menjadi kategori dengan kontribusi terbesar terhadap penjualan produk pemanas air perusahaan yakni mencapai 65 persen dari total penjualan",
+          "content": "MENINGKATNYA penggunaan water heater di Indonesia tidak hanya mencerminkan perubahan gaya hidup masyarakat, tetapi juga menunjukkan semakin tingginya perhatian konsumen terhadap aspek keamanan dan efisiensi energi dalam memilih perangkat rumah tangga. Jika sebelumnya kenyamanan menjadi alasan utama penggunaan pemanas air, kini faktor keselamatan dan konsumsi listrik menjadi pertimbangan yang tak kalah penting.\n\nMandi air hangat sendiri semakin menjadi bagian dari rutinitas masyarakat modern. Selain memberikan rasa nyaman setelah beraktivitas seharian, sejumlah penelitian menunjukkan bahwa mandi air hangat dapat membantu melancarkan sirkulasi darah, meredakan ketegangan otot, mengurangi stres, hingga meningkatkan kualitas tidur. Studi yang dipublikasikan dalam jurnal Sleep Medicine Reviews bahkan menemukan bahwa mandi atau berendam air hangat dapat membantu mengatasi insomnia dan meningkatkan kualitas tidur pada malam hari.\n\nSeiring meningkatnya kesadaran masyarakat terhadap manfaat tersebut, penggunaan water heater kini tidak lagi dipandang sebagai fasilitas mewah, melainkan telah menjadi bagian dari kebutuhan rumah tangga modern. Teknologi pemanas air pun terus berkembang dengan berbagai pilihan sumber energi, mulai dari listrik, gas, tenaga surya, hingga heat pump yang memanfaatkan panas dari udara sekitar.\n\nProduct Manager of Water Solution Wasser, Darian Tjiandra, mengatakan bahwa setiap jenis water heater memiliki karakteristik dan keunggulan masing-masing. Namun, dalam beberapa tahun terakhir, pemanas air listrik menjadi pilihan yang paling banyak diminati masyarakat.\n\n\"Setiap jenis water heater memiliki karakteristik dan keunggulan masing-masing. Namun dalam beberapa tahun terakhir, kami melihat pemanas air listrik paling diminati oleh masyarakat karena instalasi dan perawatannya relatif lebih mudah dan efisien, serta sesuai dengan kebutuhan rumah tangga modern yang mengutamakan kenyamanan,\" ujar Darian.\n\nBerdasarkan data internal Wasser, pemanas air listrik menjadi kategori dengan kontribusi terbesar terhadap penjualan produk pemanas air perusahaan, yakni mencapai 65 persen dari total penjualan. Sisanya berasal dari pemanas air gas, tenaga surya, dan heat pump.\n\nMenurut Darian, potensi pasar pemanas air di Indonesia masih terus bertumbuh seiring meningkatnya pembangunan perumahan, apartemen, hotel, serta berbagai fasilitas komersial. Di sisi lain, meningkatnya kesadaran masyarakat akan pentingnya kualitas hidup dan kenyamanan di rumah turut mendorong penggunaan pemanas air yang semakin luas.\n\nNamun, di tengah meningkatnya minat terhadap water heater listrik, masih terdapat kekhawatiran di kalangan konsumen terkait aspek keamanan, terutama risiko kebocoran arus listrik pada perangkat. Karena itu, fitur keselamatan kini menjadi salah satu faktor yang semakin diperhatikan saat memilih produk pemanas air.\n\nMenjawab kebutuhan tersebut, Wasser menghadirkan seri pemanas air listrik Ardour+ yang dilengkapi teknologi ShockProof atau antisetrum. Teknologi ini dirancang untuk membantu meminimalkan risiko sengatan listrik akibat kebocoran arus pada perangkat pemanas air.\n\nFitur ShockProof bekerja sebagai perlindungan tambahan selain perangkat ELCB (Earth Leakage Circuit Breaker), yakni sakelar otomatis yang akan memutus aliran listrik ketika mendeteksi adanya kebocoran arus. Dengan kombinasi kedua fitur tersebut, perlindungan terhadap pengguna diharapkan menjadi lebih optimal.\n\n\"Fitur ShockProof pada seri pemanas listrik Wasser Ardour+ dirancang untuk menghambat dan mengurangi kandungan listrik di dalam air jika terjadi kebocoran listrik pada komponen pemanas air, sehingga memberikan perlindungan lebih optimal bagi pengguna ketika mandi. Dengan begitu, pengguna dapat lebih tenang dan nyaman menikmati mandi air hangat,\" jelas Darian.\n\nSelain aspek keamanan, efisiensi energi juga menjadi perhatian penting bagi konsumen. Kenaikan kebutuhan listrik rumah tangga membuat masyarakat semakin selektif dalam memilih perangkat elektronik yan",
+          "publishedAt": "2026-07-26T16:14:35.386Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "FP-2",
+      "expectedContinue": false,
+      "reason": "Advocacy/macro labor signal requiring multi-hop speculation",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.78,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "medium",
+            "confidence": 0.78,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "low",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.78,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:beritasatu:d1b78d246033392476cbacb30db6749c8f96a59676630d9b30f4340d2cc5ffa3",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/FP-2",
+        "article": {
+          "title": "Apindo Minta Mitigasi PHK Dilakukan sejak Dini",
+          "summary": "Apindo meminta pemerintah melakukan langkah mitigasi pemutusan hubungan kerja (PHK) sejak dini agar gelombang PHK tidak semakin meluas.",
+          "content": "Jakarta, Beritasatu.com – Asosiasi Pengusaha Indonesia (Apindo) meminta pemerintah melakukan langkah mitigasi pemutusan hubungan kerja (PHK) sejak dini agar gelombang PHK tidak semakin meluas. Menurut Apindo, upaya pencegahan sebaiknya dilakukan sebelum perusahaan berada di ambang penutupan.\n\nKetua Bidang Ketenagakerjaan Apindo Bob Azam mengatakan, PHK yang terjadi saat ini dipicu oleh berbagai faktor, mulai dari persoalan struktural di industri padat karya, efisiensi di sektor manufaktur, hingga melemahnya permintaan pasar.\n\n\"Memang PHK sekarang bermacam sumbernya. Ada yang masalah struktural seperti di sektor padat karya, efisiensi di sektor manufaktur, dan menurunnya permintaan,\" kata Bob Azam kepada Beritasatu.com, Senin (27/7/2026).\n\nMenurut Bob, pemerintah perlu mengidentifikasi sejak awal perusahaan-perusahaan yang mulai mengalami kesulitan agar solusi dapat diberikan sebelum kondisi usaha semakin memburuk dan berujung pada PHK.\n\n\"Mitigasi justru dilakukan di awal, jangan di ujung menjelang PHK. Perlu identifikasi dan pemetaan perusahaan yang sedang mengalami kesulitan per sektor, kemudian dibuat langkah-langkah mitigasinya,\" ujarnya.\n\nIa menilai pemetaan berdasarkan sektor industri akan membantu pemerintah menyusun kebijakan yang lebih tepat sasaran. Dengan demikian, perusahaan yang sedang menghadapi tekanan dapat memperoleh dukungan lebih cepat, sehingga mampu mempertahankan operasional dan tenaga kerjanya.\n\nBob menegaskan, pendekatan pencegahan jauh lebih efektif dibandingkan penanganan setelah PHK terjadi. Selain menjaga keberlangsungan usaha, langkah tersebut juga dinilai mampu melindungi lapangan kerja dan mengurangi dampak sosial akibat meningkatnya angka pengangguran.\n\nPernyataan Apindo ini muncul di tengah rencana penutupan PT Samwon Busana Indonesia di Jepara. Perusahaan garmen berorientasi ekspor tersebut akan menghentikan operasionalnya mulai 1 Agustus 2026, dengan hari kerja terakhir karyawan pada 31 Juli 2026.\n\nPT Samwon yang berdiri sejak 2014 itu sempat mempekerjakan sekitar 2.200 pekerja sebelum pandemi Covid-19. Namun, penurunan permintaan dari pasar internasional membuat jumlah karyawannya terus menyusut hingga tersisa sekitar 680 orang menjelang penutupan pabrik.",
+          "publishedAt": "2026-07-27T23:30:00.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "FP-3",
+      "expectedContinue": false,
+      "reason": "Generic equity-market movement without direct company-context effect",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.7,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "low",
+            "confidence": 0.85,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.75,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.7,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.7,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:cnn_indonesia:c13976cc0070f90a26fb433f2c0037898a4118bf9f0e2e9c93d83666fcb45bb3",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/FP-3",
+        "article": {
+          "title": "VIDEO: Pergerakan IHSG Usai Gubernur BI Mundur",
+          "summary": "Bagaimana reaksi pasar usai pengunduran diri Gubernur Bank Indonesia?",
+          "content": "Jakarta, CNN Indonesia -- Bagaimana reaksi pasar usai pengunduran diri Gubernur Bank Indonesia? Sudah ada Produser Lapangan CNN Indonesia, Satriyo Adhi, di Gedung Bursa Efek Indonesia.",
+          "publishedAt": "2026-07-27T07:15:48.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "FP-4",
+      "expectedContinue": false,
+      "reason": "Broad national sustainability topic; weak direct operating effect unless property exposure proven",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.72,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "medium",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.75,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "low",
+            "confidence": 0.72,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.72,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:detik:00ccaed6d311bc6e16680f295070c17fb28982105f893add0c0d22bc037c171e",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/FP-4",
+        "article": {
+          "title": "Tekan Kerusakan, Menteri Trenggono Genjot Rehabilitasi Hutan Mangrove",
+          "summary": "Menteri Trenggono mengungkap Indonesia kehilangan 40% hutan mangrove dalam 30 tahun. Upaya rehabilitasi dan restorasi terus dilakukan.",
+          "content": "Denpasar - Menteri Kelautan dan Perikanan, Sakti Wahyu Trenggono mengungkap Indonesia kehilangan sekitar 40 persen hutan mangrove selama tiga dekade. Kementerian Kelautan dan Perikanan melakukan berbagai upaya untuk rehabilitasi.\n\n\"Dalam tiga dekade terakhir, Indonesia telah kehilangan sekitar 40% mangrove dengan laju kerusakan sekitar 52 ribu hektare per tahun dan sekitar 19,2% mangrove berada dalam kondisi kritis,\" kata Trenggono saat Hari Mangrove Sedunia di Taman Hutan Raya (Tahura) Ngurah Rai dilansir detikBali, Minggu (26/7/2027).\n\nTrenggono mengatakan, luas mangrove mengalami penurunan sejak 1980-an dari 4,2 juta hektare menjadi 3,3 juta hektare. Padahal, kata dia, mangrove berperan sangat penting sebagai pelindung pesisir, habitat bagi berbagai biota laut, penopang produktivitas perikanan dan mata pencaharian masyarakat, serta penyimpan karbon.\n\nTrenggono mengungkapkan degradasi dan abrasi menjadi penyebab utama Indonesia kehilangan 40 persen hutan mangrove selama tiga dekade terakhir. Hampir semua kawasan mangrove di seluruh Indonesia mengalami degradasi karena diterjang ombak.\n\nTrenggono mengungkapkan upaya menanggulangi pengurangan mangrove itu adalah dengan restorasi. Indonesia, tutur Trenggono, juga berperan strategis sebagai salah satu produsen perikanan utama dengan potensi sumber daya kelautannya yang besar. Sekitar 23 persen ekosistem mangrove dunia menopang produktivitas perikanan dan ketahanan pangan.\n\n\"Oleh karena itu, rehabilitasi mangrove tidak boleh berhenti pada kegiatan penanaman semata, tetapi harus dilakukan berbasis kesesuaian ekologis agar fungsi ekosistem benar-benar pulih,\" jelas Trenggono.\n\nTrenggono menambahkan, Kementerian Kelautan dan Perikanan bersinergi dengan seluruh pemangku kebijakan dalam menjaga, memulihkan, dan mengelola ekosistem mangrove Indonesia. Sebanyak 15 ribu bibit pohon bakau kurap (Rhizophora mucronata) ditanam di Ekowisata Mangrove Batu Lumbang, Tahura Ngurah Rai, Denpasar.\n\n\"Keberhasilan pemulihan mangrove bergantung pada kolaborasi seluruh pemangku kepentingan melalui kebijakan terpadu, pemanfaatan sains, pemberdayaan masyarakat serta penguatan pendanaan, pengawasan, dan edukasi publik,\" tutur Sakti.\n\nBaca selengkapnya di sini.",
+          "publishedAt": "2026-07-26T14:17:17.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TN-1",
+      "expectedContinue": false,
+      "reason": "Local crime without broad market effect",
+      "production": {
+        "relevance": "none",
+        "confidence": 0.86,
+        "subject_relation": "market",
+        "branch": "stop",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "none",
+            "confidence": 0.86,
+            "subject_relation": "unrelated"
+          },
+          {
+            "relevance": "none",
+            "confidence": 0.9,
+            "subject_relation": "unrelated"
+          },
+          {
+            "relevance": "none",
+            "confidence": 0.92,
+            "subject_relation": "unrelated"
+          }
+        ],
+        "merged": {
+          "relevance": "none",
+          "confidence": 0.86,
+          "subject_relation": "unrelated"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:liputan6:bda0170b12223b62d2499003d68ec32b0a8ce9dbf82289dba3077a01b23d64af",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TN-1",
+        "article": {
+          "title": "Situasi Terkini Bentrok Warga di Menteng, Motor Hangus Masih Terlihat",
+          "summary": "Jejak bentrokan masih terlihat di Jalan Tambak, Menteng, mulai dari kerangka motor hangus hingga pagar yang roboh. Polisi memastikan satu orang tewas dan satu lainnya kritis.",
+          "content": "Liputan6.com, Jakarta - Garis polisi masih membentang di lokasi bentrokan di Jalan Tambak, Kelurahan Pegangsaan, Kecamatan Menteng, Jakarta Pusat, Minggu (26/7/2026).\n\nJejak bentrokan masih tampak di sejumlah titik, mulai dari kerangka sepeda motor yang hangus terbakar, pagar besi yang roboh, hingga tembok pembatas yang rusak akibat aksi saling serang.\n\nBerdasarkan pantauan Liputan6.com, kondisi di lokasi telah berangsur kondusif. Arus lalu lintas di Jalan Tambak juga sudah kembali normal dan dapat dilalui kendaraan. Meski demikian, sejumlah personel kepolisian, termasuk Brimob, masih berjaga dan menyisir area sekitar untuk kepentingan penyelidikan.\n\nAdvertisement\n\nDi depan lokasi bentrokan, Polsek Metro Menteng bersama Satpol PP DKI Jakarta juga mendirikan tenda pemantauan guna mengantisipasi potensi gangguan keamanan.\n\nKasat Reskrim Polres Metro Jakarta Pusat AKBP Roby Heri Saputra mengatakan bentrokan tersebut mengakibatkan dua orang mengalami luka berat. Namun, satu di antaranya meninggal dunia setelah sempat mendapat penanganan di rumah sakit.\n\n\"Informasi terbaru dari dua orang yang diamankan dari TKP masih dalam kondisi kritis saat dibawa, namun ketika di rumah sakit ada satu yang sudah meninggal,\" kata Roby kepada wartawan, Minggu.\n\nPolisi Masih Berjaga\n\nMenurut Roby, bentrokan bermula ketika sekelompok orang datang untuk membeli sarapan di kawasan tersebut. Diduga karena tidak mendapat pelayanan yang diinginkan, mereka sempat menggeber kendaraannya sebelum pergi.\n\nTak lama berselang, kelompok tersebut kembali dengan membawa sejumlah rekannya dan diduga merusak gerobak penjual nasi uduk.\n\n\"Jadi ada kelompok dari yang diserang ini datang mau beli sarapan, kemudian mungkin tidak dilayani dengan baik atau tidak berkenan, sehingga menggeber kendaraannya. Kemudian dia pergi, kemudian datang lagi dengan membawa teman-temannya merusak gerobak penjual nasi uduk atau sarapan tersebut,\" ujar Roby.\n\nAksi perusakan itu kemudian memicu perlawanan dari warga sekitar hingga bentrokan tak terhindarkan. Polisi menemukan sejumlah jejak bentrokan di lokasi, di antaranya puing bangunan yang terbakar, kendaraan yang hangus, bercak darah, serta batu yang berlumuran darah.\n\n\"Di TKP kita menemukan ada puing-puing dari bangunan yang terbakar, juga ada kendaraan yang terbakar, juga jejak darah dan batu yang berlumuran darah,\" kata Roby.\n\nPetugas sempat berupaya membubarkan bentrokan. Namun, banyaknya massa yang terlibat membuat kericuhan tidak dapat dicegah hingga menimbulkan korban.\n\nDua Korban Dibawa ke RSCM\n\nDua korban kemudian dievakuasi ke Rumah Sakit Cipto Mangunkusumo (RSCM) untuk mendapatkan perawatan. Sementara itu, delapan orang yang diduga terlibat diamankan ke Polsek Metro Menteng untuk dimintai keterangan.\n\n\"Dari korban yang kita amankan dari TKP ada dua orang dibawa ke RSCM, dan dari kelompok warga yang ada, ada dari dua kelompok, satu kelompok enam orang dan yang dari luar itu dua orang yang kita sedang amankan dan ambil keterangannya di Polsek Menteng,\" ujar Roby.\n\nHingga Minggu siang, polisi masih melakukan olah tempat kejadian perkara (TKP) dan mengumpulkan sejumlah keterangan untuk mengungkap penyebab pasti bentrokan serta peran masing-masing pihak yang terlibat.",
+          "publishedAt": "2026-07-26T10:44:52.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TN-2",
+      "expectedContinue": false,
+      "reason": "Local roadwork without named property impact",
+      "production": {
+        "relevance": "none",
+        "confidence": 0.8,
+        "subject_relation": "unrelated",
+        "branch": "stop",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "none",
+            "confidence": 0.9,
+            "subject_relation": "unrelated"
+          },
+          {
+            "relevance": "low",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "low",
+            "confidence": 0.85,
+            "subject_relation": "unrelated"
+          }
+        ],
+        "merged": {
+          "relevance": "none",
+          "confidence": 0.8,
+          "subject_relation": "unrelated"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:detik:5f84510028feadc61d407226c27b7f3ee9f2811d596f7d7376bd997bfdfab0a6",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TN-2",
+        "article": {
+          "title": "Proyek Perbaikan Jalan Picu Kemacetan di Kebon Sirih",
+          "summary": "Perbaikan Jalan Kebon Sirih sepanjang 345 meter memicu kemacetan di Jakarta Pusat karena menyita satu lajur.",
+          "content": "Jakarta - Perbaikan Jalan Kebon Sirih sepanjang 345 meter memicu kemacetan di Jakarta Pusat karena menyita satu lajur.",
+          "publishedAt": "2026-07-27T07:02:45.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TN-3",
+      "expectedContinue": false,
+      "reason": "Customer-segment coincidence without tourism rule change",
+      "production": {
+        "relevance": "none",
+        "confidence": 0.72,
+        "subject_relation": "market",
+        "branch": "stop",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "none",
+            "confidence": 0.88,
+            "subject_relation": "unrelated"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.72,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "low",
+            "confidence": 0.75,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "none",
+          "confidence": 0.72,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:beritasatu:16368e9d57e3041354836d05c50e8ddb4ef40a0a7f7550eed6a5df703cef59bf",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TN-3",
+        "article": {
+          "title": "Klub Lari Eksklusif WNA di Bali Berujung Dicekal Imigrasi",
+          "summary": "Viral di media sosial, kegiatan olahraga lari bertajuk Bali Silence Disco di Bali menjadi sorotan setelah muncul dugaan adanya pembatasan peserta yang hanya diperuntukkan bagi warga negara asing (WNA) dan menolak keikutsertaan warga negara Indonesia (WNI)",
+          "content": "Viral di media sosial, kegiatan olahraga lari bertajuk Bali Silence Disco di Bali menjadi sorotan setelah muncul dugaan adanya pembatasan peserta yang hanya diperuntukkan bagi warga negara asing (WNA) dan menolak keikutsertaan warga negara Indonesia (WNI).\n\nPolemik ini kemudian mendapat perhatian serius dari Direktorat Jenderal Imigrasi Kementerian Imigrasi dan Pemasyarakatan. Menindaklanjuti kontroversi yang berkembang, pihak Imigrasi mengambil tindakan terhadap dua WNA yang disebut sebagai pendiri klub lari eksklusif tersebut dengan menjatuhkan larangan masuk ke wilayah Indonesia.\n\nKasus ini memicu perbincangan publik mengenai penyelenggaraan kegiatan olahraga oleh warga negara asing di Indonesia, aturan keimigrasian, serta pentingnya menghormati ketentuan hukum dan norma yang berlaku di tengah masyarakat.\n\n#BaliSilenceDisco #Bali #Imigrasi #WNA #WNI #KlubLari #OlahragaBali #Viral #Beritasatu #SaatnyaMajuBersama\n\nPastikan kamu subscribe dan aktifkan juga tombol lonceng untuk mendapatkan notifikasi video terbaru dari BeritaSatu.\n\n---------------------------------------------------------------------------------------------------------------------------\nKunjungi juga social media channel kami :\n\nOfficial Website: https://www.beritasatu.com\nWhatsapp : https://whatsapp.com/channel/0029Vb2lVmJJJhzSSEkLN30K\nTwitter       : https://twitter.com/Beritasatu\nFacebook : https://www.facebook.com/beritasatu/\nInstagram : https://www.instagram.com/beritasatu/\nTiktok        : https://www.tiktok.com/@beritasatuofficial\n\n__________________________________________________________________________________",
+          "publishedAt": "2026-07-26T14:53:08.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TP-1",
+      "expectedContinue": true,
+      "reason": "Concrete peer lodging promo with direct-booking discount",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.8,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "medium",
+            "confidence": 0.82,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.85,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.8,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:media_indonesia:0a37a180981e128fbe3787f0e0dd948b45cd46c06620ad4fd959b52b8598d50a",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TP-1",
+        "article": {
+          "title": "Sutan Raja Hotel Convention Centre Soreang Luncurkan Promo July Mid Year Magic Selama Bulan Juli",
+          "summary": "Sutan Raja Hotel Soreang menghadirkan promo July Mid Year Magic sepanjang Juli 2026 Menginap mulai Rp550 ribu dan diskon hingga 20 direct booking",
+          "content": "MEMASUKI pertengahan tahun, Sutan Raja Hotel & Convention Centre Soreang—jaringan hotel di bawah naungan Sapa Raja Hotels Management—menghadirkan penawaran menginap spesial bertajuk \"July Mid Year Magic\". Promo ini dirancang untuk memberikan pengalaman liburan maupun perjalanan bisnis yang lebih berkesan dan terjangkau di kawasan Bandung Selatan.\n\nBerlangsung sepanjang periode 1 hingga 31 Juli 2026, promo kamar Deluxe Room ini ditawarkan dalam dua pilihan paket yang flexible sesuai kebutuhan tamu.\n\nMenariknya, para tamu juga bisa mendapatkan nilai tambah berupa diskon tambahan hingga 20% dengan melakukan pemesanan langsung (direct booking) melalui situs resmi. Tamu cukup memasukkan kode promo JMYM20 saat bertransaksi di website resmi.\n\nUntuk reservasi dan informasi lebih lanjut mengenai promo July Mid Year Magic, tamu dapat menghubungi nomor telepon (022) 5897700, WhatsApp di +62 8111 1123 230, email ke [email protected], Instagram @sutanrajasoreang, atau langsung memesan melalui situs www.saparajahotels.com.\n\n(RO/P-4)",
+          "publishedAt": "2026-07-27T05:10:04.021Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TP-2",
+      "expectedContinue": true,
+      "reason": "Concrete infrastructure project in operating region Bali",
+      "production": {
+        "relevance": "high",
+        "confidence": 0.85,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "high",
+            "confidence": 0.88,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "high",
+            "confidence": 0.85,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.85,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "high",
+          "confidence": 0.85,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:detik:c42478e6858c78566d6910f3dfb8148b897cf7417cc24fe9cb26ad5847301562",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TP-2",
+        "article": {
+          "title": "Pemkab Badung Bangun JLS dan Shortcut Rp 2,9 T untuk Atasi Kemacetan",
+          "summary": "Pemkab Badung memulai pembangunan dua proyek infrastruktur senilai Rp 2,9 triliun untuk mengatasi kemacetan dan meningkatkan konektivitas serta pariwisata.",
+          "content": "Jakarta - Pemerintah Kabupaten (Pemkab) Badung resmi memulai pembangunan dua mega proyek infrastruktur strategis senilai lebih dari Rp 2,9 triliun. Proyek tersebut meliputi Jalan Lingkar Selatan (JLS) dan Shortcut Berawa-Umalas-Kedampang-Teuku Umar Barat.\n\nLangkah nyata ini diambil untuk mengatasi kemacetan dan meningkatkan konektivitas antarwilayah. Pembangunan ini sekaligus diharapkan mampu memperkuat daya saing pariwisata dan pertumbuhan ekonomi daerah.\n\nGroundbreaking dilakukan langsung oleh Bupati Badung I Wayan Adi Arnawa bersama Gubernur Bali Wayan Koster. Acara ini ditandai dengan penekanan tombol sirine di lokasi pembangunan JLS Segmen 4, Desa Pecatu, Kecamatan Kuta Selatan, Senin (27/7).\n\n\"Pengembangan koridor di Kecamatan Kuta Selatan dan Kuta Utara dirancang membentuk jaringan jalan yang saling terhubung. Infrastruktur ini akan menghadirkan jalur alternatif, mengurangi beban lalu lintas pada ruas utama, serta meningkatkan aksesibilitas,\" ujar Bupati Badung I Wayan Adi Arnawa dalam keterangannya, Selasa (28/7/2026).\n\nBupati menjelaskan tahap awal pembangunan pada tahun 2026-2027 meliputi JLS dan penataan Simpang Siligita sepanjang 10,89 kilometer. Selain itu, pemerintah juga membangun Jalan Semer-Teuku Umar Barat sepanjang 4,77 kilometer.\n\n\"Kalau jaringan jalan ini sudah selesai dibangun, secara umum wilayah Badung akan dilintasi jalan-jalan besar yang saling terkoneksi. Saya yakin daya dukung pariwisata kita akan semakin meningkat, mobilitas masyarakat menjadi lebih lancar,\" tegasnya.\n\nAdi Arnawa mengungkapkan seluruh proses telah dipersiapkan secara matang dan terukur. Persiapan ini meliputi penyusunan Feasibility Study (FS), Detail Engineering Design (DED), penetapan lokasi, hingga proses pengadaan tanah.\n\nIa mengakui proses pembebasan lahan sempat menghadapi berbagai dinamika di lapangan. Namun, masyarakat akhirnya memberikan dukungan penuh karena sudah jenuh dengan kemacetan yang melanda wilayah Badung Selatan.\n\nPembangunan JLS ini merupakan bagian dari rencana besar penyediaan jaringan jalan sepanjang hampir 30 kilometer di Badung Selatan. Untuk wilayah Badung Tengah dan Utara, pemerintah juga menyiapkan jaringan jalan sepanjang 52,95 kilometer yang direalisasikan bertahap hingga 2029.\n\nSementara itu, Gubernur Bali Wayan Koster turut memberikan apresiasi atas realisasi proyek strategis tersebut. Ia menilai pembangunan JLS merupakan solusi konkret dalam mengatasi kemacetan kronis sekaligus menjaga kualitas pariwisata Bali.\n\nKoster juga menilai keputusan Pemkab Badung memanfaatkan pembiayaan PT Sarana Multi Infrastruktur (PT SMI) sangat tepat. Langkah strategis ini diambil agar pembangunan dapat dipercepat tanpa terus terbebani kenaikan biaya konstruksi di masa mendatang.\n\nTurut hadir dalam peresmian ini Sekretaris Direktorat Jenderal Bina Marga Kementerian PUPR Haeruddin C. Maddi dan jajaran Direksi PT SMI. Acara ini juga dihadiri oleh unsur Forkopimda Bali dan Badung, Pimpinan BUMN Wilayah Bali, jajaran DPRD Badung, serta tokoh masyarakat setempat.",
+          "publishedAt": "2026-07-28T03:11:36.000Z",
+          "updatedAt": null
+        }
+      }
+    },
+    {
+      "id": "TP-3",
+      "expectedContinue": true,
+      "reason": "Concrete peer dining acquisition event/format",
+      "production": {
+        "relevance": "medium",
+        "confidence": 0.78,
+        "subject_relation": "market",
+        "branch": "continue",
+        "prompt_version": "1.8.0",
+        "passes": [
+          {
+            "relevance": "low",
+            "confidence": 0.8,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.78,
+            "subject_relation": "market"
+          },
+          {
+            "relevance": "medium",
+            "confidence": 0.78,
+            "subject_relation": "market"
+          }
+        ],
+        "merged": {
+          "relevance": "medium",
+          "confidence": 0.78,
+          "subject_relation": "market"
+        }
+      },
+      "source": {
+        "sourceArticleId": "crawl:media_indonesia:a7fcef3440101814af2b930093a475ac98f8761a3c4a3435f4b3677bf28f6ae7",
+        "requestedLocale": "id",
+        "contentLocale": "id",
+        "canonicalUrl": "https://eval.invalid/TP-3",
+        "article": {
+          "title": "Dukung UMKM Lokal, Rumah Makan Padang Ini Gelar The Heritage Weekend Market",
+          "summary": "Rumah makan padang milik Deddy Corbuzier itu ingin menghadirkan pengalaman yang lebih dari sekadar menikmati hidangan Minang",
+          "content": "GADANG Barubah kembali menghadirkan inovasi melalui program The Heritage Weekend Market, sebuah pasar akhir pekan yang membuka kesempatan bagi pelaku Usaha Mikro, Kecil, dan Menengah (UMKM) untuk memperkenalkan produk unggulan mereka kepada masyarakat.\n\nMelalui program ini, Rumah makan padang milik Deddy Corbuzier itu ingin menghadirkan pengalaman yang lebih dari sekadar menikmati hidangan Minang. Pengunjung juga dapat menemukan beragam produk lokal berkualitas yang mengangkat kekayaan budaya, kreativitas, dan kearifan lokal Indonesia.\n\n\"Bagi kami, warisan budaya tidak hanya hadir melalui cita rasa masakan Minang, tetapi juga melalui karya-karya para pelaku UMKM. Melalui The Heritage Weekend Market, kami ingin menjadikan Gadang Barubah sebagai ruang bertemunya kuliner, budaya, komunitas, dan ekonomi kreatif,\" tulis Gadang Barubah dalam keterangan pers yang diterima, Minggu (26/7).\n\nMengusung konsep weekend pop-up market, kegiatan ini terbuka bagi UMKM di bidang food & beverage maupun non-food, dengan prioritas bagi produk yang memiliki keterkaitan dengan budaya Minang maupun Sumatera. Seluruh tenant akan melalui proses kurasi oleh tim Gadang Barubah guna memastikan kualitas produk, kesesuaian konsep, serta pengalaman terbaik bagi para pengunjung.\n\nBagi tenant kategori makanan dan minuman misalnya, produk yang dijual wajib dalam kondisi siap saji tanpa proses memasak di lokasi. Seluruh peserta juga diharapkan menjaga kebersihan, kerapihan area, serta mengikuti ketentuan operasional yang telah ditetapkan. Siapapun bisa mendaftar kegiatan ini dengan informasi lebih lanjut bisa menghubungi lewat kanal media sosial Gadang Barubah\n\nMelalui The Heritage Weekend Market, Gadang Barubah berharap dapat menciptakan ekosistem yang saling mendukung antara dunia kuliner, pelaku UMKM, komunitas kreatif, dan masyarakat. Inisiatif ini diharapkan menjadi langkah nyata dalam menjaga warisan budaya sekaligus memperkuat ekonomi lokal melalui kolaborasi yang berkelanjutan. (H-2)",
+          "publishedAt": "2026-07-26T16:14:45.229Z",
+          "updatedAt": null
+        }
+      }
+    }
+  ]
+}

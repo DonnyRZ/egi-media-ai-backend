@@ -12,6 +12,7 @@ const { T02_OUTPUT_SCHEMA } = require("../../src/ai/tasks/t02-relevance-class/sc
 const { validateT02Output } = require("../../src/ai/tasks/t02-relevance-class/output-validator");
 const { mergeRelevanceOutputs } = require("../../src/ai/tasks/t02-relevance-class/service");
 const { applySubjectIdentityGate } = require("../../src/ai/tasks/t02-relevance-class/subject-identity-gate");
+const { applyMarketMaterialityGate } = require("../../src/ai/tasks/t02-relevance-class/market-materiality-gate");
 const { shouldFormIssue } = require("../../src/ai/tasks/t02-relevance-class/relevance-policy");
 const { buildT07Input } = require("../../src/ai/tasks/t07-issue-analysis/prompt");
 const { T07_OUTPUT_SCHEMA } = require("../../src/ai/tasks/t07-issue-analysis/schema");
@@ -249,7 +250,8 @@ async function main() {
       companyId: context.companyId,
       context,
       source,
-      options: { includeBodySnippet: true, bodySnippetChars: 2500, useRubric: true },
+      // Match production: body is for identity gate only, not the model.
+      options: { includeBodySnippet: false, useRubric: true },
     });
     const passes = [];
     for (let i = 0; i < 3; i += 1) {
@@ -271,8 +273,16 @@ async function main() {
       summary: item.summary,
       body: item.content,
     });
-    const shouldContinue = shouldFormIssue({
+    const materiality = applyMarketMaterialityGate({
       relevance: identity.relevance,
+      confidence: identity.confidence,
+      subjectRelation: identity.subjectRelation,
+      fields,
+      title: item.title,
+      summary: item.summary,
+    });
+    const shouldContinue = shouldFormIssue({
+      relevance: materiality.relevance,
       subjectRelation: identity.subjectRelation,
     });
     const relationStable = new Set(passes.map((pass) => pass.subject_relation)).size === 1;
