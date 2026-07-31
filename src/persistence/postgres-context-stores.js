@@ -26,6 +26,15 @@ class PostgresEffectiveCompanyContextStore {
     const row = await this.db.query("INSERT INTO ai.company_contexts (id,tenant_id,company_id,version,content_jsonb,source,status,updated_by,created_at,updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,'effective',$7,$8,$8) RETURNING *", [id, tenantId, companyId, nextVersion, JSON.stringify(content), source, actorId, now]);
     return { context: mapContext(row.rows[0]) };
   }
+  async clearEffective({ tenantId = null, companyId }) {
+    const current = await this.getEffective(companyId, tenantId);
+    if (!current) return { cleared: false, context: null };
+    await this.db.query(
+      "UPDATE ai.company_contexts SET status='archived', updated_at=now() WHERE tenant_id=$1 AND company_id=$2 AND status='effective'",
+      [tenantId ?? current.tenantId, companyId],
+    );
+    return { cleared: true, context: { ...current, status: "archived" } };
+  }
 }
 
 function mapDraft(row) { return { draftId: row.id, tenantId: row.tenant_id, companyId: row.company_id, status: row.status, isEffective: false, revision: row.revision, result: row.result_jsonb, sourceFingerprints: row.source_fingerprints_jsonb, provenance: row.provenance_jsonb, review: row.review_jsonb, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }; }

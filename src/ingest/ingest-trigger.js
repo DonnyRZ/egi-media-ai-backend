@@ -73,8 +73,12 @@ async function enqueueIngestTrigger({
   idempotencyKey,
   maxAttempts = 3,
   copy = "internal",
+  assertIntakeReady = null,
 }) {
   const parsed = parseIngestTriggerBody(body, { copy });
+  if (typeof assertIntakeReady === "function") {
+    await assertIntakeReady({ tenantId, companyId });
+  }
   const result = await queue.enqueue({
     tenantId,
     companyId,

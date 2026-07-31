@@ -147,9 +147,9 @@ test("human manual write creates the next effective context version", async () =
   const second = await service.replaceEffectiveContext({
     actor, companyId: "company-1", version: 2, fields: secondFields, changeReason: "Update",
   });
-  assert.equal(first.version, 1);
-  assert.equal(second.version, 2);
-  assert.equal(second.source, "manual");
+  assert.equal(first.context.version, 1);
+  assert.equal(second.context.version, 2);
+  assert.equal(second.context.source, "manual");
   await assert.rejects(
     service.replaceEffectiveContext({ actor, companyId: "company-1", version: 2, fields: secondFields }),
     { code: "VERSION_CONFLICT" },

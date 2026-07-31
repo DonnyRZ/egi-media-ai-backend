@@ -1,6 +1,6 @@
 // Language preference: N/A — enum/match task; no user-facing prose output_language rule.
 const { T02_PROMPT_ID, T02_PROMPT_VERSION } = require("./definition");
-const { leadershipSystemPreamble, withManagementIdentity } = require("../../identity/prompt-stamp");
+const { leadershipSystemPreamble, withManagementIdentity, REGISTRY_BOOTSTRAP_CONTEXT } = require("../../identity/prompt-stamp");
 
 function buildSystemPolicy(context) {
   return [
@@ -109,6 +109,6 @@ function buildT02Input({ companyId, context, source, options = {} }) {
   ];
 }
 
-const SYSTEM_POLICY = buildSystemPolicy({});
+const SYSTEM_POLICY = buildSystemPolicy(REGISTRY_BOOTSTRAP_CONTEXT);
 
 module.exports = { SYSTEM_POLICY, CLASSIFICATION_RUBRIC, buildT02Input, buildSystemPolicy };

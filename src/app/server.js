@@ -222,6 +222,24 @@ class Server {
         companyId: req.authContext.companyId,
         ...query,
       }),
+      assertIntakeReady: async ({ tenantId, companyId }) => {
+        const { assertManagementIdentityReady } = require("../ai/identity");
+        await assertManagementIdentityReady({
+          effectiveContextStore: this._getCompanyContextRuntime().effectiveContextStore,
+          identityStore: this._getManagementIdentityRuntime().identityStore,
+          tenantId,
+          companyId,
+        });
+      },
+      getIntakeReadiness: async ({ tenantId, companyId }) => {
+        const { resolveManagementIdentityReadiness } = require("../ai/identity");
+        return resolveManagementIdentityReadiness({
+          effectiveContextStore: this._getCompanyContextRuntime().effectiveContextStore,
+          identityStore: this._getManagementIdentityRuntime().identityStore,
+          tenantId,
+          companyId,
+        });
+      },
     });
 
     this.app.use((_req, res) => {

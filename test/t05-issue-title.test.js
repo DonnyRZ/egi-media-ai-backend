@@ -55,6 +55,18 @@ function buildRuntime({ output = { title: "Regulasi Baru untuk Operator Logistik
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     cmsSourceGate: { requirePublishedArticle: async () => sourceResult },
     issueStore, matchDecisionStore, relevanceDecisionStore,
+    getEffectiveContext: async () => ({
+      status: "effective",
+      companyId,
+      version: 3,
+      fields: { company_name: "Acme Logistics" },
+      managementIdentity: {
+        identity: "You are Acme Logistics leadership.",
+        company_name: "Acme Logistics",
+        lens_summary: "Fleet and regulation risk",
+        fingerprint: "test-fp",
+      },
+    }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.title.generate",
   });
   return { runtime, issueStore, matchDecisionStore, mutation, kernelCalls: () => kernelCalls };

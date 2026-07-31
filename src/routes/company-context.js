@@ -6,6 +6,7 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { extractPdfSource } = require("../company-context/pdf-source.service");
 const { resolveDraftLanguage } = require("../language/ai-output-language");
+const { serializeManagementIdentitySummary } = require("../ai/identity/readiness");
 
 function createCompanyContextRouter({ companyContextService, companyContextDraftService, getCompanyContextDraftService, getCompanyContextUploadStore, getCompanyStore } = {}) {
   const router = express.Router();
@@ -89,16 +90,16 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
   }));
 
   router.get("/api/v1/companies/:companyId/context", scope, asyncHandler(async (req, res) => {
-    const context = await companyContextService.getEffectiveContext({
+    const { context, managementIdentity } = await companyContextService.getEffectiveContextWithIdentity({
       actor: req.authContext?.actor || req.user,
       tenantId: req.authContext?.tenantId || null,
       companyId: req.params.companyId,
     });
-    success(res, serializeContext(context), req);
+    success(res, serializeContext(context, managementIdentity), req);
   }));
 
   router.put("/api/v1/companies/:companyId/context", draftScope, requireIdempotencyKey, requireIfMatch, asyncHandler(async (req, res) => {
-    const context = await companyContextService.replaceEffectiveContext({
+    const result = await companyContextService.replaceEffectiveContext({
       actor: req.authContext?.actor || req.user,
       tenantId: req.authContext?.tenantId || null,
       companyId: req.params.companyId,
@@ -106,7 +107,33 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
       fields: req.body?.fields,
       changeReason: req.body?.change_reason,
     });
-    success(res, serializeContext(context), req);
+    success(res, serializeContext(result.context, result.managementIdentity), req);
+  }));
+
+  router.delete("/api/v1/companies/:companyId/context", approveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const result = await companyContextService.clearEffectiveContext({
+      actor: req.authContext?.actor || req.user,
+      tenantId: req.authContext?.tenantId || null,
+      companyId: req.params.companyId,
+    });
+    success(res, {
+      cleared: true,
+      archived_version: result.context?.version ?? null,
+      company_id: req.params.companyId,
+    }, req);
+  }));
+
+  router.post("/api/v1/companies/:companyId/context/management-identity/retry", approveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const record = await companyContextService.retryManagementIdentity({
+      actor: req.authContext?.actor || req.user,
+      tenantId: req.authContext?.tenantId || null,
+      companyId: req.params.companyId,
+    });
+    success(res, {
+      management_identity: serializeManagementIdentitySummary(record, {
+        contextVersion: record.contextVersion,
+      }),
+    }, req);
   }));
 
   router.get("/api/v1/company-context/drafts/:draftId", scope, asyncHandler(async (req, res) => {
@@ -142,7 +169,13 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
       approvalNote: req.body?.approval_note,
       expectedRevision: readExpectedRevision(req),
     });
-    success(res, { draft: serializeDraft(result.draft), effective_context: serializeContext(result.effectiveContext) }, req);
+    success(res, {
+      draft: serializeDraft(result.draft),
+      effective_context: serializeContext(result.effectiveContext, result.managementIdentity),
+      management_identity: serializeManagementIdentitySummary(result.managementIdentity, {
+        contextVersion: result.effectiveContext?.version,
+      }),
+    }, req);
   }));
 
   router.use((error, req, res, _next) => {
@@ -207,8 +240,8 @@ function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
-function serializeContext(context) {
-  return {
+function serializeContext(context, managementIdentity = undefined) {
+  const payload = {
     context_id: context.contextId,
     company_id: context.companyId,
     version: context.version,
@@ -223,6 +256,12 @@ function serializeContext(context) {
     created_at: context.createdAt,
     updated_at: context.updatedAt,
   };
+  if (managementIdentity !== undefined) {
+    payload.management_identity = serializeManagementIdentitySummary(managementIdentity, {
+      contextVersion: context.version,
+    });
+  }
+  return payload;
 }
 
 function serializeDraft(draft) {

@@ -54,6 +54,16 @@ class InMemoryEffectiveCompanyContextStore {
     return { context: cloneForRead(context) };
   }
 
+  clearEffective({ tenantId = null, companyId }) {
+    const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || [];
+    const priorEffective = contexts.find((context) => context.status === "effective");
+    if (!priorEffective) return { cleared: false, context: null };
+    priorEffective.status = "archived";
+    priorEffective.archivedAt = this._timestamp();
+    priorEffective.updatedAt = this._timestamp();
+    return { cleared: true, context: cloneForRead(priorEffective) };
+  }
+
   _timestamp() {
     return new Date(this.now()).toISOString();
   }

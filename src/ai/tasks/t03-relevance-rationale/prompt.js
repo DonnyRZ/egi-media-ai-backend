@@ -1,6 +1,6 @@
 const { T03_PROMPT_ID, T03_PROMPT_VERSION } = require("./definition");
 const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
-const { leadershipSystemPreamble, withManagementIdentity } = require("../../identity/prompt-stamp");
+const { leadershipSystemPreamble, withManagementIdentity, REGISTRY_BOOTSTRAP_CONTEXT } = require("../../identity/prompt-stamp");
 
 function buildSystemPolicy(context) {
   return [
@@ -54,6 +54,6 @@ function buildT03Input({ companyId, context, decision, source, outputLanguage })
   ];
 }
 
-const SYSTEM_POLICY = buildSystemPolicy({});
+const SYSTEM_POLICY = buildSystemPolicy(REGISTRY_BOOTSTRAP_CONTEXT);
 
 module.exports = { SYSTEM_POLICY, buildT03Input };

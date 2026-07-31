@@ -23,6 +23,8 @@ function createNewsIntakeRouter({
   getStatus,
   getRecentRuns,
   setAutomaticIntake,
+  assertIntakeReady,
+  getIntakeReadiness,
   logger,
 } = {}) {
   const router = express.Router();
@@ -47,7 +49,23 @@ function createNewsIntakeRouter({
 
   router.get("/api/v1/news-intake/status", readScope, asyncHandler(async (req, res) => {
     const raw = typeof getStatus === "function" ? await getStatus(req) : {};
-    return success(res, toNewsIntakeStatus(raw), req);
+    const readiness = typeof getIntakeReadiness === "function"
+      ? await getIntakeReadiness({
+        tenantId: req.authContext.tenantId,
+        companyId: req.authContext.companyId,
+      })
+      : null;
+    const data = toNewsIntakeStatus(raw);
+    if (readiness) {
+      data.management_identity = {
+        ready: Boolean(readiness.ready),
+        status: readiness.status,
+        context_version: readiness.contextVersion,
+        has_effective_context: Boolean(readiness.hasEffectiveContext),
+      };
+      data.intake_ready = Boolean(readiness.ready);
+    }
+    return success(res, data, req);
   }));
 
   router.get("/api/v1/news-intake/runs", readScope, asyncHandler(async (req, res) => {
@@ -80,6 +98,7 @@ function createNewsIntakeRouter({
       idempotencyKey,
       maxAttempts: 3,
       copy: "human",
+      assertIntakeReady,
     });
 
     const log = logger || req.app?.locals?.logger;

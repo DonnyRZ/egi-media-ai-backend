@@ -24,8 +24,15 @@ const {
   trustedIdentityStamp,
   leadershipSystemPreamble,
   withManagementIdentity,
+  REGISTRY_BOOTSTRAP_CONTEXT,
 } = require("./prompt-stamp");
 const { checkManagementIdentityQuality } = require("./quality-checks");
+const {
+  resolveManagementIdentityReadiness,
+  assertManagementIdentityReady,
+  managementIdentityRequiredError,
+  serializeManagementIdentitySummary,
+} = require("./readiness");
 
 module.exports = {
   MANAGEMENT_IDENTITY_VERSION,
@@ -47,5 +54,10 @@ module.exports = {
   trustedIdentityStamp,
   leadershipSystemPreamble,
   withManagementIdentity,
+  REGISTRY_BOOTSTRAP_CONTEXT,
   checkManagementIdentityQuality,
+  resolveManagementIdentityReadiness,
+  assertManagementIdentityReady,
+  managementIdentityRequiredError,
+  serializeManagementIdentitySummary,
 };

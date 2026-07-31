@@ -16,7 +16,7 @@ const { createMembershipRouter } = require("./memberships");
 const { createPlatformRouter } = require("./platform");
 const { createAutomationRouter } = require("./automation");
 
-module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake }) => {
+module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake, assertIntakeReady, getIntakeReadiness }) => {
   server.use(createCompanyContextRouter({
     companyContextService,
     getCompanyContextDraftService,
@@ -36,12 +36,14 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   server.use(createNewsFeedRouter({ getNewsFeedService }));
   server.use(createAlertRouter({ getAlertRuntime, getT12Service, getEmailDeliveryService }));
   server.use(createReportRouter({ getReportRuntime }));
-  server.use(createIngestRouter({ getIngestRuntime }));
+  server.use(createIngestRouter({ getIngestRuntime, assertIntakeReady }));
   server.use(createNewsIntakeRouter({
     getIngestRuntime,
     getStatus: getAutomationStatus,
     getRecentRuns: getNewsIntakeRecentRuns,
     setAutomaticIntake,
+    assertIntakeReady,
+    getIntakeReadiness,
   }));
   server.use(createAutomationRouter({ getStatus: getAutomationStatus, getJobs: getAutomationJobs }));
 };

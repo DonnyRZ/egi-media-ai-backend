@@ -119,6 +119,48 @@ class CompanyContextService {
     return context;
   }
 
+  async getEffectiveContextWithIdentity({ actor, tenantId = null, companyId }) {
+    const context = await this.getEffectiveContext({ actor, tenantId, companyId });
+    const record = this.managementIdentityService
+      ? await this.managementIdentityService.get({
+        tenantId: tenantId ?? context.tenantId ?? null,
+        companyId,
+        contextVersion: context.version,
+      })
+      : null;
+    return { context, managementIdentity: record };
+  }
+
+  async clearEffectiveContext({ actor, tenantId = null, companyId }) {
+    await this._authorize(actor, tenantId, companyId, "company_context.approve");
+    if (typeof this.effectiveContextStore.clearEffective !== "function") {
+      throw new CompanyContextError("Effective context clear is not configured", { code: "NOT_READY", statusCode: 503 });
+    }
+    const result = await this.effectiveContextStore.clearEffective({ tenantId, companyId });
+    if (!result.cleared) {
+      throw new CompanyContextNotFoundError("No approved effective Company Context exists", { details: { companyId } });
+    }
+    return result;
+  }
+
+  async retryManagementIdentity({ actor, tenantId = null, companyId }) {
+    await this._authorize(actor, tenantId, companyId, "company_context.approve");
+    if (!this.managementIdentityService) {
+      throw new CompanyContextError("Management identity service is not configured", { code: "NOT_READY", statusCode: 503 });
+    }
+    const context = await this.effectiveContextStore.getEffective(companyId, tenantId);
+    if (!context) {
+      throw new CompanyContextNotFoundError("No approved effective Company Context exists", { details: { companyId } });
+    }
+    return this.managementIdentityService.draftAndPersist({
+      tenantId: tenantId ?? context.tenantId ?? null,
+      companyId,
+      contextVersion: context.version,
+      fields: context.fields,
+      throwOnError: false,
+    });
+  }
+
   async getEffectiveFullContext({ actor, tenantId = null, companyId }) {
     const context = await this.getEffectiveContext({ actor, tenantId, companyId });
     if (!this.managementIdentityService) {
@@ -160,7 +202,15 @@ class CompanyContextService {
       fields: activation.context.fields,
     });
 
-    return activation.context;
+    const managementIdentity = this.managementIdentityService
+      ? await this.managementIdentityService.get({
+        tenantId: activation.context.tenantId,
+        companyId: activation.context.companyId,
+        contextVersion: activation.context.version,
+      })
+      : null;
+
+    return { context: activation.context, managementIdentity };
   }
 
   async _draftIdentityForContext({ tenantId, companyId, contextVersion, fields }) {

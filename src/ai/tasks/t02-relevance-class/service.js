@@ -221,6 +221,11 @@ class RelevanceClassificationService {
     if (!context || context.status !== "effective" || context.companyId !== companyId || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T02 requires an approved effective Company Context for the same company");
     }
+    if (!context.managementIdentity?.identity) {
+      throw new AiConfigurationError("T02 requires a ready management identity for the effective Company Context", {
+        details: { code: "MANAGEMENT_IDENTITY_REQUIRED", companyId, contextVersion: context.version },
+      });
+    }
   }
 
   async _authorizeCompany(companyId) {

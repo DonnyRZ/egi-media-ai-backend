@@ -1,6 +1,6 @@
 const { T05_PROMPT_ID, T05_PROMPT_VERSION } = require("./definition");
 const { applyOutputLanguage, outputLanguageContractRule, resolveAiOutputLanguage } = require("../../../language/ai-output-language");
-const { leadershipSystemPreamble, withManagementIdentity } = require("../../identity/prompt-stamp");
+const { leadershipSystemPreamble, withManagementIdentity, REGISTRY_BOOTSTRAP_CONTEXT } = require("../../identity/prompt-stamp");
 
 function buildSystemPolicy(context) {
   return [
@@ -56,6 +56,6 @@ function buildT05Input({ tenantId, companyId, issue, development, matchDecision,
   ];
 }
 
-const SYSTEM_POLICY = buildSystemPolicy({});
+const SYSTEM_POLICY = buildSystemPolicy(REGISTRY_BOOTSTRAP_CONTEXT);
 
 module.exports = { SYSTEM_POLICY, buildT05Input };
