@@ -226,8 +226,8 @@ async function main() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY missing");
   const models = {
-    nanoModel: process.env.OPENAI_NANO_MODEL || "gpt-5-nano",
-    miniModel: process.env.OPENAI_MINI_MODEL || "gpt-5-mini",
+    nanoModel: process.env.OPENAI_NANO_MODEL || process.env.OPENAI_MODEL || "gpt-5.6-luna",
+    miniModel: process.env.OPENAI_MINI_MODEL || process.env.OPENAI_MODEL || "gpt-5.6-luna",
   };
   const client = createOpenAiClient({ apiKey, timeoutMs: 180000 });
   const kernel = new AiTaskKernel({

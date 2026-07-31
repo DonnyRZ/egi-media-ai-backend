@@ -5,8 +5,9 @@
     "T02_INCLUDE_BODY_SNIPPET": "false",
     "T02_DUAL_CALL": "true",
     "T02_CONSENSUS_CALLS": "3",
-    "OPENAI_MINI_MODEL": "gpt-5-mini-2025-08-07",
-    "OPENAI_NANO_MODEL": "gpt-5-nano-2025-08-07"
+    "OPENAI_MODEL": "gpt-5.6-luna",
+    "OPENAI_MINI_MODEL": "gpt-5.6-luna",
+    "OPENAI_NANO_MODEL": "gpt-5.6-luna"
   },
   "context": {
     "companyId": "company-arunika-audit",

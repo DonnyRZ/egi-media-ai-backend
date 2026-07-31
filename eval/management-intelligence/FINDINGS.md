@@ -64,6 +64,7 @@ Do **not** rely on prompt wording alone.
 
 ## Phase 4 — review status
 
-- Unit tests for gate (including upgrade + FP/TN non-upgrade + TN-2 demote) must stay green.
-- Production replay must show FP-1..4 stop, TP-1..3 continue, TN stop.
-- Live eval multi-industry critical set must stay green under body=false + gate.
+- Unit tests for gate (including upgrade + FP/TN non-upgrade + TN-2 demote): green.
+- Production replay (`replay-production.js` baseline): **10/10 matchExpected**, 0 FP, 0 FN.
+- Live eval critical set (A peer/dining/regulation/negatives + B manufacturing + C fintech): green (C retried after transient provider error).
+- Deployed `c2a3e41` to VPS; active issues reduced to Sutan Raja, Badung JLS, Rumah Makan Padang.

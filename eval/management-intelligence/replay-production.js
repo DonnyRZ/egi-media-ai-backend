@@ -228,8 +228,8 @@ async function main() {
   const fixture = JSON.parse(fs.readFileSync(CASES_PATH, "utf8"));
 
   const models = {
-    nanoModel: process.env.OPENAI_NANO_MODEL || fixture.productionEnv?.OPENAI_NANO_MODEL || "gpt-5-nano",
-    miniModel: process.env.OPENAI_MINI_MODEL || fixture.productionEnv?.OPENAI_MINI_MODEL || "gpt-5-mini",
+    nanoModel: process.env.OPENAI_NANO_MODEL || fixture.productionEnv?.OPENAI_NANO_MODEL || process.env.OPENAI_MODEL || "gpt-5.6-luna",
+    miniModel: process.env.OPENAI_MINI_MODEL || fixture.productionEnv?.OPENAI_MINI_MODEL || process.env.OPENAI_MODEL || "gpt-5.6-luna",
   };
   const client = createOpenAiClient({ apiKey, timeoutMs: 180000 });
   const kernel = new AiTaskKernel({

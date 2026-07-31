@@ -14,7 +14,7 @@ function resolveModel(modelAlias, openaiConfig) {
     });
   }
 
-  const model = openaiConfig[configKey];
+  const model = openaiConfig[configKey] || openaiConfig.model;
   if (!model || typeof model !== "string") {
     throw new AiConfigurationError("Configured AI model is missing", {
       details: { modelAlias, configKey },
