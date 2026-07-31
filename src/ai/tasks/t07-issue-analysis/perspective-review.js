@@ -5,7 +5,7 @@ const {
 } = require("./definition");
 const { T07_OUTPUT_SCHEMA } = require("./schema");
 const { validateT07Output } = require("./output-validator");
-const { leadershipSystemPreamble, withManagementIdentity } = require("../../identity/prompt-stamp");
+const { leadershipSystemPreamble, withManagementIdentity, REGISTRY_BOOTSTRAP_CONTEXT } = require("../../identity/prompt-stamp");
 
 const T07_PERSPECTIVE_REVIEW_SCHEMA = Object.freeze({
   name: "management_perspective_review_v1",
@@ -85,7 +85,7 @@ function buildPerspectiveReviewInput({
   ];
 }
 
-const REVIEW_SYSTEM_POLICY = buildReviewSystemPolicy({});
+const REVIEW_SYSTEM_POLICY = buildReviewSystemPolicy(REGISTRY_BOOTSTRAP_CONTEXT);
 
 function validatePerspectiveReview(data, {
   allowedArticleIds,
