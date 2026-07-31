@@ -8,12 +8,12 @@ const { buildT12Input } = require("./prompt");
 const { validateT12Output } = require("./output-validator");
 
 class DirectAlertBlurbService {
-  constructor({ eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getEffectiveContext = null, authorizeCompany = denyByDefault }) {
     if (!eventStore?.get || !eventStore?.markContentBlocked) throw new AiConfigurationError("T12 requires alert event persistence");
     if (!issueStore?.getIssue || !issueStore?.getDevelopment || !issueStore?.getArticleForDevelopment || !issueStore?.getAlertContentReadiness) throw new AiConfigurationError("T12 requires scoped issue and development reads");
     if (!analysisStore?.getCurrent || !priorityStore?.get || !reasonStore?.get) throw new AiConfigurationError("T12 requires validated priority handoff reads");
     if (!blurbStore?.get || !blurbStore?.create || !promptExecutionService?.executeActive) throw new AiConfigurationError("T12 requires blurb persistence and prompt execution");
-    Object.assign(this, { eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
+    Object.assign(this, { eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore, resolveOutputLanguage, getEffectiveContext, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, alertEventId }) {
@@ -26,10 +26,13 @@ class DirectAlertBlurbService {
     if (existing) return { blurb: existing, event, reused: true };
     try {
       const input = await this._loadValidatedInput({ tenantId, companyId, event });
+      const context = typeof this.getEffectiveContext === "function"
+        ? await this.getEffectiveContext(companyId, tenantId)
+        : null;
       const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
       const execution = await this.promptExecutionService.executeActive({
         promptId: T12_PROMPT_ID, promptVersion: T12_PROMPT_VERSION, model: "nano",
-        input: buildT12Input({ tenantId, companyId, ...input, outputLanguage }), outputSchema: T12_OUTPUT_SCHEMA,
+        input: buildT12Input({ tenantId, companyId, ...input, outputLanguage, context }), outputSchema: T12_OUTPUT_SCHEMA,
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT12Output(data, { claimIds: new Set(input.sourceClaims.map((claim) => claim.claimId)) }),
       });

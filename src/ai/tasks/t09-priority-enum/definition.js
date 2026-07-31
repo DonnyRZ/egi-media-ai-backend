@@ -1,5 +1,5 @@
 const T09_PROMPT_ID = "T09_priority_enum";
-const T09_PROMPT_VERSION = "1.0.0";
+const T09_PROMPT_VERSION = "1.1.0";
 
 function createT09PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT09PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.0",
+    inputSchemaVersion: "1.1",
     outputSchemaVersion: "1.0",
-    changeSummary: "Classify one current validated issue analysis into a priority enum",
+    changeSummary: "FULL CONTEXT: leadership identity + company_context fields for priority enum",
     approvedBy: null,
-    rollbackVersion: null,
+    rollbackVersion: "1.0.0",
   };
 }
 

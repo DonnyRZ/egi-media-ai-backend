@@ -1,7 +1,7 @@
 "use strict";
 
 const { isContinuingRelevance } = require("./relevance-policy");
-const { applyContextOverlapGate, tokenize } = require("./context-overlap-gate");
+const { hasIndustryPriorityOverlap, tokenize } = require("./context-overlap-gate");
 
 const SUBJECT_RELATIONS = Object.freeze(["self", "competitor", "market", "unrelated"]);
 const STOP_WORDS = new Set([
@@ -129,14 +129,7 @@ function findAliasHits(aliases, title, summary, body = "") {
 }
 
 function industryOverlapPresent(fields, title, summary) {
-  const overlap = applyContextOverlapGate({
-    relevance: "medium",
-    confidence: 0.5,
-    fields,
-    title,
-    summary,
-  });
-  return !overlap.gated && (overlap.hits || 0) >= 1;
+  return hasIndustryPriorityOverlap(fields, title, summary);
 }
 
 /**
@@ -153,6 +146,8 @@ function applySubjectIdentityGate({
   body = "",
 }) {
   const competitors = Array.isArray(fields.competitors) ? fields.competitors : [];
+  // Persisted as competitorOptIn for API/DB compat: true when competitors[] is non-empty.
+  // Not a product feature flag — unlisted peers become "market", not blocked.
   const competitorOptIn = competitors.length > 0;
   const selfHits = findAliasHits(collectSelfAliases(fields), title, summary, body);
   const competitorHits = competitorOptIn
@@ -226,7 +221,7 @@ function applySubjectIdentityGate({
   // An unlisted competitor is a market signal, not irrelevant content.
   if (nextRelation === "competitor" && !competitorOptIn) {
     gated = true;
-    reason = "competitor_without_opt_in_list";
+    reason = "competitor_without_listed_peers";
     nextRelation = industryOverlapPresent(fields, title, summary) ? "market" : "unrelated";
     if (nextRelation === "unrelated" && isContinuingRelevance(nextRelevance)) {
       nextRelevance = "none";

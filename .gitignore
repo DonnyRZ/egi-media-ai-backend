@@ -8,8 +8,17 @@ logs
 coverage
 .data/
 
+# Local sandbox profiles / generated identity previews (not product fixtures)
+company-profile-test/
+
+# One-off agent/E2E dumps — do not commit
+scripts/*-stdout.txt
+scripts/e2e-*.js
+eval/**/*-stdout.txt
+eval/t02/*.log
+backend-stdout.log
+
 # Management-intelligence audit outputs contain raw model responses.
 eval/management-intelligence/live-result.json
 eval/management-intelligence/replay-result.json
 eval/management-intelligence/*-stdout.txt
-

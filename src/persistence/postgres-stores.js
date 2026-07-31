@@ -31,7 +31,7 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
       decisionId: id, tenantId, articleId, companyId, contextVersion, inputFingerprint, source,
       relevance: output.relevance, confidence: output.confidence,
       subjectRelation, competitorOptIn,
-      branch: branchForDecision({ relevance: output.relevance, subjectRelation, competitorOptIn }),
+      branch: branchForDecision({ relevance: output.relevance, subjectRelation }),
       provenance, createdAt: new Date().toISOString(),
     };
     const payload = json({ ...value, source, inputFingerprint });
@@ -138,7 +138,7 @@ function mapRelevance(row) {
     subjectRelation,
     competitorOptIn,
     // Recompute branch so legacy continue rows and market leaks cannot reopen issue formation.
-    branch: branchForDecision({ relevance, subjectRelation, competitorOptIn }),
+    branch: branchForDecision({ relevance, subjectRelation }),
     createdAt: row.created_at?.toISOString?.() || row.created_at,
   };
 }

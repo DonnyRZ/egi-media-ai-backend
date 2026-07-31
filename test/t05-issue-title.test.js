@@ -5,6 +5,7 @@ const { InMemoryRelevanceDecisionStore } = require("../src/ai/tasks/t02-relevanc
 const { InMemoryIssueMatchDecisionStore } = require("../src/ai/tasks/t04-issue-match");
 const { InMemoryIssueStore } = require("../src/issues");
 const { createT05IssueTitleRuntime } = require("../src/ai/tasks/t05-issue-title");
+const { T05_PROMPT_VERSION } = require("../src/ai/tasks/t05-issue-title/definition");
 const { fingerprint } = require("../src/ai/tasks/t02-relevance-class/service");
 
 const tenantId = "tenant-h";
@@ -76,7 +77,7 @@ test("T05 generates a bounded title only for a titleless active issue and leaves
   assert.match(input[1].content, /<UNTRUSTED_ARTICLE_DATA>/);
   assert.match(input[1].content, /New logistics regulation/);
   assert.doesNotMatch(input[1].content, /This full article body must not be sent to T05/);
-  assert.equal(issueStore.getGeneratedTitle({ issueId: mutation.issueId, developmentId: mutation.developmentId, promptVersion: "1.0.0" }).title, result.title.title);
+  assert.equal(issueStore.getGeneratedTitle({ issueId: mutation.issueId, developmentId: mutation.developmentId, promptVersion: T05_PROMPT_VERSION }).title, result.title.title);
 });
 
 test("T05 is idempotent after a successful title write", async () => {

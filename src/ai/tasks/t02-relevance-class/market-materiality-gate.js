@@ -8,23 +8,29 @@ const { tokenize } = require("./context-overlap-gate");
  *
  * Continues only when a market-classified article has a direct hook to concrete
  * company_context fields. Topic/priority keyword coincidence alone is never enough.
- * Synonym families are derived from runtime field text (multi-industry), not a
- * hard-coded tenant brand.
+ *
+ * Product-category expansions activate only when those stems already appear in
+ * the tenant's products/industry fields (multi-industry safe — no brand bias).
  */
 
 const COMMERCIAL_ACTION_RE = /\b(promo|promosi|diskon|discount|launch|luncur|membuka|dibuka|tutup|penutupan|ekspansi|expansion|harga|price|tarif|direct[\s-]?book|pasar|market|gelar|event|acara|grand\s+opening|akuisisi|acquisition|merger|paket|package|campaign|kampanye)\b/i;
 
 const PROJECT_REG_RE = /\b(infrastruktur|bandara|pelabuhan|regulasi|peraturan|undang[\s-]?undang|pajak|levy|groundbreaking|pembangunan|shortcut|tol|jembatan|kebijakan|policy|duty|tarif\s+impor|import\s+duty|jalan\s+lingkar|ruas\s+jalan|triliun|miliar)\b/i;
 
-const DESTINATION_DEMAND_RE = /\b(pariwisata|tourism|destinasi|destination|wisatawan|visitor|kunjungan|konektivitas|connectivity|kemacetan|aksesibilitas)\b/i;
+/** Accessibility / demand-pressure signals in an operating geography. */
+const OPERATING_DEMAND_RE = /\b(pariwisata|tourism|destinasi|destination|wisatawan|visitor|kunjungan|konektivitas|connectivity|kemacetan|aksesibilitas|accessibility|congest)\b/i;
 
-const FAMILY_RULES = Object.freeze([
+/**
+ * Expand product/industry stems already present in company context into common
+ * article phrasings. Rules never fire unless the tenant's own fields match `field`.
+ */
+const PRODUCT_CATEGORY_EXPAND = Object.freeze([
   {
     field: /hotel|resort|lodging|hospitality|perhotelan|penginapan|akomodasi|accommodation/i,
     article: /\b(hotel|resort|penginapan|convention|konvensi|kamar|akomodasi|hospitality|lodging)\b/i,
   },
   {
-    field: /restoran|restaurant|dining|food|beverage|kuliner|f\s*&\s*b|kafe|cafe|culin/i,
+    field: /restoran|restaurant|dining|food|beverage|kuliner|f\s*&\s*b|kafe|cafe|culin|katering/i,
     article: /\b(restoran|restaurant|rumah\s+makan|kuliner|cafe|kafe|food|beverage|dining|makanan|hidangan)\b/i,
   },
   {
@@ -100,13 +106,10 @@ function hasRegionHit(text, fields = {}) {
   return countTokenHits(text, regionTokens(fields)).hits >= 1;
 }
 
-function hasFieldFamily(fields, fieldPattern) {
-  return fieldPattern.test(fieldBlob(fields));
-}
-
-function hasPeerFamilyHit(fields, text) {
-  for (const rule of FAMILY_RULES) {
-    if (rule.field.test(fieldBlob(fields)) && rule.article.test(text)) return true;
+function hasExpandedProductCategoryHit(fields, text) {
+  const blob = fieldBlob(fields);
+  for (const rule of PRODUCT_CATEGORY_EXPAND) {
+    if (rule.field.test(blob) && rule.article.test(text)) return true;
   }
   return false;
 }
@@ -114,7 +117,6 @@ function hasPeerFamilyHit(fields, text) {
 function hasDependencyHit(fields, text) {
   const norm = normalizeText(text);
   for (const phrase of dependencyPhrases(fields)) {
-    // Require a 2+ token distinctive fragment, not a single generic word.
     const parts = phrase.split(/\s+/).filter((part) => part.length >= 5);
     if (parts.length === 0) continue;
     if (parts.filter((part) => norm.includes(part)).length >= 2) return true;
@@ -139,27 +141,23 @@ function applyMarketMaterialityGate({
   const commercial = COMMERCIAL_ACTION_RE.test(text);
   const project = PROJECT_REG_RE.test(text);
   const region = hasRegionHit(text, fields);
-  const peerFamily = hasPeerFamilyHit(fields, text);
+  const productCategory = hasExpandedProductCategoryHit(fields, text);
   const dependency = hasDependencyHit(fields, text);
-  const destinationIndustry = hasFieldFamily(
-    fields,
-    /hotel|resort|lodging|hospitality|perhotelan|penginapan|restoran|restaurant|dining|kuliner/i,
-  );
+  const hasOperatingRegions = Array.isArray(fields.regions) && fields.regions.length > 0;
 
   // Rescue true-positive peer/product moves the model underrates as low/none.
-  // Only peer/product + commercial action — never region/project upgrades
-  // (those would rescue local roadworks that correctly scored low).
+  // Only product/category + commercial action — never region/project upgrades.
   if (
     !isContinuingRelevance(relevance)
     && subjectRelation === "market"
-    && ((peerFamily && commercial) || (pi.hits >= 1 && commercial))
+    && ((productCategory && commercial) || (pi.hits >= 1 && commercial))
   ) {
     return {
       relevance: "medium",
       confidence: Math.max(typeof confidence === "number" ? confidence : 0.5, 0.55),
       gated: true,
       reason: "peer_commercial_action_upgrade",
-      hook: peerFamily && commercial ? "peer_family_commercial_action" : "product_industry_overlap",
+      hook: productCategory && commercial ? "product_category_commercial_action" : "product_industry_overlap",
       matched: pi.matched,
     };
   }
@@ -185,13 +183,13 @@ function applyMarketMaterialityGate({
       matched: pi.matched,
     };
   }
-  if (peerFamily && commercial) {
+  if (productCategory && commercial) {
     return {
       relevance,
       confidence,
       gated: false,
       reason: null,
-      hook: "peer_family_commercial_action",
+      hook: "product_category_commercial_action",
       matched: [],
     };
   }
@@ -205,15 +203,15 @@ function applyMarketMaterialityGate({
       matched: [],
     };
   }
-  // Operators whose context is lodging/dining care about destination
-  // infrastructure even when the article names a sub-region not listed verbatim.
-  if (destinationIndustry && project && DESTINATION_DEMAND_RE.test(text)) {
+  // Sub-region infrastructure that affects listed operating geographies even
+  // when the article names a district not listed verbatim in regions[].
+  if (hasOperatingRegions && project && OPERATING_DEMAND_RE.test(text)) {
     return {
       relevance,
       confidence,
       gated: false,
       reason: null,
-      hook: "operating_industry_destination_project",
+      hook: "operating_area_infrastructure_demand",
       matched: [],
     };
   }

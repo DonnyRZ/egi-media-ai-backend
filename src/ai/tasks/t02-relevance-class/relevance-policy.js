@@ -20,6 +20,7 @@ function isContinuingRelevance(relevance) {
  *
  * subject_relation controls analysis framing, not whether a material external
  * signal is useful to management. Unlisted peers are classified as market.
+ * competitorOptIn (listed competitors[]) does not gate issue formation.
  */
 function shouldFormIssue({ relevance, subjectRelation }) {
   if (!isContinuingRelevance(relevance)) return false;
@@ -36,11 +37,6 @@ function branchForDecision({ relevance, subjectRelation = null } = {}) {
   return shouldFormIssue({ relevance, subjectRelation }) ? "continue" : "stop";
 }
 
-/** @deprecated Prefer branchForDecision — relevance alone must not open issues. */
-function branchForRelevance(relevance) {
-  return isContinuingRelevance(relevance) ? "continue" : "stop";
-}
-
 module.exports = {
   CONTINUING_RELEVANCE,
   ALL_RELEVANCE,
@@ -48,5 +44,4 @@ module.exports = {
   isContinuingRelevance,
   shouldFormIssue,
   branchForDecision,
-  branchForRelevance,
 };

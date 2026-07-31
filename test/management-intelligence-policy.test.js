@@ -126,9 +126,9 @@ test("T07 generation and review contracts target dashboard-company management", 
   });
   const generationText = generationInput.map((item) => item.content).join("\n");
   const reviewText = reviewInput.map((item) => item.content).join("\n");
-  assert.match(generationText, /management team of the company/i);
+  assert.match(generationText, /management \/ leadership of the company|management_identity/i);
   assert.match(generationText, /never write an operations brief for the external company/i);
-  assert.match(reviewText, /dashboard company's management/i);
-  assert.match(reviewText, /invented company facts/i);
+  assert.match(reviewText, /your company's leadership|leadership persona/i);
+  assert.match(reviewText, /invents company|invented company facts/i);
 });
 

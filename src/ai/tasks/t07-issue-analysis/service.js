@@ -21,13 +21,13 @@ const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
 
 class IssueAnalysisService {
-  constructor({ cmsSourceGate, issueStore, relevanceDecisionStore = null, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault, timeoutMs = null }) {
+  constructor({ cmsSourceGate, issueStore, relevanceDecisionStore = null, getEffectiveContext, analysisStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault, timeoutMs = null, enablePerspectiveReview = true }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T07 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.listArticles) throw new AiConfigurationError("T07 requires issue evidence persistence");
     if (typeof getEffectiveContext !== "function") throw new AiConfigurationError("T07 requires effective Company Context reader");
     if (!analysisStore?.get || !analysisStore?.create) throw new AiConfigurationError("T07 requires analysis persistence");
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T07 requires prompt execution service");
-    Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany, timeoutMs });
+    Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany, timeoutMs, enablePerspectiveReview: enablePerspectiveReview !== false });
   }
 
   async analyze({ tenantId, companyId, issueId }) {
@@ -63,30 +63,46 @@ class IssueAnalysisService {
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT07Output(data, { allowedArticleIds, expectedSubjectRelation: subjectRelation }),
     });
-    const review = await this.promptExecutionService.executeActive({
-      promptId: T07_REVIEW_PROMPT_ID,
-      promptVersion: T07_REVIEW_PROMPT_VERSION,
-      model: "mini",
-      input: buildPerspectiveReviewInput({
-        tenantId,
-        companyId,
-        context,
-        evidence,
-        outputLanguage,
-        subjectRelation,
-        candidate: execution.data,
-      }),
-      outputSchema: T07_PERSPECTIVE_REVIEW_SCHEMA,
-      timeoutMs: this.timeoutMs,
-      budgetScope: { tenantId, companyId },
-      validateResult: (data) => validatePerspectiveReview(data, {
-        allowedArticleIds,
-        expectedSubjectRelation: subjectRelation,
-      }),
-    });
-    const reviewedAnalysis = review.data.verdict === "corrected"
-      ? review.data.corrected_analysis
-      : execution.data;
+    let reviewedAnalysis = execution.data;
+    let reviewProvenance = {
+      enabled: false,
+      skipped: true,
+      reason: "perspective_review_disabled",
+    };
+    if (this.enablePerspectiveReview) {
+      const review = await this.promptExecutionService.executeActive({
+        promptId: T07_REVIEW_PROMPT_ID,
+        promptVersion: T07_REVIEW_PROMPT_VERSION,
+        model: "mini",
+        input: buildPerspectiveReviewInput({
+          tenantId,
+          companyId,
+          context,
+          evidence,
+          outputLanguage,
+          subjectRelation,
+          candidate: execution.data,
+        }),
+        outputSchema: T07_PERSPECTIVE_REVIEW_SCHEMA,
+        timeoutMs: this.timeoutMs,
+        budgetScope: { tenantId, companyId },
+        validateResult: (data) => validatePerspectiveReview(data, {
+          allowedArticleIds,
+          expectedSubjectRelation: subjectRelation,
+        }),
+      });
+      reviewedAnalysis = review.data.verdict === "corrected"
+        ? review.data.corrected_analysis
+        : execution.data;
+      reviewProvenance = {
+        enabled: true,
+        promptId: T07_REVIEW_PROMPT_ID,
+        promptVersion: T07_REVIEW_PROMPT_VERSION,
+        verdict: review.data.verdict,
+        violations: review.data.violations,
+        provenance: review.provenance,
+      };
+    }
     const analysis = await this.analysisStore.create({
       tenantId, companyId, issueId, contextVersion: context.version, inputFingerprint, promptVersion: T07_PROMPT_VERSION,
       analysis: reviewedAnalysis,
@@ -94,13 +110,7 @@ class IssueAnalysisService {
       provenance: {
         ...execution.provenance,
         subjectRelation,
-        managementPerspectiveReview: {
-          promptId: T07_REVIEW_PROMPT_ID,
-          promptVersion: T07_REVIEW_PROMPT_VERSION,
-          verdict: review.data.verdict,
-          violations: review.data.violations,
-          provenance: review.provenance,
-        },
+        managementPerspectiveReview: reviewProvenance,
       },
     });
     return { analysis, reused: false };
@@ -190,6 +200,7 @@ function resolveIssueSubjectRelation(fields, evidence) {
 function fingerprint({ issue, context, evidence, subjectRelation }) {
   return createHash("sha256").update(JSON.stringify({
     issueId: issue.issueId, issueVersion: issue.version, contextVersion: context.version,
+    managementIdentityFingerprint: context.managementIdentity?.fingerprint || null,
     subjectRelation,
     evidence: evidence.map((item) => ({ id: item.sourceArticleId, locale: item.requestedLocale, updatedAt: item.article.updatedAt, title: item.article.title, summary: item.article.summary, content: item.article.content })),
   })).digest("hex");

@@ -50,7 +50,6 @@ class InMemoryRelevanceDecisionStore {
       branch: branchForDecision({
         relevance: output.relevance,
         subjectRelation,
-        competitorOptIn,
       }),
       source: {
         sourceArticleId: source.sourceArticleId,

@@ -10,7 +10,7 @@ const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
 class IssueOneLinerService {
-  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getEffectiveContext = null, authorizeCompany = denyByDefault }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T06 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.getLatestDevelopment || !issueStore?.getGeneratedOneLiner || !issueStore?.applyGeneratedOneLiner) {
       throw new AiConfigurationError("T06 requires issue one-liner persistence");
@@ -18,7 +18,7 @@ class IssueOneLinerService {
     if (!matchDecisionStore?.getById || !relevanceDecisionStore?.getById || !promptExecutionService?.executeActive) {
       throw new AiConfigurationError("T06 requires validated upstream decisions and prompt execution");
     }
-    Object.assign(this, { cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
+    Object.assign(this, { cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, getEffectiveContext, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, issueId }) {
@@ -48,10 +48,13 @@ class IssueOneLinerService {
     if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion, inputOptions: resolveT02InputOptions() }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T06 refuses to generate from a stale article snapshot");
     }
+    const context = typeof this.getEffectiveContext === "function"
+      ? await this.getEffectiveContext(companyId, tenantId)
+      : null;
     const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T06_PROMPT_ID, promptVersion: T06_PROMPT_VERSION, model: "nano",
-      input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }),
+      input: buildT06Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage, context }),
       outputSchema: T06_OUTPUT_SCHEMA, validateResult: validateT06Output,
       budgetScope: { tenantId, companyId },
     });

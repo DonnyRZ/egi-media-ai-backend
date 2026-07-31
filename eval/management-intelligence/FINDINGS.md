@@ -56,7 +56,8 @@ Do **not** rely on prompt wording alone.
 
 ## Phase 3 — implemented
 
-- `applyMarketMaterialityGate` (`market-materiality-gate.js`), fingerprint `v14-market-materiality-gate`, T02 prompt **1.9.2**.
+- `applyMarketMaterialityGate` (`market-materiality-gate.js`), fingerprint gateStack `v15-pre-identity-cleanup` (was `v14-market-materiality-gate`), T02 prompt **1.9.2**.
+- Pre-identity cleanup (2026-07-31): removed dead continue-path `applyContextOverlapGate` demotion + stub provenance; `context-overlap-gate.js` is lexical helpers only; dropped deprecated `branchForRelevance`; destination keep is operating-regions + project + demand (not hospitality-industry gated).
 - Demote continuing `market` without a direct context hook.
 - **Upgrade path:** if the model returns low/none for `market` but title/summary already show peer-family/product + commercial action, promote to `medium` (rescues stochastic Padang-style FN).
 - **Not** upgraded on region/project alone (would promote local roadworks).

@@ -38,8 +38,8 @@ test("market materiality gate keeps region infrastructure project", () => {
   assert.ok([
     "product_industry_overlap",
     "region_project_or_regulation",
-    "peer_family_commercial_action",
-    "operating_industry_destination_project",
+    "product_category_commercial_action",
+    "operating_area_infrastructure_demand",
   ].includes(gated.hook));
 });
 
@@ -80,7 +80,7 @@ test("market materiality gate stops unrelated vendor water-heater metric", () =>
   assert.equal(shouldFormIssue({ relevance: gated.relevance, subjectRelation: "market" }), false);
 });
 
-test("market materiality gate stops labour advocacy without direct hospitality hook", () => {
+test("market materiality gate stops labour advocacy without direct product hook", () => {
   const gated = gateCase("FP-2");
   assert.equal(gated.gated, true);
   assert.equal(gated.relevance, "low");

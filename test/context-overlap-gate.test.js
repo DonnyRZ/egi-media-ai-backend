@@ -1,6 +1,8 @@
+"use strict";
+
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { applyContextOverlapGate } = require("../src/ai/tasks/t02-relevance-class/context-overlap-gate");
+const { hasIndustryPriorityOverlap } = require("../src/ai/tasks/t02-relevance-class/context-overlap-gate");
 
 const fields = {
   industry: "Hospitality operations",
@@ -20,52 +22,46 @@ const fields = {
   sub_industry: "Hotel and restaurant management",
 };
 
-test("context overlap gate downgrades continuing relevance without field hooks", () => {
-  const gated = applyContextOverlapGate({
-    relevance: "medium",
-    confidence: 0.7,
-    fields,
-    title: "Bentrokan warga menyebabkan motor hangus",
-    summary: "Satu orang tewas dalam bentrokan di kawasan padat masyarakat.",
-  });
-  assert.equal(gated.relevance, "low");
-  assert.equal(gated.gated, true);
-  assert.equal(gated.reason, "no_company_context_field_overlap");
+test("industry/priority overlap is false without field hooks", () => {
+  assert.equal(
+    hasIndustryPriorityOverlap(
+      fields,
+      "Bentrokan warga menyebabkan motor hangus",
+      "Satu orang tewas dalam bentrokan di kawasan padat masyarakat.",
+    ),
+    false,
+  );
 });
 
-test("context overlap gate ignores country name and generic community words", () => {
-  const gated = applyContextOverlapGate({
-    relevance: "medium",
-    confidence: 0.7,
-    fields,
-    title: "Pemkot Serang tanam mangrove di pesisir Indonesia",
-    summary: "Aksi lingkungan bersama warga tanpa tautan operasi properti.",
-  });
-  assert.equal(gated.relevance, "low");
-  assert.equal(gated.gated, true);
+test("industry/priority overlap ignores country name and generic community words", () => {
+  assert.equal(
+    hasIndustryPriorityOverlap(
+      fields,
+      "Pemkot Serang tanam mangrove di pesisir Indonesia",
+      "Aksi lingkungan bersama warga tanpa tautan operasi properti.",
+    ),
+    false,
+  );
 });
 
-test("context overlap gate keeps lexical hooks when product/topic tokens exist (identity gate is separate)", () => {
-  const kept = applyContextOverlapGate({
-    relevance: "medium",
-    confidence: 0.7,
-    fields,
-    title: "Hotel promo July Mid Year Magic",
-    summary: "Resort dining package for guest experience.",
-  });
-  assert.equal(kept.relevance, "medium");
-  assert.equal(kept.gated, false);
-  assert.ok(kept.hits >= 1);
+test("industry/priority overlap is true when product/topic tokens exist", () => {
+  assert.equal(
+    hasIndustryPriorityOverlap(
+      fields,
+      "Hotel promo July Mid Year Magic",
+      "Resort dining package for guest experience.",
+    ),
+    true,
+  );
 });
 
-test("single generic priority token is not enough to continue", () => {
-  const gated = applyContextOverlapGate({
-    relevance: "high",
-    confidence: 0.8,
-    fields,
-    title: "Efisiensi energi water heater rumah tangga",
-    summary: "Konsumen memprioritaskan hemat daya tanpa kaitan properti penginapan.",
-  });
-  assert.equal(gated.relevance, "low");
-  assert.equal(gated.gated, true);
+test("single generic priority token is not enough for overlap", () => {
+  assert.equal(
+    hasIndustryPriorityOverlap(
+      fields,
+      "Efisiensi energi water heater rumah tangga",
+      "Konsumen memprioritaskan hemat daya tanpa kaitan properti penginapan.",
+    ),
+    false,
+  );
 });

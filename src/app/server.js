@@ -284,9 +284,11 @@ class Server {
   _getCompanyContextRuntime() {
     if (!this.companyContextRuntime) {
       const persistence = this._getPersistenceRuntime();
+      const identityRuntime = this._getManagementIdentityRuntime();
       this.companyContextRuntime = createCompanyContextRuntime({
         draftStore: persistence?.contextDraftStore,
         effectiveContextStore: persistence?.effectiveContextStore,
+        managementIdentityService: identityRuntime?.service || null,
         authorize: async ({ actor, tenantId, companyId, action }) => {
           try {
             await this.authorizationService.authorize({ actor, tenantId, companyId }, action);
@@ -298,6 +300,40 @@ class Server {
       });
     }
     return this.companyContextRuntime;
+  }
+
+  _getManagementIdentityRuntime() {
+    if (!this.managementIdentityRuntime) {
+      const persistence = this._getPersistenceRuntime();
+      const { createManagementIdentityRuntime } = require("../ai/identity");
+      this.managementIdentityRuntime = createManagementIdentityRuntime({
+        aiTaskKernel: createAiTaskKernel(),
+        openaiConfig: config.get("/openai"),
+        identityStore: persistence?.managementIdentityStore || undefined,
+      });
+    }
+    return this.managementIdentityRuntime;
+  }
+
+  _getEffectiveFullContext(companyId, tenantId = null) {
+    const { getEffectiveFullContext } = require("../ai/identity");
+    return getEffectiveFullContext({
+      getEffectiveContext: (id, tid) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(id, tid),
+      identityStore: this._getManagementIdentityRuntime().identityStore,
+      companyId,
+      tenantId,
+    });
+  }
+
+  _getFullContextByVersion(companyId, version, tenantId = null) {
+    const { getFullContextByVersion } = require("../ai/identity");
+    return getFullContextByVersion({
+      getContextVersion: (id, ver, tid) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(id, ver, tid),
+      identityStore: this._getManagementIdentityRuntime().identityStore,
+      companyId,
+      contextVersion: version,
+      tenantId,
+    });
   }
 
   _getCompanyContextDraftService() {
@@ -319,7 +355,7 @@ class Server {
         openaiConfig: config.get("/openai"),
         cmsSourceGate: this._getIssueSourceResolver(),
         decisionStore: this._getPersistenceRuntime()?.relevanceDecisionStore,
-        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
+        getEffectiveContext: async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -336,7 +372,7 @@ class Server {
         decisionStore: this.relevanceRuntime.decisionStore,
         rationaleStore: this._getPersistenceRuntime()?.rationaleStore,
         companyStore: this.companyStore,
-        getCompanyContextVersion: async (companyId, version, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getVersion(companyId, version, tenantId),
+        getCompanyContextVersion: async (companyId, version, tenantId) => this._getFullContextByVersion(companyId, version, tenantId),
         authorizeCompany: async ({ companyId }) => Boolean(companyId),
       });
     }
@@ -356,16 +392,19 @@ class Server {
         matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         issueStore, authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
+      const getEffectiveContext = async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId);
       const t05 = t05IssueTitle.createT05IssueTitleRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
+        getEffectiveContext,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t06 = t06IssueOneLiner.createT06IssueOneLinerRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), cmsSourceGate: this._getIssueSourceResolver(),
         issueStore, matchDecisionStore: t04.matchDecisionStore, relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
+        getEffectiveContext,
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       this.issueFormationRuntime = { issueStore, t04, mutation, t05, t06 };
@@ -396,7 +435,8 @@ class Server {
         issueStore: issueRuntime.issueStore, analysisStore: this._getPersistenceRuntime()?.analysisStore,
         relevanceDecisionStore: this.relevanceRuntime.decisionStore,
         companyStore: this.companyStore,
-        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
+        getEffectiveContext: async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId),
+        enablePerspectiveReview: process.env.T07_PERSPECTIVE_REVIEW !== "0",
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t08 = t08ClaimLabels.createT08ClaimLabelsRuntime({
@@ -423,14 +463,14 @@ class Server {
       const t09 = t09PriorityEnum.createT09PriorityEnumRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, priorityStore: this._getPersistenceRuntime()?.priorityStore,
-        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
+        getEffectiveContext: async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const t10 = t10PriorityReason.createT10PriorityReasonRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), issueStore: issueRuntime.issueStore,
         analysisStore: analysisRuntime.t07.analysisStore, priorityStore: t09.priorityStore, labelStore: analysisRuntime.t08.labelStore, reasonStore: this._getPersistenceRuntime()?.reasonStore,
         companyStore: this.companyStore,
-        getEffectiveContext: async (companyId, tenantId) => this._getCompanyContextRuntime().effectiveContextStore.getEffective(companyId, tenantId),
+        getEffectiveContext: async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       this.priorityRuntime = { t09, t10 };
@@ -498,6 +538,7 @@ class Server {
         issueStore: issueRuntime.issueStore, analysisStore: analysisRuntime.t07.analysisStore, priorityStore: priorityRuntime.t09.priorityStore,
         reasonStore: priorityRuntime.t10.reasonStore, blurbStore: this._getPersistenceRuntime()?.blurbStore,
         companyStore: this.companyStore,
+        getEffectiveContext: async (companyId, tenantId) => this._getEffectiveFullContext(companyId, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
     }
@@ -525,6 +566,7 @@ class Server {
       const narrativeRuntime = t13ReportNarrative.createT13ReportNarrativeRuntime({
         aiTaskKernel: createAiTaskKernel(), openaiConfig: config.get("/openai"), reportDraftStore: draftStore, narrativeStore: this._getPersistenceRuntime()?.reportNarrativeStore,
         companyStore: this.companyStore,
+        getCompanyContextVersion: async (companyId, version, tenantId) => this._getFullContextByVersion(companyId, version, tenantId),
         authorizeCompany: async ({ tenantId, companyId }) => Boolean(tenantId && companyId),
       });
       const shareIntents = [];

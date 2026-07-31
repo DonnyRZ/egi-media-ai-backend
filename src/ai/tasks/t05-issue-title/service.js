@@ -10,7 +10,7 @@ const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
 class IssueTitleService {
-  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getEffectiveContext = null, authorizeCompany = denyByDefault }) {
     if (!cmsSourceGate?.requirePublishedArticle) throw new AiConfigurationError("T05 requires CMS source gate");
     if (!issueStore?.getIssue || !issueStore?.getLatestDevelopment || !issueStore?.getGeneratedTitle || !issueStore?.applyGeneratedTitle) {
       throw new AiConfigurationError("T05 requires issue title persistence");
@@ -25,6 +25,7 @@ class IssueTitleService {
     this.promptExecutionService = promptExecutionService;
     this.companyStore = companyStore;
     this.resolveOutputLanguage = resolveOutputLanguage;
+    this.getEffectiveContext = getEffectiveContext;
     this.authorizeCompany = authorizeCompany;
   }
 
@@ -49,12 +50,15 @@ class IssueTitleService {
     if (fingerprint({ source, contextVersion: relevanceDecision.contextVersion, inputOptions: resolveT02InputOptions() }) !== relevanceDecision.inputFingerprint) {
       throw new AiConfigurationError("T05 refuses to title an issue from a stale article snapshot");
     }
+    const context = typeof this.getEffectiveContext === "function"
+      ? await this.getEffectiveContext(companyId, tenantId)
+      : null;
     const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
     const execution = await this.promptExecutionService.executeActive({
       promptId: T05_PROMPT_ID,
       promptVersion: T05_PROMPT_VERSION,
       model: "nano",
-      input: buildT05Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage }),
+      input: buildT05Input({ tenantId, companyId, issue, development, matchDecision, source, outputLanguage, context }),
       outputSchema: T05_OUTPUT_SCHEMA,
       budgetScope: { tenantId, companyId },
       validateResult: validateT05Output,

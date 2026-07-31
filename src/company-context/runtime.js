@@ -2,7 +2,12 @@ const { InMemoryCompanyContextDraftStore } = require("../ai/tasks/t01-company-co
 const { InMemoryEffectiveCompanyContextStore } = require("./effective-context.store");
 const { CompanyContextService } = require("./company-context.service");
 
-function createCompanyContextRuntime({ draftStore, effectiveContextStore, authorize } = {}) {
+function createCompanyContextRuntime({
+  draftStore,
+  effectiveContextStore,
+  authorize,
+  managementIdentityService = null,
+} = {}) {
   const contextDraftStore = draftStore || new InMemoryCompanyContextDraftStore();
   const effectiveStore = effectiveContextStore || new InMemoryEffectiveCompanyContextStore();
 
@@ -13,6 +18,7 @@ function createCompanyContextRuntime({ draftStore, effectiveContextStore, author
       draftStore: contextDraftStore,
       effectiveContextStore: effectiveStore,
       authorize,
+      managementIdentityService,
     }),
   };
 }

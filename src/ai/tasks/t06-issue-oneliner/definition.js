@@ -1,12 +1,12 @@
 const T06_PROMPT_ID = "T06_issue_oneliner";
-const T06_PROMPT_VERSION = "1.0.0";
+const T06_PROMPT_VERSION = "1.1.0";
 
 function createT06PromptDefinition({ modelName }) {
   return {
     promptId: T06_PROMPT_ID, version: T06_PROMPT_VERSION, status: "active", owner: "ai-engineering",
-    modelCompatibility: [modelName], inputSchemaVersion: "1.0", outputSchemaVersion: "1.0",
-    changeSummary: "Generate one bounded one-liner for an active issue with a valid title",
-    approvedBy: null, rollbackVersion: null,
+    modelCompatibility: [modelName], inputSchemaVersion: "1.1", outputSchemaVersion: "1.0",
+    changeSummary: "Leadership identity stamp (+ light company_context fields) for one-liner framing",
+    approvedBy: null, rollbackVersion: "1.0.0",
   };
 }
 

@@ -96,6 +96,31 @@ const contexts = {
   },
 };
 
+/** Leadership personas for FULL CONTEXT (fields stay factual scope). */
+const identities = {
+  A: {
+    version: "1.0.0",
+    company_name: "Northstar Lodging Collective",
+    identity: "You are the management and leadership of Northstar Lodging Collective. You focus on strategic decisions that shape your company's market position, guest demand, direct-channel growth, risk exposure, and response to material lodging and dining market signals. You lead a lodging and guest-services company.",
+    lens_summary: "You are the leadership of Northstar Lodging Collective, focused on strategic stewardship of your company.",
+    fingerprint: "eval-northstar",
+  },
+  B: {
+    version: "1.0.0",
+    company_name: "Vector Components",
+    identity: "You are the management and leadership of Vector Components. You focus on strategic decisions that shape your company's market position, production continuity, input-cost exposure, and response to material peer and supply-chain signals. You lead an industrial components manufacturer.",
+    lens_summary: "You are the leadership of Vector Components, focused on strategic stewardship of your company.",
+    fingerprint: "eval-vector",
+  },
+  C: {
+    version: "1.0.0",
+    company_name: "ClearLedger",
+    identity: "You are the management and leadership of ClearLedger. You focus on strategic decisions that shape your company's market position, merchant growth, credit quality, regulatory exposure, and response to material payments-market signals. You lead a digital financial services company.",
+    lens_summary: "You are the leadership of ClearLedger, focused on strategic stewardship of your company.",
+    fingerprint: "eval-clearledger",
+  },
+};
+
 const allScenarios = [
   scenario("A-peer", "A", true, "market",
     "Rival lodging operator launches 25% direct-channel discount in Metro One",
@@ -244,6 +269,7 @@ async function main() {
       version: 1,
       status: "effective",
       fields,
+      managementIdentity: identities[item.contextKey],
     };
     const source = sourceFor(item);
     const t02Input = buildT02Input({
@@ -391,6 +417,7 @@ async function main() {
   const report = {
     generatedAt: new Date().toISOString(),
     models,
+    fullContext: true,
     total: results.length,
     t02Pass: results.filter((item) => item.t02.pass).length,
     t02Stable: results.filter((item) => item.t02.operationallyStable).length,

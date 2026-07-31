@@ -6,10 +6,11 @@ const {
 } = require("./company-context.errors");
 
 class CompanyContextService {
-  constructor({ draftStore, effectiveContextStore, authorize = denyByDefault }) {
+  constructor({ draftStore, effectiveContextStore, authorize = denyByDefault, managementIdentityService = null }) {
     this.draftStore = draftStore;
     this.effectiveContextStore = effectiveContextStore;
     this.authorize = authorize;
+    this.managementIdentityService = managementIdentityService;
   }
 
   async getDraft({ actor, draftId }) {
@@ -99,7 +100,14 @@ class CompanyContextService {
       },
     }));
 
-    return { draft, effectiveContext: activation.context };
+    const managementIdentity = await this._draftIdentityForContext({
+      tenantId: activation.context.tenantId,
+      companyId: activation.context.companyId,
+      contextVersion: activation.context.version,
+      fields: activation.context.fields,
+    });
+
+    return { draft, effectiveContext: activation.context, managementIdentity };
   }
 
   async getEffectiveContext({ actor, tenantId = null, companyId }) {
@@ -109,6 +117,19 @@ class CompanyContextService {
       throw new CompanyContextNotFoundError("No approved effective Company Context exists", { details: { companyId } });
     }
     return context;
+  }
+
+  async getEffectiveFullContext({ actor, tenantId = null, companyId }) {
+    const context = await this.getEffectiveContext({ actor, tenantId, companyId });
+    if (!this.managementIdentityService) {
+      return { context, managementIdentity: null };
+    }
+    const record = await this.managementIdentityService.get({
+      tenantId: tenantId ?? context.tenantId ?? null,
+      companyId,
+      contextVersion: context.version,
+    });
+    return { context, managementIdentity: record };
   }
 
   async replaceEffectiveContext({ actor, tenantId = null, companyId, version, fields, changeReason = null }) {
@@ -131,7 +152,26 @@ class CompanyContextService {
         details: activation.conflict,
       });
     }
+
+    await this._draftIdentityForContext({
+      tenantId: activation.context.tenantId,
+      companyId: activation.context.companyId,
+      contextVersion: activation.context.version,
+      fields: activation.context.fields,
+    });
+
     return activation.context;
+  }
+
+  async _draftIdentityForContext({ tenantId, companyId, contextVersion, fields }) {
+    if (!this.managementIdentityService) return null;
+    return this.managementIdentityService.draftAndPersist({
+      tenantId,
+      companyId,
+      contextVersion,
+      fields,
+      throwOnError: false,
+    });
   }
 
   async _requireDraft(draftId) {

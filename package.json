@@ -19,7 +19,10 @@
     "swagger:validate": "node -e \"const fs=require('fs'); JSON.parse(fs.readFileSync('swagger_output.json','utf8')); console.log('swagger_output.json is valid JSON')\"",
     "production:gate": "node scripts/production-readiness-gate.js",
     "multi-tenant:gate": "node scripts/multi-tenant-readiness-gate.js",
-    "logs:inspect": "node scripts/inspect-logs.js"
+    "logs:inspect": "node scripts/inspect-logs.js",
+    "identity:generate": "node scripts/generate-management-identity.js",
+    "identity:preview": "node scripts/preview-management-identity.js",
+    "identity:quality": "node scripts/check-management-identity-quality.js"
   },
   "dependencies": {
     "ajv": "^8.20.0",

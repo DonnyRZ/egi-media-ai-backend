@@ -120,7 +120,6 @@ class RelevanceClassificationService {
         shouldContinue: shouldFormIssue({
           relevance: existing.relevance,
           subjectRelation: existing.subjectRelation,
-          competitorOptIn: existing.competitorOptIn === true,
         }),
       };
     }
@@ -168,7 +167,6 @@ class RelevanceClassificationService {
         hook: materiality.hook || null,
         matched: materiality.matched || [],
       },
-      contextOverlapGate: { gated: false, reason: null, hits: null, matched: [] },
     };
 
     const provenance = {
@@ -178,7 +176,6 @@ class RelevanceClassificationService {
       merged: { relevance: merged.relevance, confidence: merged.confidence, subject_relation: merged.subject_relation },
       identityGate: output.identityGate,
       marketMaterialityGate: output.marketMaterialityGate,
-      contextOverlapGate: output.contextOverlapGate,
     };
     const persistedOutput = {
       relevance: output.relevance,
@@ -204,7 +201,6 @@ class RelevanceClassificationService {
       shouldContinue: shouldFormIssue({
         relevance: decision.relevance,
         subjectRelation: decision.subjectRelation,
-        competitorOptIn: decision.competitorOptIn === true,
       }),
     };
   }
@@ -256,8 +252,8 @@ function fingerprint({ source, contextVersion, inputOptions = null }) {
     base.bodySnippet = cleaned.slice(0, chars);
     base.bodySnippetChars = chars;
   }
-  // Bump when identity/subject_relation gate semantics change so stale continues are not reused.
-  base.contextOverlapGate = "v14-market-materiality-gate";
+  // Bump when identity/materiality gate semantics change so stale continues are not reused.
+  base.gateStack = "v16-management-identity";
   return createHash("sha256").update(JSON.stringify(base)).digest("hex");
 }
 

@@ -10,7 +10,6 @@ const {
   isContinuingRelevance,
   shouldFormIssue,
   branchForDecision,
-  branchForRelevance,
 } = require("./relevance-policy");
 const { applySubjectIdentityGate } = require("./subject-identity-gate");
 
@@ -28,6 +27,5 @@ module.exports = {
   isContinuingRelevance,
   shouldFormIssue,
   branchForDecision,
-  branchForRelevance,
   applySubjectIdentityGate,
 };

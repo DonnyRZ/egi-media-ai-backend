@@ -1,5 +1,5 @@
 const T03_PROMPT_ID = "T03_relevance_rationale";
-const T03_PROMPT_VERSION = "1.0.0";
+const T03_PROMPT_VERSION = "1.1.0";
 
 function createT03PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT03PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.0",
+    inputSchemaVersion: "1.1",
     outputSchemaVersion: "1.0",
-    changeSummary: "Optional short explanation of an immutable T02 relevance decision",
+    changeSummary: "FULL CONTEXT: leadership identity + company_context fields on rationale",
     approvedBy: null,
-    rollbackVersion: null,
+    rollbackVersion: "1.0.0",
   };
 }
 

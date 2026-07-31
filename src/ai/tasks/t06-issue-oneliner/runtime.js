@@ -4,12 +4,12 @@ const { InMemoryPromptRunStore } = require("../../provenance/prompt-run.store");
 const { createT06PromptDefinition } = require("./definition");
 const { IssueOneLinerService } = require("./service");
 
-function createT06IssueOneLinerRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, authorizeCompany, promptRegistry, runStore, companyStore = null, resolveOutputLanguage = null }) {
+function createT06IssueOneLinerRuntime({ aiTaskKernel, openaiConfig, cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, authorizeCompany, promptRegistry, runStore, companyStore = null, resolveOutputLanguage = null, getEffectiveContext = null }) {
   const registry = promptRegistry || new PromptRegistry([createT06PromptDefinition({ modelName: openaiConfig.nanoModel })]);
   const provenanceStore = runStore || new InMemoryPromptRunStore();
   const promptExecutionService = new PromptExecutionService({ promptRegistry: registry, aiTaskKernel, runStore: provenanceStore, openaiConfig });
   return {
-    service: new IssueOneLinerService({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany }),
+    service: new IssueOneLinerService({ cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, getEffectiveContext, authorizeCompany }),
     promptRegistry: registry, runStore: provenanceStore,
   };
 }

@@ -81,12 +81,25 @@ function stripBroadPriorities(fields) {
   };
 }
 
+function leadershipIdentityFor(fields) {
+  const name = typeof fields?.name === "string" && fields.name.trim()
+    ? fields.name.trim()
+    : "the company";
+  return {
+    version: "1.0.0",
+    company_name: name,
+    identity: `You are the management and leadership of ${name}. You focus on strategic decisions that shape your company's market position, risk exposure, sustainable growth, and response to material external signals.`,
+    lens_summary: `You are the leadership of ${name}, focused on strategic stewardship of your company.`,
+    fingerprint: "eval-production-identity",
+  };
+}
+
 function applyMode(caseItem, context, mode) {
   const source = structuredClone(caseItem.source);
   let fields = structuredClone(context.fields);
   let includeBodySnippet = false;
   let bodySnippetChars = 1500;
-  let note = "production-matching: title+summary only";
+  let note = "production-matching: title+summary only + management identity";
 
   if (mode === "with-body") {
     includeBodySnippet = true;
@@ -111,7 +124,11 @@ function applyMode(caseItem, context, mode) {
 
   return {
     source,
-    context: { ...context, fields },
+    context: {
+      ...context,
+      fields,
+      managementIdentity: leadershipIdentityFor(fields),
+    },
     options: { includeBodySnippet, bodySnippetChars, useRubric: true },
     note,
   };

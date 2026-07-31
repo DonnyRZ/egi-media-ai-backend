@@ -1,5 +1,5 @@
 const T10_PROMPT_ID = "T10_priority_reason";
-const T10_PROMPT_VERSION = "1.0.0";
+const T10_PROMPT_VERSION = "1.1.0";
 
 function createT10PromptDefinition({ modelName }) {
   return {
@@ -8,11 +8,11 @@ function createT10PromptDefinition({ modelName }) {
     status: "active",
     owner: "ai-engineering",
     modelCompatibility: [modelName],
-    inputSchemaVersion: "1.0",
+    inputSchemaVersion: "1.1",
     outputSchemaVersion: "1.0",
-    changeSummary: "Write a grounded bounded reason for an immutable T09 priority decision",
+    changeSummary: "FULL CONTEXT: leadership identity + company_context fields for priority reason",
     approvedBy: null,
-    rollbackVersion: null,
+    rollbackVersion: "1.0.0",
   };
 }
 

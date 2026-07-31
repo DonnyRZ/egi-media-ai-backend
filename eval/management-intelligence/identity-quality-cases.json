@@ -1,0 +1,80 @@
+{
+  "description": "Offline identity quality fixtures across industries. Scope lives in fields; identity is you-voice leadership only. Do not hard-code these brands into prompts.",
+  "cases": [
+    {
+      "id": "acme-tech-leadership",
+      "industry_label": "technology_services",
+      "fields": {
+        "name": "ACME 1 Technology Solutions",
+        "products": ["managed IT", "cloud migration"],
+        "regions": ["Metro One"]
+      },
+      "identity": {
+        "version": "1.0.0",
+        "company_name": "ACME 1 Technology Solutions",
+        "identity": "You are the management and leadership of ACME 1 Technology Solutions. You focus on strategic decisions that shape your company's market position, risk exposure, sustainable growth, and response to material external signals. You lead a technology services company.",
+        "lens_summary": "You are the leadership of ACME 1 Technology Solutions, focused on strategic stewardship of your company."
+      },
+      "expect_ok": true
+    },
+    {
+      "id": "northwind-fintech-leadership",
+      "industry_label": "fintech",
+      "fields": {
+        "name": "Northwind Payments",
+        "products": ["merchant acquiring", "settlement rails"],
+        "regions": ["ASEAN"],
+        "competitors": ["RivalPay"]
+      },
+      "identity": {
+        "version": "1.0.0",
+        "company_name": "Northwind Payments",
+        "identity": "You are the management and leadership of Northwind Payments. You focus on strategic decisions that shape your company's market position, regulatory exposure, growth quality, and response to material payment-rail and competitor signals. You lead a payments company.",
+        "lens_summary": "You are the leadership of Northwind Payments, focused on strategic stewardship of your company."
+      },
+      "expect_ok": true
+    },
+    {
+      "id": "helix-manufacturing-leadership",
+      "industry_label": "manufacturing",
+      "fields": {
+        "name": "Helix Precision Components",
+        "products": ["CNC components", "industrial fasteners"],
+        "regions": ["East Asia", "EU"]
+      },
+      "identity": {
+        "version": "1.0.0",
+        "company_name": "Helix Precision Components",
+        "identity": "You are the management and leadership of Helix Precision Components. You focus on strategic decisions that shape your company's market position, supply-chain risk, capacity planning, and response to material industry and peer signals. You lead a precision manufacturing company.",
+        "lens_summary": "You are the leadership of Helix Precision Components, focused on strategic stewardship of your company."
+      },
+      "expect_ok": true
+    },
+    {
+      "id": "bad-we-voice",
+      "industry_label": "generic",
+      "fields": { "name": "Example Co" },
+      "identity": {
+        "version": "1.0.0",
+        "company_name": "Example Co",
+        "identity": "We are the management of Example Co and our mission is growth.",
+        "lens_summary": "Our leadership lens."
+      },
+      "expect_ok": false,
+      "expect_failures_any": ["identity_must_start_with_you_are", "identity_uses_we_our_us", "lens_uses_we_our_us"]
+    },
+    {
+      "id": "bad-product-catalog",
+      "industry_label": "generic",
+      "fields": { "name": "Example Co" },
+      "identity": {
+        "version": "1.0.0",
+        "company_name": "Example Co",
+        "identity": "You are Example Co. Our products include widgets, gadgets, and a full product catalog of SKUs.",
+        "lens_summary": "You lead Example Co."
+      },
+      "expect_ok": false,
+      "expect_failures_any": ["identity_uses_we_our_us", "identity_looks_like_product_catalog"]
+    }
+  ]
+}

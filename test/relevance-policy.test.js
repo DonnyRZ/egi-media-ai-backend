@@ -21,14 +21,13 @@ test("material self, competitor, and market signals may form issues", () => {
   assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "market" }), true);
   assert.equal(shouldFormIssue({ relevance: "high", subjectRelation: "unrelated" }), false);
   assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "self" }), true);
-  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: false }), true);
-  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: true }), true);
+  assert.equal(shouldFormIssue({ relevance: "medium", subjectRelation: "competitor" }), true);
   assert.equal(shouldFormIssue({ relevance: "low", subjectRelation: "self" }), false);
 });
 
 test("branchForDecision continues material market intelligence and stops unrelated", () => {
   assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "market" }), "continue");
   assert.equal(branchForDecision({ relevance: "high", subjectRelation: "self" }), "continue");
-  assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "competitor", competitorOptIn: true }), "continue");
+  assert.equal(branchForDecision({ relevance: "medium", subjectRelation: "competitor" }), "continue");
   assert.equal(branchForDecision({ relevance: "medium", subjectRelation: null }), "stop");
 });

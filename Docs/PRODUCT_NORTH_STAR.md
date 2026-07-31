@@ -50,6 +50,23 @@ All relevance and framing decisions use the effective `company_context.fields`
 provided at runtime. Prompts, gates, tests, and rubrics must not hard-code a
 tenant, brand, or industry.
 
+## Full context (fields + leadership identity)
+
+Judgmental AI tasks receive **full context**:
+
+1. **`company_context.fields`** — facts and operating scope (products, regions,
+   competitors, priorities, and related fields).
+2. **`management_identity`** — the singular **you**-voice leadership persona for
+   this company (who the model acts as, and its strategic mandate).
+
+Identity is not a restatement of company scope. Scope stays in fields; identity
+is the leadership lens. Downstream tasks must use both together — never identity
+alone as a substitute for fields, and never fields alone when a persisted
+identity exists for that context version.
+
+Hardening flags and async identity notes:
+[`Docs/MANAGEMENT_IDENTITY_HARDENING.md`](MANAGEMENT_IDENTITY_HARDENING.md).
+
 ## Change control
 
 Changes to what can form an issue or whose perspective an analysis serves are

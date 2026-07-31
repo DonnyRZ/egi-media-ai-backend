@@ -6,10 +6,10 @@ const { buildT13Input } = require("./prompt");
 const { validateT13Output } = require("./output-validator");
 
 class ReportNarrativeService {
-  constructor({ reportDraftStore, narrativeStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
+  constructor({ reportDraftStore, narrativeStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getCompanyContextVersion = null, authorizeCompany = denyByDefault }) {
     if (!reportDraftStore?.get || !reportDraftStore?.markNarrativeInvalid) throw new AiConfigurationError("T13 requires report draft persistence");
     if (!narrativeStore?.get || !narrativeStore?.create || !promptExecutionService?.executeActive) throw new AiConfigurationError("T13 requires narrative persistence and prompt execution");
-    Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
+    Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, companyStore, resolveOutputLanguage, getCompanyContextVersion, authorizeCompany });
   }
 
   async generate({ tenantId, companyId, reportId }) {
@@ -20,10 +20,13 @@ class ReportNarrativeService {
     if (existing) return { narrative: existing, report, reused: true };
     try {
       validateReportPack(report);
+      const context = typeof this.getCompanyContextVersion === "function"
+        ? await this.getCompanyContextVersion(companyId, report.contextVersion, tenantId)
+        : null;
       const outputLanguage = await this._resolveOutputLanguage({ tenantId, companyId });
       const execution = await this.promptExecutionService.executeActive({
         promptId: T13_PROMPT_ID, promptVersion: T13_PROMPT_VERSION, model: "mini",
-        input: buildT13Input({ tenantId, companyId, report, outputLanguage }), outputSchema: T13_OUTPUT_SCHEMA,
+        input: buildT13Input({ tenantId, companyId, report, outputLanguage, context }), outputSchema: T13_OUTPUT_SCHEMA,
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT13Output(data, { report }),
       });
