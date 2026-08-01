@@ -9,11 +9,11 @@ const { formatCrawlIssueSourceId } = require("../src/cms/issue-source-id");
 const { CRAWL_SOURCE_IDS } = require("../src/news-feed/channel-registry");
 const { evaluateContextCompleteness } = require("../src/company-context/completeness");
 
-const INPUT_PRICE = 1 / 1_000_000;
-const CACHED_INPUT_PRICE = 0.10 / 1_000_000;
-const OUTPUT_PRICE = 6 / 1_000_000;
-const SOFT_CAP_USD = 9.5;
-const MAX_CAP_USD = 10;
+const INPUT_PRICE = 0.20 / 1_000_000;
+const CACHED_INPUT_PRICE = 0.02 / 1_000_000;
+const OUTPUT_PRICE = 1.20 / 1_000_000;
+const SOFT_CAP_USD = 4.75;
+const MAX_CAP_USD = 5;
 const TASK_QUEUE = "ai-task-T02";
 
 async function main() {
@@ -33,7 +33,9 @@ async function main() {
       return;
     }
     const source = await loadSourceScope(ai, args.sourceCompany, args.contextFile, args.identityFile);
-    const articles = await selectArticles(crawl, args.limit, source.context_content?.fields || {}, args.keywords);
+    const articles = args.manifestFile
+      ? await selectManifestArticles(crawl, args.manifestFile, args.manifestSplit, args.manifestCompany, args.limit)
+      : await selectArticles(crawl, args.limit, source.context_content?.fields || {}, args.keywords);
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
 
     await createEvaluationScope(ai, { tenantId, companyId, runId, source });
@@ -176,6 +178,23 @@ async function selectArticles(db, limit, contextFields, keywords = []) {
     else cursor += 1;
   }
   return selected.slice(0, limit);
+}
+
+async function selectManifestArticles(db, manifestFile, split, companyKey, limit) {
+  if (!split || !companyKey) throw new Error("manifest-file requires manifest-split and manifest-company");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  const selected = (manifest.articles || []).filter((row) => row.split === split && row.companyKey === companyKey);
+  if (selected.length < limit) throw new Error(`Manifest ${split}/${companyKey} has only ${selected.length} articles; need ${limit}`);
+  const items = selected.slice(0, limit);
+  const result = await db.query(`SELECT a.article_id,a.source_id,a.content_hash,a.canonical_url,a.title,a.content_text,a.published_at,a.collected_at
+    FROM public.articles a WHERE a.article_id=ANY($1::bigint[]) AND a.validation_status IN ('valid','stored','parsed','published')
+    AND length(coalesce(a.content_text,''))>=300 AND a.content_hash ~ '^[a-f0-9]{8,128}$' AND a.canonical_url IS NOT NULL`, [items.map((item) => item.articleId)]);
+  const byId = new Map(result.rows.map((row) => [Number(row.article_id), row]));
+  return items.map((item) => {
+    const row = byId.get(Number(item.articleId));
+    if (!row) throw new Error(`Manifest article ${item.articleId} is no longer eligible`);
+    return { sourceArticleId: formatCrawlIssueSourceId({ sourceId: row.source_id, contentHash: row.content_hash }), sourceSnapshotId: `eval-manifest-${split}-${companyKey}-${row.article_id}`, sourceId: row.source_id, contentHash: row.content_hash, articleId: String(row.article_id), title: row.title, canonicalUrl: row.canonical_url, contentLength: row.content_text?.length || 0, publishedAt: row.published_at, collectedAt: row.collected_at, eventKey: item.eventCluster, reviewBucket: item.expectedBucket };
+  });
 }
 
 function eventKey(title) {
@@ -326,7 +345,7 @@ async function readSummary(db, { tenantId, companyId }) {
 
 function estimateNextBatchUsd(usage, batchSize, fallbackPerArticle) {
   if (usage.requests === 0) return fallbackPerArticle * batchSize;
-  return Math.max(fallbackPerArticle * batchSize, (usage.costUsd / Math.max(1, usage.requests)) * batchSize * 12);
+  return Math.max(fallbackPerArticle * batchSize, (usage.costUsd / Math.max(1, usage.requests)) * batchSize * 2);
 }
 
 function chunk(items, size) {
@@ -336,7 +355,7 @@ function chunk(items, size) {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.08, sourceCompany: "Arunika", keywords: [], contextFile: null, identityFile: null };
+  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.002, sourceCompany: "Arunika", keywords: [], manifestFile: null, manifestSplit: null, manifestCompany: null, contextFile: null, identityFile: null };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help") args.help = true;
@@ -347,6 +366,9 @@ function parseArgs(argv) {
     else if (value === "--source-company") args.sourceCompany = argv[++i];
     else if (value === "--context-file") args.contextFile = argv[++i];
     else if (value === "--identity-file") args.identityFile = argv[++i];
+    else if (value === "--manifest-file") args.manifestFile = argv[++i];
+    else if (value === "--manifest-split") args.manifestSplit = argv[++i];
+    else if (value === "--manifest-company") args.manifestCompany = argv[++i];
     else if (value === "--keywords") args.keywords = String(argv[++i] || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
     else if (value === "--poll-ms") args.pollMs = positive(argv[++i], "poll-ms");
     else if (value === "--estimated-usd-per-article") args.estimatedUsdPerArticle = Number(argv[++i]);
@@ -382,6 +404,6 @@ async function cleanupTenant(db, tenantId) {
   }
 }
 
-function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--context-file path --identity-file path] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
+function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--manifest-file path --manifest-split train|validation|test --manifest-company acme-1] [--context-file path --identity-file path] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
 
 main().catch((error) => { console.error(JSON.stringify({ event: "evaluation_failed", code: error.code || "EVALUATION_FAILED", message: error.message })); process.exitCode = 1; });
