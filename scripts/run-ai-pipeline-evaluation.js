@@ -5,6 +5,7 @@ require("dotenv").config();
 const { randomUUID } = require("crypto");
 const { Pool } = require("pg");
 const { formatCrawlIssueSourceId } = require("../src/cms/issue-source-id");
+const { CRAWL_SOURCE_IDS } = require("../src/news-feed/channel-registry");
 const { evaluateContextCompleteness } = require("../src/company-context/completeness");
 
 const INPUT_PRICE = 1 / 1_000_000;
@@ -31,7 +32,7 @@ async function main() {
       return;
     }
     const source = await loadSourceScope(ai, args.sourceCompany);
-    const articles = await selectArticles(crawl, args.limit);
+    const articles = await selectArticles(crawl, args.limit, source.context_content?.fields || {});
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
 
     await createEvaluationScope(ai, { tenantId, companyId, runId, source });
@@ -83,24 +84,25 @@ async function loadSourceScope(db, requestedName) {
   return result.rows[0];
 }
 
-async function selectArticles(db, limit) {
+async function selectArticles(db, limit, contextFields) {
   const result = await db.query(`
     SELECT a.article_id, a.source_id, a.content_hash, a.canonical_url, a.title,
            a.content_text, a.published_at, a.collected_at
     FROM public.articles a
-    WHERE a.validation_status IN ('valid', 'stored', 'parsed', 'published')
+    WHERE a.source_id = ANY($2::text[])
+      AND a.validation_status IN ('valid', 'stored', 'parsed', 'published')
       AND a.content_hash ~ '^[a-f0-9]{8,128}$'
       AND length(coalesce(a.content_text, '')) >= 300
       AND a.canonical_url IS NOT NULL
     ORDER BY a.published_at DESC NULLS LAST, a.article_id DESC
-    LIMIT $1`, [Math.max(limit * 2, limit)]);
+    LIMIT $1`, [Math.max(limit * 10, 500), CRAWL_SOURCE_IDS]);
   const seen = new Set();
-  const selected = [];
+  const candidates = [];
   for (const row of result.rows) {
-    const key = `${row.source_id}:${row.content_hash}`;
+    const key = `${row.source_id}:${row.content_hash}:${row.canonical_url}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    selected.push({
+    candidates.push({
       sourceArticleId: formatCrawlIssueSourceId({ sourceId: row.source_id, contentHash: row.content_hash }),
       sourceSnapshotId: `eval-snapshot-${row.article_id}`,
       sourceId: row.source_id,
@@ -111,10 +113,63 @@ async function selectArticles(db, limit) {
       contentLength: row.content_text?.length || 0,
       publishedAt: row.published_at,
       collectedAt: row.collected_at,
+      eventKey: eventKey(row.title),
+      reviewBucket: classifyReviewBucket(row, contextFields),
     });
-    if (selected.length === limit) break;
   }
-  return selected;
+  const selected = [];
+  const selectedKeys = new Set();
+  const duplicateTarget = Math.min(Math.floor(limit * 0.25), Math.max(0, limit - 1));
+  const duplicateGroups = groupBy(candidates.filter((item) => item.eventKey), (item) => item.eventKey)
+    .filter((group) => new Set(group.map((item) => item.sourceId)).size > 1)
+    .sort((a, b) => b.length - a.length);
+  for (const group of duplicateGroups) {
+    for (const item of group.slice(0, 2)) {
+      if (selected.length >= duplicateTarget) break;
+      selected.push(item);
+      selectedKeys.add(item.sourceArticleId);
+    }
+    if (selected.length >= duplicateTarget) break;
+  }
+  const bySource = new Map();
+  for (const item of candidates) if (!selectedKeys.has(item.sourceArticleId)) {
+    if (!bySource.has(item.sourceId)) bySource.set(item.sourceId, []);
+    bySource.get(item.sourceId).push(item);
+  }
+  const sourceQueues = [...bySource.values()];
+  let cursor = 0;
+  while (selected.length < limit && sourceQueues.length) {
+    const queue = sourceQueues[cursor % sourceQueues.length];
+    const item = queue.shift();
+    if (item) {
+      selected.push(item);
+      selectedKeys.add(item.sourceArticleId);
+    }
+    if (queue.length === 0) sourceQueues.splice(cursor % sourceQueues.length, 1);
+    else cursor += 1;
+  }
+  return selected.slice(0, limit);
+}
+
+function eventKey(title) {
+  return String(title || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\b(ini|itu|yang|dan|di|ke|dari|untuk|dengan|akan|jadi|the|a|an|of|to|in|on)\b/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 8).join(" ");
+}
+
+function classifyReviewBucket(row, contextFields) {
+  const text = `${row.title || ""} ${row.content_text || ""}`.toLowerCase();
+  const terms = Object.values(contextFields || {}).flatMap((value) => Array.isArray(value) ? value : [value]).filter((value) => typeof value === "string").flatMap((value) => value.toLowerCase().split(/\W+/).filter((token) => token.length >= 5));
+  return terms.some((term) => text.includes(term)) ? "context-overlap" : "hard-negative-candidate";
+}
+
+function groupBy(items, keyFn) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.values()];
 }
 
 async function createEvaluationScope(db, { tenantId, companyId, runId, source }) {
