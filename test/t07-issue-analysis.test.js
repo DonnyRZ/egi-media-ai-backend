@@ -22,7 +22,13 @@ function source(articleId, { updatedAt = "2026-07-22T11:00:00.000Z", content = "
 }
 
 function context() {
-  return { companyId, version: 3, status: "effective", fields: { name: "PT Example Logistics", industry: "Logistics", competitors: [], products: ["Fleet tracking"], topics: [], priorities: [], goals: [], regions: [] } };
+  return {
+    companyId,
+    version: 3,
+    status: "effective",
+    fields: { name: "PT Example Logistics", industry: "Logistics", competitors: [], products: ["Fleet tracking"], topics: [], priorities: [], goals: [], regions: [] },
+    managementIdentity: { status: "ready", identity: "You are the management and leadership of PT Example Logistics.", fingerprint: "identity-test" },
+  };
 }
 
 function buildRuntime({ output, reviewOutput, sourceOverrides = {}, onKernelRequest, propagateRelation = false, relevanceSubject = "self" } = {}) {
@@ -159,6 +165,16 @@ test("T07 rejects an out-of-evidence citation without persisting an analysis", a
   await assert.rejects(runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }), { code: "AI_OUTPUT_SCHEMA_INVALID" });
   assert.deepEqual(runtime.analysisStore.list(), []);
   assert.equal(runtime.runStore.list()[0].validationOutcome, "failed");
+});
+
+test("T07 marks strict provider validation failures retryable for bounded queue recovery", async () => {
+  const output = validOutput();
+  output.claims[0].source_article_ids = [unknownArticle];
+  const { runtime, created } = buildRuntime({ output });
+  await assert.rejects(
+    runtime.service.analyze({ tenantId, companyId, issueId: created.issueId }),
+    (error) => error.code === "AI_OUTPUT_SCHEMA_INVALID" && error.retryable === true,
+  );
 });
 
 test("T07 does not call the model when linked evidence is stale or cross-scope", async (t) => {

@@ -52,6 +52,15 @@ function normalize(data) {
   };
 }
 
-function invalid() { return new AiOutputError("T07 output has an invalid analysis shape or out-of-evidence citation", { code: "AI_OUTPUT_SCHEMA_INVALID" }); }
+// Provider completions can occasionally violate the strict citation/shape
+// contract. Let the queue perform its bounded retry policy; a persistent
+// violation still dead-letters after maxAttempts and never gets persisted.
+function invalid() {
+  const error = new AiOutputError("T07 output has an invalid analysis shape or out-of-evidence citation", {
+    code: "AI_OUTPUT_SCHEMA_INVALID",
+  });
+  error.retryable = true;
+  return error;
+}
 
 module.exports = { validateT07Output };
