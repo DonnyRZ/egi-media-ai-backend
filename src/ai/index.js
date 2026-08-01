@@ -1,5 +1,6 @@
 const config = require("../config/global_config");
 const { createOpenAiClient } = require("./provider/openai.client");
+const { OpenAiRateLimiter } = require("./provider/rate-limiter");
 const { AiTaskKernel } = require("./kernel/ai-task-kernel");
 const { PromptRegistry, PromptExecutionService, InMemoryPromptRunStore } = require("./prompt");
 const t01CompanyContextDraft = require("./tasks/t01-company-context-draft");
@@ -25,6 +26,7 @@ const reports = require("../reports");
 const { AiBudgetGate } = require("../automation/ai-budget");
 const { createLogger } = require("../observability");
 const sharedBudgetGate = new AiBudgetGate(config.get("/aiBudget"));
+const sharedRateLimiter = new OpenAiRateLimiter(config.get("/openai/rateLimit"));
 const aiLogger = createLogger({ service: `${process.env.SERVICE_NAME || "egi-media-ai-backend"}.ai` });
 
 function createAiTaskKernel() {
@@ -36,6 +38,8 @@ function createAiTaskKernel() {
     openaiConfig,
     defaultTimeoutMs: openaiConfig.timeoutMs,
     budgetGate: sharedBudgetGate,
+    rateLimiter: sharedRateLimiter,
+    outputTokenReserve: openaiConfig.rateLimit.outputTokenReserve,
     logger: aiLogger,
   });
 }

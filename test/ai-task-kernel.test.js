@@ -104,3 +104,27 @@ test("normalizes retryable provider failures", async () => {
     (error) => error.code === "AI_PROVIDER_RATE_LIMITED" && error.retryable === true,
   );
 });
+
+test("uses the shared limiter around provider calls and releases with actual usage", async () => {
+  const calls = [];
+  const rateLimiter = {
+    acquire: async (input) => {
+      calls.push({ type: "acquire", input });
+      return { release: (input) => calls.push({ type: "release", input }) };
+    },
+    observeRateLimit: () => calls.push({ type: "observe" }),
+  };
+  const kernel = new AiTaskKernel({
+    openaiClient: { responses: { create: async () => ({ output_text: '{"value":"ok"}', usage: { total_tokens: 42 } }) } },
+    openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
+    defaultTimeoutMs: 1200,
+    rateLimiter,
+    outputTokenReserve: 100,
+  });
+
+  await kernel.execute({ model: "nano", input: "four words", outputSchema });
+  assert.equal(calls[0].type, "acquire");
+  assert.equal(calls[0].input.model, "nano-test-model");
+  assert.equal(calls[0].input.estimatedTokens, 103);
+  assert.deepEqual(calls[1], { type: "release", input: { actualTokens: 42 } });
+});

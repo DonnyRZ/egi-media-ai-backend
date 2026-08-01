@@ -35,7 +35,13 @@ function normalizeProviderError(error) {
   const name = error?.name || "";
   const providerRequestId = error?.request_id || error?._request_id || null;
   const providerError = error?.error || {};
-  const providerDetails = { status: status || null, providerRequestId, providerErrorType: providerDetailsValue(providerError.type), providerErrorCode: providerDetailsValue(providerError.code) };
+  const providerDetails = {
+    status: status || null,
+    providerRequestId,
+    providerErrorType: providerDetailsValue(providerError.type),
+    providerErrorCode: providerDetailsValue(providerError.code),
+    ...extractRateLimitDetails(error),
+  };
 
   if (name === "APIConnectionTimeoutError" || status === 408 || /timed out|timeout/i.test(error?.message || "")) {
     return new AiProviderError("OpenAI request timed out", {
@@ -92,6 +98,40 @@ function normalizeProviderError(error) {
 
 function providerDetailsValue(value) {
   return typeof value === "string" && value.length <= 120 ? value : null;
+}
+
+function extractRateLimitDetails(error) {
+  const headers = error?.headers || error?.response?.headers;
+  return {
+    retryAfterMs: parseRetryAfterMs(headerValue(headers, "retry-after")),
+    resetRequestsMs: parseDurationMs(headerValue(headers, "x-ratelimit-reset-requests")),
+    resetTokensMs: parseDurationMs(headerValue(headers, "x-ratelimit-reset-tokens")),
+  };
+}
+
+function headerValue(headers, name) {
+  if (!headers) return null;
+  if (typeof headers.get === "function") return headers.get(name) || headers.get(name.toLowerCase());
+  const value = headers[name] ?? headers[name.toLowerCase()] ?? headers[name.toUpperCase()];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseRetryAfterMs(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.ceil(numeric * 1000));
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : 0;
+}
+
+function parseDurationMs(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  const text = String(value).trim();
+  const numeric = Number(text);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.ceil(numeric * 1000));
+  const match = text.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/i);
+  if (!match || !match.slice(1).some(Boolean)) return 0;
+  return Math.ceil(((Number(match[1] || 0) * 3600) + (Number(match[2] || 0) * 60) + Number(match[3] || 0)) * 1000);
 }
 
 module.exports = {

@@ -29,3 +29,16 @@ test("S20 dead-letters non-retryable failures without another attempt", async ()
   const { queue } = build(); enqueue(queue); const result = await queue.processNext({ queueName: "ai-pipeline", handler: async () => { throw Object.assign(new Error("schema invalid"), { code: "AI_OUTPUT_SCHEMA_INVALID", retryable: false }); } });
   assert.equal(result.deadLettered, true); assert.equal(result.job.attempts, 1); assert.equal(result.job.lastErrorCode, "AI_OUTPUT_SCHEMA_INVALID");
 });
+
+test("S20 rate-limit retries respect provider reset hints", async () => {
+  const { queue } = build();
+  enqueue(queue);
+  const failure = Object.assign(new Error("token limit"), {
+    code: "AI_PROVIDER_RATE_LIMITED",
+    retryable: true,
+    details: { resetTokensMs: 120000 },
+  });
+  const result = await queue.processNext({ queueName: "ai-pipeline", handler: async () => { throw failure; } });
+  assert.equal(result.retried, true);
+  assert.equal(result.delayMs, 120000);
+});

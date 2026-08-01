@@ -34,7 +34,7 @@ class JobQueueService {
       const errorCode = typeof error?.code === "string" ? error.code : "JOB_FAILED";
       const errorMessage = safeErrorMessage(error);
       if (this.isRetryable(error) && job.attempts < job.maxAttempts) {
-        const delayMs = this.backoff({ attempt: job.attempts, job, error });
+        const delayMs = Math.max(this.backoff({ attempt: job.attempts, job, error }), retryAfterDelay(error));
         const retried = await this.jobStore.retry({ jobId: job.jobId, workerId, availableAt: this.now() + delayMs, errorCode, errorMessage });
         this.logger.warn("job_retry_scheduled", { tenantId: job.tenantId, companyId: job.companyId, jobId: job.jobId, queueName, jobType: job.jobType, attempt: job.attempts, errorCode, delayMs });
         return { job: retried, retried: true, delayMs };
@@ -48,6 +48,11 @@ class JobQueueService {
 
 function defaultBackoff({ attempt }) { return Math.min(300000, 1000 * (2 ** Math.max(0, attempt - 1))); }
 function defaultRetryable(error) { return error?.retryable === true || ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EHOSTUNREACH"].includes(error?.code); }
+function retryAfterDelay(error) {
+  if (error?.code !== "AI_PROVIDER_RATE_LIMITED") return 0;
+  const details = error.details || {};
+  return Math.min(600000, Math.max(Number(details.retryAfterMs) || 0, Number(details.resetRequestsMs) || 0, Number(details.resetTokensMs) || 0));
+}
 function safeErrorMessage(error) { return typeof error?.message === "string" && error.message.length <= 500 ? error.message : "Job handler failed"; }
 function validationError(message) { const error = new Error(message); error.code = "VALIDATION_ERROR"; error.statusCode = 400; return error; }
 

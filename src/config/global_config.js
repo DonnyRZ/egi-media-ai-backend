@@ -25,6 +25,13 @@ const config = {
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
     t01TimeoutMs: Number(process.env.OPENAI_T01_TIMEOUT_MS || 120000),
     t07TimeoutMs: Number(process.env.OPENAI_T07_TIMEOUT_MS || 90000),
+    rateLimit: {
+      maxConcurrency: Number(process.env.OPENAI_MAX_CONCURRENCY || 2),
+      requestsPerMinute: Number(process.env.OPENAI_RATE_LIMIT_RPM || 0),
+      tokensPerMinute: Number(process.env.OPENAI_RATE_LIMIT_TPM || 0),
+      safetyRatio: Number(process.env.OPENAI_RATE_LIMIT_SAFETY_RATIO || 0.8),
+      outputTokenReserve: Number(process.env.OPENAI_OUTPUT_TOKEN_RESERVE || 1000),
+    },
   },
   auth: {
     accessTokenSecret: process.env.AUTH_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET,

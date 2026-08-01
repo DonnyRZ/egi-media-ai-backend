@@ -9,7 +9,7 @@ const {
 } = require("../provider/provider.errors");
 
 class AiTaskKernel {
-  constructor({ openaiClient, openaiConfig, defaultTimeoutMs, uuid = randomUUID, budgetGate = null, logger = null }) {
+  constructor({ openaiClient, openaiConfig, defaultTimeoutMs, uuid = randomUUID, budgetGate = null, rateLimiter = null, outputTokenReserve = 1000, logger = null }) {
     if (!openaiClient?.responses?.create) {
       throw new AiConfigurationError("OpenAI client must expose responses.create");
     }
@@ -27,6 +27,8 @@ class AiTaskKernel {
     this.defaultTimeoutMs = defaultTimeoutMs;
     this.uuid = uuid;
     this.budgetGate = budgetGate;
+    this.rateLimiter = rateLimiter;
+    this.outputTokenReserve = Number.isFinite(Number(outputTokenReserve)) ? Math.max(0, Math.ceil(Number(outputTokenReserve))) : 1000;
     this.logger = logger || { debug() {}, info() {}, warn() {}, error() {}, fatal() {} };
     this.ajv = new Ajv({ allErrors: true, strict: false });
   }
@@ -42,8 +44,10 @@ class AiTaskKernel {
     this.logger.info("ai_task_started", { requestId: correlationId, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, timeoutMs: resolvedTimeoutMs });
 
     let response;
+    let rateLimitLease;
     try {
       this.budgetGate?.beforeRequest(budgetScope);
+      rateLimitLease = await this.rateLimiter?.acquire({ model: resolvedModel, estimatedTokens: estimateTokens(input, this.outputTokenReserve) });
       const requestBody = {
         model: resolvedModel,
         input,
@@ -67,9 +71,16 @@ class AiTaskKernel {
       );
     } catch (error) {
       const normalized = normalizeProviderError(error);
+      if (normalized.code === "AI_PROVIDER_RATE_LIMITED") {
+        this.rateLimiter?.observeRateLimit({ model: resolvedModel, ...normalized.details });
+      }
+      rateLimitLease?.release();
       this.logger.error("ai_task_failed", { requestId: correlationId, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, error: normalized });
       throw normalized;
     }
+
+    const usage = normalizeUsage(response.usage);
+    rateLimitLease?.release({ actualTokens: usage?.totalTokens });
 
     let data;
     try {
@@ -78,9 +89,9 @@ class AiTaskKernel {
       this.logger.error("ai_output_rejected", { requestId: correlationId, providerRequestId: response?._request_id || null, providerResponseId: response?.id || null, modelAlias: model, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, error });
       throw error;
     }
-    this.budgetGate?.recordUsage(normalizeUsage(response.usage), budgetScope);
+    this.budgetGate?.recordUsage(usage, budgetScope);
 
-    this.logger.info("ai_task_succeeded", { requestId: correlationId, providerRequestId: response._request_id || null, providerResponseId: response.id || null, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, usage: normalizeUsage(response.usage) });
+    this.logger.info("ai_task_succeeded", { requestId: correlationId, providerRequestId: response._request_id || null, providerResponseId: response.id || null, modelAlias: model, model: resolvedModel, outputSchema: outputSchema.name, durationMs: Date.now() - startedAt, usage });
 
     return {
       data,
@@ -90,7 +101,7 @@ class AiTaskKernel {
       },
       model: { alias: model, name: resolvedModel },
       providerResponseId: response.id || null,
-      usage: normalizeUsage(response.usage),
+      usage,
       latencyMs: Date.now() - startedAt,
     };
   }
@@ -170,6 +181,11 @@ function normalizeUsage(usage) {
     outputTokens: usage.output_tokens ?? null,
     totalTokens: usage.total_tokens ?? null,
   };
+}
+
+function estimateTokens(input, outputTokenReserve) {
+  const serialized = typeof input === "string" ? input : JSON.stringify(input);
+  return Math.ceil((serialized?.length || 0) / 4) + outputTokenReserve;
 }
 
 module.exports = { AiTaskKernel };
