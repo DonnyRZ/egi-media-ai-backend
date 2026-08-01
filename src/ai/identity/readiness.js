@@ -48,7 +48,9 @@ async function resolveManagementIdentityReadiness({
     };
   }
 
-  const completeness = context.completeness || evaluateContextCompleteness(context.fields);
+  const completeness = context.completeness?.rule_version === "review-v2"
+    ? context.completeness
+    : evaluateContextCompleteness(context.fields, context.fieldReview || null, { legacyEffective: true });
   if (!completeness.complete) {
     return {
       ready: false,

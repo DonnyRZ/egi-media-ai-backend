@@ -5,7 +5,7 @@ const { CONTEXT_FIELDS, createT01OutputSchema } = require("./schema");
 const { buildT01Input } = require("./prompt");
 const { validateT01Output } = require("./output-validator");
 const { T01_PROMPT_ID, T01_PROMPT_VERSION } = require("./definition");
-const { evaluateContextCompleteness, allMissingFields } = require("../../../company-context/completeness");
+const { evaluateContextCompleteness, allMissingFields, createInitialFieldReview } = require("../../../company-context/completeness");
 
 class CompanyContextDraftService {
   constructor({ promptExecutionService, draftStore, authorizeCompany = denyByDefault, timeoutMs = null }) {
@@ -52,10 +52,12 @@ class CompanyContextDraftService {
       validateResult: (data) => validateT01Output(data, { sourceLocators }),
     });
 
-    const completeness = evaluateContextCompleteness(execution.data.context);
+    const fieldReview = createInitialFieldReview(execution.data.context);
+    const completeness = evaluateContextCompleteness(execution.data.context, fieldReview, { legacyEffective: false });
     const result = {
       ...execution.data,
       missing_fields: allMissingFields(execution.data.context),
+      field_review: fieldReview,
       completeness,
     };
     const draft = await this.draftStore.create({

@@ -105,6 +105,7 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
       companyId: req.params.companyId,
       version: req.body?.version,
       fields: req.body?.fields,
+      fieldReview: req.body?.field_review,
       changeReason: req.body?.change_reason,
     });
     success(res, serializeContext(result.context, result.managementIdentity), req);
@@ -250,6 +251,7 @@ function serializeContext(context, managementIdentity = undefined) {
     draft_id: context.draftId,
     fields: context.fields,
     field_sources: context.fieldSources || [],
+    field_review: context.fieldReview || null,
     missing_fields: context.missingFields || [],
     completeness: context.completeness || null,
     change_reason: context.changeReason,

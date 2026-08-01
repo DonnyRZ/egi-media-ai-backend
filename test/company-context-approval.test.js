@@ -7,6 +7,7 @@ const { InMemoryCompanyContextDraftStore } = require("../src/ai/tasks/t01-compan
 const { InMemoryEffectiveCompanyContextStore } = require("../src/company-context/effective-context.store");
 const { CompanyContextService } = require("../src/company-context/company-context.service");
 const { createCompanyContextRouter } = require("../src/routes/company-context");
+const { createManualFieldReview } = require("../src/company-context/completeness");
 
 function contextFields() {
   return {
@@ -21,7 +22,13 @@ function contextFields() {
 function createDraft(store, companyId = "company-1") {
   return store.create({
     companyId,
-    result: { status: "complete", context: contextFields(), field_sources: [], missing_fields: [] },
+    result: {
+      status: "complete",
+      context: contextFields(),
+      field_review: createManualFieldReview(contextFields()),
+      field_sources: [],
+      missing_fields: [],
+    },
     sourceFingerprints: [],
     provenance: { runId: "run-1" },
   });

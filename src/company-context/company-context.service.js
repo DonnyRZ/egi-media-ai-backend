@@ -4,7 +4,16 @@ const {
   CompanyContextNotFoundError,
   CompanyContextConflictError,
 } = require("./company-context.errors");
-const { evaluateContextCompleteness, allMissingFields, incompleteContextError } = require("./completeness");
+const {
+  evaluateContextCompleteness,
+  allMissingFields,
+  incompleteContextError,
+  FIELD_REVIEW_STATUSES,
+  AI_REVIEW_FIELDS,
+  OPTIONAL_FIELDS,
+  createManualFieldReview,
+  normalizeFieldReview,
+} = require("./completeness");
 
 class CompanyContextService {
   constructor({ draftStore, effectiveContextStore, authorize = denyByDefault, managementIdentityService = null }) {
@@ -20,18 +29,19 @@ class CompanyContextService {
     return draft;
   }
 
-  async editDraft({ actor, draftId, fields, reviewNote = null, expectedRevision }) {
+  async editDraft({ actor, draftId, fields, fieldReview = null, reviewNote = null, expectedRevision }) {
     const current = await this._requireDraft(draftId);
     await this._authorize(actor, current.tenantId, current.companyId, "company_context.draft");
     this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
     const mergedFields = mergeAndValidateFields(current.result.context, fields);
-    const completeness = evaluateContextCompleteness(mergedFields);
+    const mergedReview = mergeAndValidateFieldReview(current.result.field_review, fieldReview, fields, mergedFields);
+    const completeness = evaluateContextCompleteness(mergedFields, mergedReview, { legacyEffective: false });
 
     return this.draftStore.update(draftId, (draft) => ({
       ...draft,
       status: "draft",
-      result: { ...draft.result, context: mergedFields, missing_fields: allMissingFields(mergedFields), completeness },
+      result: { ...draft.result, context: mergedFields, field_review: mergedReview, missing_fields: allMissingFields(mergedFields), completeness },
       review: { ...draft.review, note: normalizeOptionalText(reviewNote, 1000) },
     }));
   }
@@ -74,7 +84,7 @@ class CompanyContextService {
       });
     }
 
-    const completeness = evaluateContextCompleteness(current.result.context);
+    const completeness = evaluateContextCompleteness(current.result.context, current.result.field_review, { legacyEffective: false });
     if (!completeness.complete) {
       throw incompleteContextError(completeness, { companyId: current.companyId });
     }
@@ -83,6 +93,7 @@ class CompanyContextService {
       tenantId: current.tenantId,
       companyId: current.companyId,
       fields: current.result.context,
+      fieldReview: completeness.field_review,
       fieldSources: current.result.field_sources || [],
       missingFields: current.result.missing_fields || [],
       completeness,
@@ -186,7 +197,8 @@ class CompanyContextService {
     // Align with PUT /companies/:id/context route scope (company_context.draft).
     await this._authorize(actor, tenantId, companyId, "company_context.draft");
     const validatedFields = validateFullFields(fields);
-    const completeness = evaluateContextCompleteness(validatedFields);
+    const fieldReview = createManualFieldReview(validatedFields);
+    const completeness = evaluateContextCompleteness(validatedFields, fieldReview, { legacyEffective: false });
     if (!completeness.complete) {
       throw incompleteContextError(completeness, { companyId, contextVersion: version });
     }
@@ -194,6 +206,7 @@ class CompanyContextService {
       tenantId,
       companyId,
       fields: validatedFields,
+      fieldReview,
       fieldSources: [],
       missingFields: [],
       completeness,
@@ -289,6 +302,35 @@ function mergeAndValidateFields(currentFields, patch) {
     }
   }
   return validateFullFields({ ...currentFields, ...patch });
+}
+
+function mergeAndValidateFieldReview(currentReview, patch, fieldPatch, mergedFields) {
+  const merged = normalizeFieldReview(mergedFields, currentReview, { legacyEffective: false });
+  // A field patch from a legacy client represents an explicit manual edit. New
+  // clients send field_review alongside the patch; in that case only the
+  // explicit review state may confirm an AI proposal.
+  if ((patch === null || patch === undefined) && fieldPatch && typeof fieldPatch === "object") {
+    for (const field of Object.keys(fieldPatch)) {
+      if (CONTEXT_FIELDS.includes(field) && fieldPatch[field] !== undefined) {
+        merged[field] = hasValue(mergedFields[field], field) ? "user_confirmed" : (AI_REVIEW_FIELDS.includes(field) || OPTIONAL_FIELDS.includes(field) ? "reviewed_none_disclosed" : "missing");
+      }
+    }
+  }
+  if (patch !== null && patch !== undefined) {
+    if (typeof patch !== "object" || Array.isArray(patch)) throw new CompanyContextError("Company Context field review must be an object", { code: "VALIDATION_ERROR" });
+    for (const [field, status] of Object.entries(patch)) {
+      if (!CONTEXT_FIELDS.includes(field) || !FIELD_REVIEW_STATUSES.includes(status)) throw new CompanyContextError("Company Context field review is invalid", { code: "VALIDATION_ERROR", details: { field, status } });
+      if (status === "user_confirmed" && !hasValue(mergedFields[field], field)) throw new CompanyContextError("A confirmed Company Context field must contain a value", { code: "VALIDATION_ERROR", details: { field } });
+      if (status === "reviewed_none_disclosed" && !AI_REVIEW_FIELDS.includes(field) && !OPTIONAL_FIELDS.includes(field)) throw new CompanyContextError("Required Company Context fields cannot be marked as undisclosed", { code: "VALIDATION_ERROR", details: { field } });
+      merged[field] = status;
+    }
+  }
+  return merged;
+}
+
+function hasValue(value, field) {
+  if (SCALAR_FIELDS.includes(field)) return typeof value === "string" && value.trim().length > 0;
+  return Array.isArray(value) && value.length > 0;
 }
 
 function validateFullFields(fields) {

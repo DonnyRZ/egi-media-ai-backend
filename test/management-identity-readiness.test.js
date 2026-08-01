@@ -12,6 +12,7 @@ const { InMemoryManagementIdentityStore } = require("../src/ai/identity/identity
 const { enqueueIngestTrigger } = require("../src/ingest/ingest-trigger");
 const { InMemoryPipelineCompanyStore, PostgresPipelineCompanyStore } = require("../src/automation/company-scope");
 const { leadershipSystemPreamble } = require("../src/ai/identity/prompt-stamp");
+const { createManualFieldReview } = require("../src/company-context/completeness");
 
 function completeFields() {
   return {
@@ -136,8 +137,8 @@ describe("listEligible requires ready identity flag", () => {
     const store = new PostgresPipelineCompanyStore({
       db: {
         query: async () => ({ rows: [
-          { tenant_id: "t1", company_id: "complete", content_jsonb: { fields: completeFields() } },
-          { tenant_id: "t1", company_id: "incomplete", content_jsonb: { fields: { ...completeFields(), risks: [] } } },
+          { tenant_id: "t1", company_id: "complete", content_jsonb: { fields: completeFields(), fieldReview: createManualFieldReview(completeFields()) } },
+          { tenant_id: "t1", company_id: "incomplete", content_jsonb: { fields: { ...completeFields(), risks: [] }, fieldReview: { priorities: "user_confirmed", risks: "ai_proposed" } } },
         ] }),
       },
     });

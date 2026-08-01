@@ -222,7 +222,9 @@ class RelevanceClassificationService {
     if (!context || context.status !== "effective" || context.companyId !== companyId || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T02 requires an approved effective Company Context for the same company");
     }
-    const completeness = context.completeness || evaluateContextCompleteness(context.fields);
+    const completeness = context.completeness?.rule_version === "review-v2"
+      ? context.completeness
+      : evaluateContextCompleteness(context.fields, context.fieldReview || null, { legacyEffective: true });
     if (!completeness.complete) {
       throw incompleteContextError(completeness, { companyId, contextVersion: context.version });
     }

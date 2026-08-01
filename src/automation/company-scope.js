@@ -27,7 +27,11 @@ class PostgresPipelineCompanyStore {
       WHERE c.status = 'active'
     `);
     return result.rows
-      .filter((row) => evaluateContextCompleteness(row.content_jsonb?.fields || {}).complete)
+      .filter((row) => evaluateContextCompleteness(
+        row.content_jsonb?.fields || {},
+        row.content_jsonb?.fieldReview || null,
+        { legacyEffective: !row.content_jsonb?.fieldReview },
+      ).complete)
       .map((row) => ({
       tenantId: row.tenant_id,
       companyId: row.company_id,

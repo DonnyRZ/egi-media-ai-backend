@@ -1,4 +1,5 @@
 const { randomUUID } = require("crypto");
+const { evaluateContextCompleteness } = require("./completeness");
 
 class InMemoryEffectiveCompanyContextStore {
   constructor({ uuid = randomUUID, now = Date.now } = {}) {
@@ -19,7 +20,7 @@ class InMemoryEffectiveCompanyContextStore {
     return context ? cloneForRead(context) : null;
   }
 
-  activate({ tenantId = null, companyId, fields, fieldSources = [], missingFields = [], completeness = null, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
+  activate({ tenantId = null, companyId, fields, fieldSources = [], missingFields = [], fieldReview = null, completeness = null, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
     const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || [];
     const nextVersion = contexts.length + 1;
     if (expectedNextVersion !== undefined && expectedNextVersion !== nextVersion) {
@@ -44,7 +45,8 @@ class InMemoryEffectiveCompanyContextStore {
       fields: structuredClone(fields),
       fieldSources: structuredClone(fieldSources),
       missingFields: structuredClone(missingFields),
-      completeness: structuredClone(completeness),
+      fieldReview: structuredClone(fieldReview),
+      completeness: structuredClone(completeness || evaluateContextCompleteness(fields, fieldReview, { legacyEffective: true })),
       changeReason,
       updatedBy: actorId,
       createdAt: now,
