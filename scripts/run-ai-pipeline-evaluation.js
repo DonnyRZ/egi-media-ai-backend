@@ -273,7 +273,10 @@ async function cleanupTenant(db, tenantId) {
       "ai.alert_events", "ai.issue_developments", "ai.issue_articles", "ai.issue_priorities",
       "ai.issue_analyses", "ai.issues", "ai.article_relevance", "ai.stage_runs", "ai.pipeline_states",
       "ai.queue_jobs", "ai.management_identities", "ai.company_contexts", "ai.companies", "ai.tenants",
-    ]) await db.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]);
+    ]) {
+      const predicate = table === "ai.tenants" ? "id=$1" : "tenant_id=$1";
+      await db.query(`DELETE FROM ${table} WHERE ${predicate}`, [tenantId]);
+    }
     await db.query("COMMIT");
   } catch (error) {
     await db.query("ROLLBACK");
