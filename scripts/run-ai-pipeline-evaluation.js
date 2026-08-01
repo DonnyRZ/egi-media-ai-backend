@@ -32,7 +32,7 @@ async function main() {
       return;
     }
     const source = await loadSourceScope(ai, args.sourceCompany);
-    const articles = await selectArticles(crawl, args.limit, source.context_content?.fields || {});
+    const articles = await selectArticles(crawl, args.limit, source.context_content?.fields || {}, args.keywords);
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
 
     await createEvaluationScope(ai, { tenantId, companyId, runId, source });
@@ -84,18 +84,24 @@ async function loadSourceScope(db, requestedName) {
   return result.rows[0];
 }
 
-async function selectArticles(db, limit, contextFields) {
+async function selectArticles(db, limit, contextFields, keywords = []) {
+  const keywordClause = keywords.length
+    ? "AND (a.title ILIKE ANY($3::text[]) OR a.content_text ILIKE ANY($3::text[]))"
+    : "";
+  const params = [Math.max(limit * 10, 500), CRAWL_SOURCE_IDS];
+  if (keywords.length) params.push(keywords.map((keyword) => `%${keyword}%`));
   const result = await db.query(`
     SELECT a.article_id, a.source_id, a.content_hash, a.canonical_url, a.title,
            a.content_text, a.published_at, a.collected_at
     FROM public.articles a
-    WHERE a.source_id = ANY($2::text[])
+      WHERE a.source_id = ANY($2::text[])
+      ${keywordClause}
       AND a.validation_status IN ('valid', 'stored', 'parsed', 'published')
       AND a.content_hash ~ '^[a-f0-9]{8,128}$'
       AND length(coalesce(a.content_text, '')) >= 300
       AND a.canonical_url IS NOT NULL
     ORDER BY a.published_at DESC NULLS LAST, a.article_id DESC
-    LIMIT $1`, [Math.max(limit * 10, 500), CRAWL_SOURCE_IDS]);
+    LIMIT $1`, params);
   const seen = new Set();
   const candidates = [];
   for (const row of result.rows) {
@@ -304,7 +310,7 @@ function chunk(items, size) {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.08, sourceCompany: "Arunika" };
+  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.08, sourceCompany: "Arunika", keywords: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help") args.help = true;
@@ -313,6 +319,7 @@ function parseArgs(argv) {
     else if (value === "--batch-size") args.batchSize = positive(argv[++i], "batch-size");
     else if (value === "--run-id") args.runId = argv[++i];
     else if (value === "--source-company") args.sourceCompany = argv[++i];
+    else if (value === "--keywords") args.keywords = String(argv[++i] || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
     else if (value === "--poll-ms") args.pollMs = positive(argv[++i], "poll-ms");
     else if (value === "--estimated-usd-per-article") args.estimatedUsdPerArticle = Number(argv[++i]);
     else throw new Error(`Unknown argument: ${value}`);
@@ -347,6 +354,6 @@ async function cleanupTenant(db, tenantId) {
   }
 }
 
-function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
+function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
 
 main().catch((error) => { console.error(JSON.stringify({ event: "evaluation_failed", code: error.code || "EVALUATION_FAILED", message: error.message })); process.exitCode = 1; });
