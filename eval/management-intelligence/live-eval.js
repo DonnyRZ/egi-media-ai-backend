@@ -311,11 +311,9 @@ async function main() {
       relevance: materiality.relevance,
       subjectRelation: identity.subjectRelation,
     });
-    const relationStable = new Set(passes.map((pass) => pass.subject_relation)).size === 1;
-    const branchStable = new Set(passes.map((pass) => shouldFormIssue({
-      relevance: pass.relevance,
-      subjectRelation: pass.subject_relation,
-    }))).size === 1;
+    const finalPassOutcomes = passes.map((pass) => classifyFinalPass({ pass, fields, item }));
+    const relationStable = new Set(finalPassOutcomes.map((pass) => pass.subjectRelation)).size === 1;
+    const branchStable = new Set(finalPassOutcomes.map((pass) => pass.shouldContinue)).size === 1;
     const operationallyStable = branchStable && (!item.expectedContinue || relationStable);
 
     const record = {
@@ -439,6 +437,30 @@ async function main() {
     t07Pass: report.t07Pass,
   }, null, 2));
   process.exit(report.allGreen ? 0 : 1);
+}
+
+function classifyFinalPass({ pass, fields, item }) {
+  const identity = applySubjectIdentityGate({
+    relevance: pass.relevance,
+    confidence: pass.confidence,
+    subjectRelation: pass.subject_relation,
+    fields,
+    title: item.title,
+    summary: item.summary,
+    body: item.content,
+  });
+  const materiality = applyMarketMaterialityGate({
+    relevance: identity.relevance,
+    confidence: identity.confidence,
+    subjectRelation: identity.subjectRelation,
+    fields,
+    title: item.title,
+    summary: item.summary,
+  });
+  return {
+    subjectRelation: identity.subjectRelation,
+    shouldContinue: shouldFormIssue({ relevance: materiality.relevance, subjectRelation: identity.subjectRelation }),
+  };
 }
 
 function buildIndependentAuditInput({ fields, item, finalAnalysis }) {

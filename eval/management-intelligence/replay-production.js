@@ -186,10 +186,12 @@ async function classifyCase({ kernel, caseItem, context, mode, passes }) {
     relevance: materiality.relevance,
     subjectRelation: identity.subjectRelation,
   });
-  const branchStable = new Set(passResults.map((p) => shouldFormIssue({
-    relevance: p.relevance,
-    subjectRelation: p.subject_relation,
-  }))).size === 1;
+  const finalPassOutcomes = passResults.map((p) => classifyFinalPass({
+    pass: p,
+    fields: configured.context.fields,
+    source: configured.source.article,
+  }));
+  const branchStable = new Set(finalPassOutcomes.map((p) => p.shouldContinue)).size === 1;
   return {
     id: caseItem.id,
     mode,
@@ -204,6 +206,30 @@ async function classifyCase({ kernel, caseItem, context, mode, passes }) {
     branchStable,
     matchesExpected: shouldContinue === caseItem.expectedContinue,
     matchesProduction: shouldContinue === (caseItem.production?.branch === "continue"),
+  };
+}
+
+function classifyFinalPass({ pass, fields, source }) {
+  const identity = applySubjectIdentityGate({
+    relevance: pass.relevance,
+    confidence: pass.confidence,
+    subjectRelation: pass.subject_relation,
+    fields,
+    title: source.title,
+    summary: source.summary,
+    body: source.content || "",
+  });
+  const materiality = applyMarketMaterialityGate({
+    relevance: identity.relevance,
+    confidence: identity.confidence,
+    subjectRelation: identity.subjectRelation,
+    fields,
+    title: source.title,
+    summary: source.summary,
+  });
+  return {
+    subjectRelation: identity.subjectRelation,
+    shouldContinue: shouldFormIssue({ relevance: materiality.relevance, subjectRelation: identity.subjectRelation }),
   };
 }
 
