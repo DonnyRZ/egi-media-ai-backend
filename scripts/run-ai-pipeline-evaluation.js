@@ -24,6 +24,11 @@ async function main() {
   const crawl = new Pool({ connectionString: process.env.CRAWL_DATABASE_URL, max: 2 });
 
   try {
+    if (args.cleanupTenant) {
+      await cleanupTenant(ai, args.cleanupTenant);
+      console.log(JSON.stringify({ event: "evaluation_scope_cleaned", tenantId: args.cleanupTenant }));
+      return;
+    }
     const source = await loadSourceScope(ai, args.sourceCompany);
     const articles = await selectArticles(crawl, args.limit);
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
@@ -179,7 +184,7 @@ async function waitForBatch(db, { tenantId, companyId, pipelineIds, pollMs, time
 
 async function readUsage(db, tenantId, companyId) {
   const result = await db.query(`
-    SELECT task, payload_jsonb AS payload, provenance_jsonb AS provenance, output_jsonb AS output
+    SELECT task, payload_jsonb AS payload, NULL::jsonb AS provenance, output_jsonb AS output
     FROM ai.stage_runs
     WHERE tenant_id=$1 AND company_id=$2
     UNION ALL
@@ -240,6 +245,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help") args.help = true;
+    else if (value === "--cleanup-tenant") args.cleanupTenant = argv[++i];
     else if (value === "--limit") args.limit = positive(argv[++i], "limit");
     else if (value === "--batch-size") args.batchSize = positive(argv[++i], "batch-size");
     else if (value === "--run-id") args.runId = argv[++i];
@@ -260,6 +266,21 @@ function positive(value, name) {
 }
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--source-company Arunika] [--run-id id]"); }
+async function cleanupTenant(db, tenantId) {
+  await db.query("BEGIN");
+  try {
+    for (const table of [
+      "ai.alert_events", "ai.issue_developments", "ai.issue_articles", "ai.issue_priorities",
+      "ai.issue_analyses", "ai.issues", "ai.article_relevance", "ai.stage_runs", "ai.pipeline_states",
+      "ai.queue_jobs", "ai.management_identities", "ai.company_contexts", "ai.companies", "ai.tenants",
+    ]) await db.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]);
+    await db.query("COMMIT");
+  } catch (error) {
+    await db.query("ROLLBACK");
+    throw error;
+  }
+}
+
+function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
 
 main().catch((error) => { console.error(JSON.stringify({ event: "evaluation_failed", code: error.code || "EVALUATION_FAILED", message: error.message })); process.exitCode = 1; });
