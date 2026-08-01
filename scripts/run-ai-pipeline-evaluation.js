@@ -3,6 +3,7 @@
 require("dotenv").config();
 
 const { randomUUID } = require("crypto");
+const fs = require("fs");
 const { Pool } = require("pg");
 const { formatCrawlIssueSourceId } = require("../src/cms/issue-source-id");
 const { CRAWL_SOURCE_IDS } = require("../src/news-feed/channel-registry");
@@ -31,7 +32,7 @@ async function main() {
       console.log(JSON.stringify({ event: "evaluation_scope_cleaned", tenantId: args.cleanupTenant }));
       return;
     }
-    const source = await loadSourceScope(ai, args.sourceCompany);
+    const source = await loadSourceScope(ai, args.sourceCompany, args.contextFile, args.identityFile);
     const articles = await selectArticles(crawl, args.limit, source.context_content?.fields || {}, args.keywords);
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
 
@@ -68,7 +69,27 @@ async function main() {
   }
 }
 
-async function loadSourceScope(db, requestedName) {
+async function loadSourceScope(db, requestedName, contextFile = null, identityFile = null) {
+  if (contextFile || identityFile) {
+    if (!contextFile || !identityFile) throw new Error("context-file and identity-file must be provided together");
+    const context = JSON.parse(fs.readFileSync(contextFile, "utf8"));
+    const identity = JSON.parse(fs.readFileSync(identityFile, "utf8"));
+    const fields = context.fields || context.context?.fields;
+    if (!fields || typeof fields !== "object" || !identity.identity) throw new Error("Snapshot files must contain context fields and identity.identity");
+    return {
+      company_id: context.companyId || `snapshot-${randomUUID()}`,
+      tenant_id: "snapshot",
+      name: context.companyName || fields.name || "Evaluation Snapshot",
+      context_version: Number.isInteger(context.version) ? context.version : 1,
+      context_content: {
+        ...(context.content || {}),
+        fields,
+        fieldReview: context.field_review || context.fieldReview || null,
+      },
+      identity_content: identity,
+      identity_provenance: identity.provenance || {},
+    };
+  }
   const result = await db.query(`
     SELECT c.id AS company_id, c.tenant_id, c.name, cc.version AS context_version,
            cc.content_jsonb AS context_content, mi.identity_jsonb AS identity_content,
@@ -310,7 +331,7 @@ function chunk(items, size) {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.08, sourceCompany: "Arunika", keywords: [] };
+  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.08, sourceCompany: "Arunika", keywords: [], contextFile: null, identityFile: null };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help") args.help = true;
@@ -319,6 +340,8 @@ function parseArgs(argv) {
     else if (value === "--batch-size") args.batchSize = positive(argv[++i], "batch-size");
     else if (value === "--run-id") args.runId = argv[++i];
     else if (value === "--source-company") args.sourceCompany = argv[++i];
+    else if (value === "--context-file") args.contextFile = argv[++i];
+    else if (value === "--identity-file") args.identityFile = argv[++i];
     else if (value === "--keywords") args.keywords = String(argv[++i] || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
     else if (value === "--poll-ms") args.pollMs = positive(argv[++i], "poll-ms");
     else if (value === "--estimated-usd-per-article") args.estimatedUsdPerArticle = Number(argv[++i]);
@@ -354,6 +377,6 @@ async function cleanupTenant(db, tenantId) {
   }
 }
 
-function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
+function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--context-file path --identity-file path] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
 
 main().catch((error) => { console.error(JSON.stringify({ event: "evaluation_failed", code: error.code || "EVALUATION_FAILED", message: error.message })); process.exitCode = 1; });
