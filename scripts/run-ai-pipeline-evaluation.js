@@ -5,6 +5,7 @@ require("dotenv").config();
 const { randomUUID } = require("crypto");
 const { Pool } = require("pg");
 const { formatCrawlIssueSourceId } = require("../src/cms/issue-source-id");
+const { evaluateContextCompleteness } = require("../src/company-context/completeness");
 
 const INPUT_PRICE = 1 / 1_000_000;
 const CACHED_INPUT_PRICE = 0.10 / 1_000_000;
@@ -117,6 +118,13 @@ async function selectArticles(db, limit) {
 }
 
 async function createEvaluationScope(db, { tenantId, companyId, runId, source }) {
+  const completeness = evaluateContextCompleteness(source.context_content?.fields || {});
+  if (!completeness.complete) {
+    const error = new Error("Evaluation source context is incomplete; complete the company facts manually before testing");
+    error.code = "EVALUATION_SOURCE_CONTEXT_INCOMPLETE";
+    error.details = { sourceCompanyId: source.company_id, contextVersion: source.context_version, completeness };
+    throw error;
+  }
   await db.query("BEGIN");
   try {
     await db.query("INSERT INTO ai.tenants (id,name,status) VALUES ($1,$2,'active')", [tenantId, `AI Evaluation ${runId}`]);
