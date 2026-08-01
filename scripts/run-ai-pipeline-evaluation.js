@@ -200,7 +200,12 @@ function groupBy(items, keyFn) {
 }
 
 async function createEvaluationScope(db, { tenantId, companyId, runId, source }) {
-  const completeness = evaluateContextCompleteness(source.context_content?.fields || {});
+  const fieldReview = source.context_content?.fieldReview || source.context_content?.field_review || null;
+  const completeness = evaluateContextCompleteness(
+    source.context_content?.fields || {},
+    fieldReview,
+    { legacyEffective: !fieldReview },
+  );
   if (!completeness.complete) {
     const error = new Error("Evaluation source context is incomplete; complete the company facts manually before testing");
     error.code = "EVALUATION_SOURCE_CONTEXT_INCOMPLETE";
