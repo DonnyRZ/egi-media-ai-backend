@@ -251,6 +251,7 @@ function serializeContext(context, managementIdentity = undefined) {
     fields: context.fields,
     field_sources: context.fieldSources || [],
     missing_fields: context.missingFields || [],
+    completeness: context.completeness || null,
     change_reason: context.changeReason,
     updated_by: context.updatedBy,
     created_at: context.createdAt,

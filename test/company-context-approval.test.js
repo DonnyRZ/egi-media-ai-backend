@@ -10,11 +10,11 @@ const { createCompanyContextRouter } = require("../src/routes/company-context");
 
 function contextFields() {
   return {
-    name: "PT Example", industry: "Logistics", sub_industry: null, description: null,
-    products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],
+    name: "PT Example", industry: "Logistics", sub_industry: null, description: "Fleet tracking services for logistics operators.",
+    products: ["Fleet tracking"], customers: ["Logistics operators"], regions: ["Indonesia"], competitors: [],
     brands_aliases: [],
     key_people: [],
-    priorities: ["Reduce costs"], goals: [], risks: [], topics: [], dependencies: [],
+    priorities: ["Reduce costs"], goals: [], risks: ["Fuel cost volatility"], topics: [], dependencies: [],
   };
 }
 

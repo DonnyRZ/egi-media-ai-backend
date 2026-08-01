@@ -4,6 +4,7 @@ const {
   CompanyContextNotFoundError,
   CompanyContextConflictError,
 } = require("./company-context.errors");
+const { evaluateContextCompleteness, allMissingFields, incompleteContextError } = require("./completeness");
 
 class CompanyContextService {
   constructor({ draftStore, effectiveContextStore, authorize = denyByDefault, managementIdentityService = null }) {
@@ -25,11 +26,12 @@ class CompanyContextService {
     this._assertRevision(current, expectedRevision);
     this._assertEditable(current);
     const mergedFields = mergeAndValidateFields(current.result.context, fields);
+    const completeness = evaluateContextCompleteness(mergedFields);
 
     return this.draftStore.update(draftId, (draft) => ({
       ...draft,
       status: "draft",
-      result: { ...draft.result, context: mergedFields },
+      result: { ...draft.result, context: mergedFields, missing_fields: allMissingFields(mergedFields), completeness },
       review: { ...draft.review, note: normalizeOptionalText(reviewNote, 1000) },
     }));
   }
@@ -72,12 +74,18 @@ class CompanyContextService {
       });
     }
 
+    const completeness = evaluateContextCompleteness(current.result.context);
+    if (!completeness.complete) {
+      throw incompleteContextError(completeness, { companyId: current.companyId });
+    }
+
     const activation = await this.effectiveContextStore.activate({
       tenantId: current.tenantId,
       companyId: current.companyId,
       fields: current.result.context,
       fieldSources: current.result.field_sources || [],
       missingFields: current.result.missing_fields || [],
+      completeness,
       source: "ai_draft",
       actorId: actorId(actor),
       draftId: current.draftId,
@@ -178,12 +186,17 @@ class CompanyContextService {
     // Align with PUT /companies/:id/context route scope (company_context.draft).
     await this._authorize(actor, tenantId, companyId, "company_context.draft");
     const validatedFields = validateFullFields(fields);
+    const completeness = evaluateContextCompleteness(validatedFields);
+    if (!completeness.complete) {
+      throw incompleteContextError(completeness, { companyId, contextVersion: version });
+    }
     const activation = await this.effectiveContextStore.activate({
       tenantId,
       companyId,
       fields: validatedFields,
       fieldSources: [],
       missingFields: [],
+      completeness,
       source: "manual",
       actorId: actor.id,
       changeReason: normalizeOptionalText(changeReason, 1000),

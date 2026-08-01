@@ -18,11 +18,11 @@ class PostgresEffectiveCompanyContextStore {
   constructor({ db, uuid = randomUUID } = {}) { this.db = db; this.uuid = uuid; }
   async getEffective(companyId, tenantId = null) { const row = tenantId ? await this.db.query("SELECT * FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2 AND status='effective' LIMIT 1", [tenantId, companyId]) : await this.db.query("SELECT * FROM ai.company_contexts WHERE company_id=$1 AND status='effective' LIMIT 1", [companyId]); return row.rows[0] ? mapContext(row.rows[0]) : null; }
   async getVersion(companyId, version, tenantId = null) { const row = tenantId ? await this.db.query("SELECT * FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2 AND version=$3 LIMIT 1", [tenantId, companyId, version]) : await this.db.query("SELECT * FROM ai.company_contexts WHERE company_id=$1 AND version=$2 LIMIT 1", [companyId, version]); return row.rows[0] ? mapContext(row.rows[0]) : null; }
-  async activate({ tenantId = "unknown", companyId, fields, fieldSources = [], missingFields = [], source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
+  async activate({ tenantId = "unknown", companyId, fields, fieldSources = [], missingFields = [], completeness = null, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
     const current = await this.db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2", [tenantId, companyId]); const nextVersion = current.rows[0].version + 1;
     if (expectedNextVersion !== undefined && expectedNextVersion !== nextVersion) return { conflict: { expectedNextVersion, actualNextVersion: nextVersion } };
     await this.db.query("UPDATE ai.company_contexts SET status='archived',updated_at=now() WHERE tenant_id=$1 AND company_id=$2 AND status='effective'", [tenantId, companyId]);
-    const id = this.uuid(); const now = new Date().toISOString(); const content = { fields, fieldSources, missingFields, source, draftId, changeReason, updatedBy: actorId };
+    const id = this.uuid(); const now = new Date().toISOString(); const content = { fields, fieldSources, missingFields, completeness, source, draftId, changeReason, updatedBy: actorId };
     const row = await this.db.query("INSERT INTO ai.company_contexts (id,tenant_id,company_id,version,content_jsonb,source,status,updated_by,created_at,updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,'effective',$7,$8,$8) RETURNING *", [id, tenantId, companyId, nextVersion, JSON.stringify(content), source, actorId, now]);
     return { context: mapContext(row.rows[0]) };
   }
@@ -51,6 +51,7 @@ function mapContext(row) {
     fields: normalizeContextFieldsForRead(content.fields || {}),
     fieldSources: content.fieldSources || [],
     missingFields: content.missingFields || [],
+    completeness: content.completeness || null,
     changeReason: content.changeReason || null,
     updatedBy: row.updated_by,
     createdAt: date(row.created_at),

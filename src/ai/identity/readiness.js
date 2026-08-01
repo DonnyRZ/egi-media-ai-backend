@@ -1,5 +1,7 @@
 "use strict";
 
+const { evaluateContextCompleteness, incompleteContextError } = require("../../company-context/completeness");
+
 /**
  * Resolve whether a company may run AI intake / judgmental tasks.
  * Requires an effective company context and a ready management identity
@@ -46,6 +48,19 @@ async function resolveManagementIdentityReadiness({
     };
   }
 
+  const completeness = context.completeness || evaluateContextCompleteness(context.fields);
+  if (!completeness.complete) {
+    return {
+      ready: false,
+      status: "context_incomplete",
+      contextVersion: context.version,
+      hasEffectiveContext: true,
+      contextCompleteness: completeness,
+      identity: null,
+      record: null,
+    };
+  }
+
   const record = identityStore?.get
     ? await identityStore.get({
       tenantId: tenantId ?? context.tenantId ?? null,
@@ -60,6 +75,7 @@ async function resolveManagementIdentityReadiness({
       status: "missing",
       contextVersion: context.version,
       hasEffectiveContext: true,
+      contextCompleteness: completeness,
       identity: null,
       record: null,
     };
@@ -74,6 +90,7 @@ async function resolveManagementIdentityReadiness({
     status,
     contextVersion: context.version,
     hasEffectiveContext: true,
+    contextCompleteness: completeness,
     identity: record.identity || null,
     record,
   };
@@ -82,6 +99,12 @@ async function resolveManagementIdentityReadiness({
 async function assertManagementIdentityReady(args) {
   const readiness = await resolveManagementIdentityReadiness(args);
   if (!readiness.ready) {
+    if (readiness.status === "context_incomplete") {
+      throw incompleteContextError(readiness.contextCompleteness, {
+        companyId: args.companyId,
+        contextVersion: readiness.contextVersion,
+      });
+    }
     throw managementIdentityRequiredError({
       companyId: args.companyId,
       tenantId: args.tenantId ?? null,
@@ -102,6 +125,7 @@ function serializeManagementIdentitySummary(record, { contextVersion = null } = 
       lens_summary: null,
       fingerprint: null,
       error_message: null,
+      completeness: null,
       updated_at: null,
     };
   }
@@ -112,6 +136,7 @@ function serializeManagementIdentitySummary(record, { contextVersion = null } = 
     lens_summary: record.identity?.lens_summary || null,
     fingerprint: record.identity?.fingerprint || null,
     error_message: record.errorMessage || null,
+    completeness: record.completeness || null,
     updated_at: record.updatedAt || null,
   };
 }

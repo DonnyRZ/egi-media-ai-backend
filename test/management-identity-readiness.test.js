@@ -10,8 +10,17 @@ const {
 const { InMemoryEffectiveCompanyContextStore } = require("../src/company-context/effective-context.store");
 const { InMemoryManagementIdentityStore } = require("../src/ai/identity/identity.store");
 const { enqueueIngestTrigger } = require("../src/ingest/ingest-trigger");
-const { InMemoryPipelineCompanyStore } = require("../src/automation/company-scope");
+const { InMemoryPipelineCompanyStore, PostgresPipelineCompanyStore } = require("../src/automation/company-scope");
 const { leadershipSystemPreamble } = require("../src/ai/identity/prompt-stamp");
+
+function completeFields() {
+  return {
+    name: "Acme", industry: "Logistics", sub_industry: null, description: "Fleet tracking services.",
+    products: ["Fleet tracking"], customers: ["Logistics operators"], regions: ["Indonesia"],
+    competitors: [], brands_aliases: [], key_people: [], priorities: ["Cost control"], goals: [],
+    risks: ["Fuel costs"], topics: [], dependencies: [],
+  };
+}
 
 describe("management identity readiness", () => {
   it("reports missing when no effective context exists", async () => {
@@ -31,7 +40,7 @@ describe("management identity readiness", () => {
     contexts.activate({
       tenantId: "ten-1",
       companyId: "co-1",
-      fields: { company_name: "Acme" },
+      fields: completeFields(),
       source: "manual",
       actorId: "actor-1",
     });
@@ -51,7 +60,7 @@ describe("management identity readiness", () => {
     const activated = contexts.activate({
       tenantId: "ten-1",
       companyId: "co-1",
-      fields: { company_name: "Acme" },
+      fields: completeFields(),
       source: "manual",
       actorId: "actor-1",
     });
@@ -121,6 +130,19 @@ describe("listEligible requires ready identity flag", () => {
     });
     const eligible = await store.listEligible();
     assert.deepEqual(eligible.map((item) => item.companyId), ["c1"]);
+  });
+
+  it("excludes a PostgreSQL company whose effective context is incomplete", async () => {
+    const store = new PostgresPipelineCompanyStore({
+      db: {
+        query: async () => ({ rows: [
+          { tenant_id: "t1", company_id: "complete", content_jsonb: { fields: completeFields() } },
+          { tenant_id: "t1", company_id: "incomplete", content_jsonb: { fields: { ...completeFields(), risks: [] } } },
+        ] }),
+      },
+    });
+    const eligible = await store.listEligible();
+    assert.deepEqual(eligible.map((item) => item.companyId), ["complete"]);
   });
 });
 

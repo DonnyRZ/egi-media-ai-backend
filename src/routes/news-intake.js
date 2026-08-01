@@ -63,6 +63,13 @@ function createNewsIntakeRouter({
         context_version: readiness.contextVersion,
         has_effective_context: Boolean(readiness.hasEffectiveContext),
       };
+      data.company_context = {
+        complete: readiness.contextCompleteness?.complete !== false,
+        status: readiness.contextCompleteness?.status || (readiness.hasEffectiveContext ? "complete" : "missing"),
+        rule_version: readiness.contextCompleteness?.rule_version || null,
+        missing_core_fields: readiness.contextCompleteness?.missing_core_fields || [],
+        missing_recommended_fields: readiness.contextCompleteness?.missing_recommended_fields || [],
+      };
       data.intake_ready = Boolean(readiness.ready);
     }
     return success(res, data, req);

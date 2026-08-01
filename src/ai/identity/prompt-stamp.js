@@ -31,6 +31,13 @@ function trustedIdentityStamp(context) {
  * Does not restate company scope (that lives in company_context_fields).
  */
 function leadershipSystemPreamble(context) {
+  if (context?.completeness && context.completeness.complete === false) {
+    const error = new Error("Complete Company Context is required for judgmental AI tasks");
+    error.code = "COMPANY_CONTEXT_INCOMPLETE";
+    error.statusCode = 409;
+    error.details = { completeness: context.completeness };
+    throw error;
+  }
   const stamp = trustedIdentityStamp(context);
   if (!stamp?.identity) {
     const error = new Error("Management identity ready is required for judgmental AI tasks");

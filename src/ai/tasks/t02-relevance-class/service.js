@@ -8,6 +8,7 @@ const { validateT02Output } = require("./output-validator");
 const { isContinuingRelevance, shouldFormIssue } = require("./relevance-policy");
 const { applySubjectIdentityGate } = require("./subject-identity-gate");
 const { applyMarketMaterialityGate } = require("./market-materiality-gate");
+const { evaluateContextCompleteness, incompleteContextError } = require("../../../company-context/completeness");
 
 const RELEVANCE_RANK = Object.freeze({ none: 0, low: 1, medium: 2, high: 3 });
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
@@ -220,6 +221,10 @@ class RelevanceClassificationService {
   _validateEffectiveContext(context, companyId) {
     if (!context || context.status !== "effective" || context.companyId !== companyId || !Number.isInteger(context.version)) {
       throw new AiConfigurationError("T02 requires an approved effective Company Context for the same company");
+    }
+    const completeness = context.completeness || evaluateContextCompleteness(context.fields);
+    if (!completeness.complete) {
+      throw incompleteContextError(completeness, { companyId, contextVersion: context.version });
     }
     if (!context.managementIdentity?.identity) {
       throw new AiConfigurationError("T02 requires a ready management identity for the effective Company Context", {
