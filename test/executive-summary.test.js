@@ -79,6 +79,38 @@ test("Executive Summary excludes inactive, stale, cross-company, and invalid-cur
   assert.deepEqual(summary.items.map((item) => item.issueId), ["eligible"]);
 });
 
+test("Executive Summary excludes a raw issue that has no current analysis or priority", async () => {
+  const { service, issueStore } = buildService();
+  issueStore.seed({
+    issueId: "raw-incomplete",
+    tenantId,
+    companyId,
+    title: "Raw issue only",
+    oneLiner: "Needs downstream validation.",
+    status: "berkembang",
+    currentPriority: null,
+    currentPriorityAnalysisId: null,
+    currentPriorityDecisionId: null,
+    firstSeenAt: "2026-07-22T10:00:00.000Z",
+    lastDevelopedAt: "2026-07-22T11:00:00.000Z",
+    version: 1,
+    closedAt: null,
+    createdAt: "2026-07-22T10:00:00.000Z",
+    updatedAt: "2026-07-22T11:00:00.000Z",
+  });
+  issueStore.developmentsById.set("development-raw-incomplete", {
+    developmentId: "development-raw-incomplete",
+    tenantId,
+    companyId,
+    issueId: "raw-incomplete",
+    observedAt: "2026-07-22T11:00:00.000Z",
+    developmentType: "updated",
+  });
+
+  const summary = await service.getExecutiveSummary({ tenantId, companyId, period: "24jam" });
+  assert.deepEqual(summary.items, []);
+});
+
 test("Executive Summary validates its UI period and company authorization without any AI dependency", async () => {
   const { service } = buildService();
   await assert.rejects(service.getExecutiveSummary({ tenantId, companyId, period: "90hari" }), { code: "AI_CONFIGURATION_INVALID" });
