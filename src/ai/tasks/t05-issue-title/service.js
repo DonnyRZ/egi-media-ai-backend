@@ -6,6 +6,7 @@ const { buildT05Input } = require("./prompt");
 const { validateT05Output } = require("./output-validator");
 const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
 const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
@@ -29,7 +30,7 @@ class IssueTitleService {
     this.authorizeCompany = authorizeCompany;
   }
 
-  async generate({ tenantId, companyId, issueId }) {
+  async generate({ tenantId, companyId, issueId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     this._validateIssue(issue);
@@ -65,7 +66,8 @@ class IssueTitleService {
     });
     const applied = await this.issueStore.applyGeneratedTitle({
       tenantId, companyId, issueId, developmentId: development.developmentId,
-      promptVersion: T05_PROMPT_VERSION, title: execution.data.title, provenance: execution.provenance,
+      promptVersion: T05_PROMPT_VERSION, title: execution.data.title,
+      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
     });
     return { title: applied.title, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }

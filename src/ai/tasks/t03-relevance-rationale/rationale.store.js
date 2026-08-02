@@ -12,13 +12,13 @@ class InMemoryRelevanceRationaleStore {
     return rationale ? cloneForRead(rationale) : null;
   }
 
-  create({ decisionId, companyId, promptVersion, rationale, provenance }) {
+  create({ tenantId = null, decisionId, companyId, promptVersion, rationale, provenance, pipelineId = null, inputFingerprint = null }) {
     const key = this._key({ decisionId, promptVersion });
     const existing = this.rationalesByKey.get(key);
     if (existing) return cloneForRead(existing);
     const value = {
-      rationaleId: this.uuid(), decisionId, companyId, promptVersion, rationale,
-      provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString(),
+      rationaleId: this.uuid(), tenantId, decisionId, companyId, promptVersion, rationale,
+      pipelineId, inputFingerprint, provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString(),
     };
     this.rationalesByKey.set(key, value);
     return cloneForRead(value);

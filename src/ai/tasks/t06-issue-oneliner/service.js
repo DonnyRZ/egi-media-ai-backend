@@ -6,6 +6,7 @@ const { buildT06Input } = require("./prompt");
 const { validateT06Output } = require("./output-validator");
 const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
 const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 
@@ -21,7 +22,7 @@ class IssueOneLinerService {
     Object.assign(this, { cmsSourceGate, issueStore, matchDecisionStore, relevanceDecisionStore, promptExecutionService, companyStore, resolveOutputLanguage, getEffectiveContext, authorizeCompany });
   }
 
-  async generate({ tenantId, companyId, issueId }) {
+  async generate({ tenantId, companyId, issueId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     this._validateIssue(issue);
@@ -60,7 +61,7 @@ class IssueOneLinerService {
     });
     const applied = await this.issueStore.applyGeneratedOneLiner({
       tenantId, companyId, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION,
-      oneLiner: execution.data.oneLiner, provenance: execution.provenance,
+      oneLiner: execution.data.oneLiner, provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
     });
     return { oneLiner: applied.oneLiner, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }

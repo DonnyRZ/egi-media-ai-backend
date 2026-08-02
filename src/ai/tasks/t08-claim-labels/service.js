@@ -3,6 +3,7 @@ const { T08_PROMPT_ID, T08_PROMPT_VERSION } = require("./definition");
 const { T08_OUTPUT_SCHEMA } = require("./schema");
 const { buildT08Input } = require("./prompt");
 const { validateT08Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class ClaimLabelService {
   constructor({ analysisStore, labelStore, promptExecutionService, authorizeCompany = denyByDefault }) {
@@ -11,7 +12,7 @@ class ClaimLabelService {
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T08 requires prompt execution service");
     Object.assign(this, { analysisStore, labelStore, promptExecutionService, authorizeCompany });
   }
-  async label({ tenantId, companyId, analysisId }) {
+  async label({ tenantId, companyId, analysisId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const analysis = await this.analysisStore.getById(analysisId);
     if (!analysis || analysis.tenantId !== tenantId || analysis.companyId !== companyId || analysis.status !== "validated" || !Array.isArray(analysis.analysis?.claims) || analysis.analysis.claims.length < 1) {
@@ -27,7 +28,7 @@ class ClaimLabelService {
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT08Output(data, { claimIds }),
     });
-    const labels = await this.labelStore.create({ tenantId, companyId, analysisId, issueId: analysis.issueId, promptVersion: T08_PROMPT_VERSION, labels: execution.data.labels, provenance: execution.provenance });
+    const labels = await this.labelStore.create({ tenantId, companyId, analysisId, issueId: analysis.issueId, promptVersion: T08_PROMPT_VERSION, labels: execution.data.labels, provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId, inputFingerprint: analysis.inputFingerprint });
     return { labels, analysis, reused: false };
   }
   async _authorizeCompany({ tenantId, companyId }) { const granted = await this.authorizeCompany({ tenantId, companyId, action: "analysis.claims.label" }); if (granted !== true) throw new AiConfigurationError("T08 tenant/company authorization was not granted"); }

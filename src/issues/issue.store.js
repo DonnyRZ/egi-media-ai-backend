@@ -85,7 +85,7 @@ class InMemoryIssueStore {
     return title ? cloneForRead(title) : null;
   }
 
-  applyGeneratedTitle({ tenantId, companyId, issueId, developmentId, promptVersion, title, provenance }) {
+  applyGeneratedTitle({ tenantId, companyId, issueId, developmentId, promptVersion, title, provenance, pipelineId = null }) {
     const key = this._titleKey({ issueId, developmentId, promptVersion });
     const existing = this.titleGenerationsByKey.get(key);
     if (existing) return { title: cloneForRead(existing), reused: true };
@@ -99,7 +99,7 @@ class InMemoryIssueStore {
     issue.version += 1;
     const generated = {
       titleGenerationId: this.uuid(), tenantId, companyId, issueId, developmentId, promptVersion,
-      title, provenance: structuredClone(provenance), createdAt: now,
+      title, provenance: structuredClone(provenance), pipelineId, createdAt: now,
     };
     this.titleGenerationsByKey.set(key, generated);
     return { title: cloneForRead(generated), reused: false };
@@ -110,7 +110,7 @@ class InMemoryIssueStore {
     return oneLiner ? cloneForRead(oneLiner) : null;
   }
 
-  applyGeneratedOneLiner({ tenantId, companyId, issueId, developmentId, promptVersion, oneLiner, provenance }) {
+  applyGeneratedOneLiner({ tenantId, companyId, issueId, developmentId, promptVersion, oneLiner, provenance, pipelineId = null }) {
     const key = this._oneLinerKey({ issueId, developmentId, promptVersion });
     const existing = this.oneLinerGenerationsByKey.get(key);
     if (existing) return { oneLiner: cloneForRead(existing), reused: true };
@@ -124,7 +124,7 @@ class InMemoryIssueStore {
     issue.version += 1;
     const generated = {
       oneLinerGenerationId: this.uuid(), tenantId, companyId, issueId, developmentId, promptVersion,
-      oneLiner, provenance: structuredClone(provenance), createdAt: now,
+      oneLiner, provenance: structuredClone(provenance), pipelineId, createdAt: now,
     };
     this.oneLinerGenerationsByKey.set(key, generated);
     return { oneLiner: cloneForRead(generated), reused: false };

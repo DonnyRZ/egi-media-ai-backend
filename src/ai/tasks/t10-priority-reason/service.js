@@ -6,6 +6,7 @@ const { T10_PROMPT_ID, T10_PROMPT_VERSION } = require("./definition");
 const { T10_OUTPUT_SCHEMA } = require("./schema");
 const { buildT10Input } = require("./prompt");
 const { validateT10Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class PriorityReasonService {
   constructor({ issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
@@ -19,7 +20,7 @@ class PriorityReasonService {
     Object.assign(this, { issueStore, analysisStore, priorityStore, labelStore, getEffectiveContext, reasonStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
 
-  async generate({ tenantId, companyId, issueId, analysisId, priorityDecisionId }) {
+  async generate({ tenantId, companyId, issueId, analysisId, priorityDecisionId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !["baru", "berkembang", "dipantau"].includes(issue.status)) throw new AiConfigurationError("T10 requires an active issue in the same tenant and company");
@@ -55,7 +56,8 @@ class PriorityReasonService {
     });
     const reason = await this.reasonStore.create({
       tenantId, companyId, issueId, analysisId, priorityDecisionId, promptVersion: T10_PROMPT_VERSION,
-      reason: execution.data.reason, sourceClaimIds: execution.data.sourceClaimIds, provenance: execution.provenance,
+      reason: execution.data.reason, sourceClaimIds: execution.data.sourceClaimIds,
+      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId, inputFingerprint: analysis.inputFingerprint,
     });
     return { reason, priorityDecision, analysis, reused: false };
   }

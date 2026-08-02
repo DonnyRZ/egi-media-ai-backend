@@ -9,6 +9,7 @@ const { isContinuingRelevance, shouldFormIssue } = require("./relevance-policy")
 const { applySubjectIdentityGate } = require("./subject-identity-gate");
 const { applyMarketMaterialityGate } = require("./market-materiality-gate");
 const { evaluateContextCompleteness, incompleteContextError } = require("../../../company-context/completeness");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 const RELEVANCE_RANK = Object.freeze({ none: 0, low: 1, medium: 2, high: 3 });
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
@@ -107,7 +108,7 @@ class RelevanceClassificationService {
     this.inputOptions = inputOptions || resolveT02InputOptions();
   }
 
-  async classify({ tenantId = null, companyId, articleId, locale }) {
+  async classify({ tenantId = null, companyId, articleId, locale, pipelineId = null }) {
     await this._authorizeCompany(companyId);
     const context = await this.getEffectiveContext(companyId, tenantId);
     this._validateEffectiveContext(context, companyId);
@@ -193,7 +194,8 @@ class RelevanceClassificationService {
       inputFingerprint,
       source,
       output: persistedOutput,
-      provenance,
+      provenance: withPipelineTrace(provenance, pipelineId),
+      pipelineId,
     });
 
     return {

@@ -5,6 +5,7 @@ const { T03_OUTPUT_SCHEMA } = require("./schema");
 const { buildT03Input } = require("./prompt");
 const { validateT03Output } = require("./output-validator");
 const { fingerprint } = require("../t02-relevance-class/service");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class RelevanceRationaleService {
   constructor({ cmsSourceGate, getCompanyContextVersion, promptExecutionService, decisionStore, rationaleStore, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
@@ -23,7 +24,7 @@ class RelevanceRationaleService {
     this.authorizeCompany = authorizeCompany;
   }
 
-  async generate({ tenantId = null, companyId, decisionId }) {
+  async generate({ tenantId = null, companyId, decisionId, pipelineId = null }) {
     await this._authorizeCompany(companyId);
     const decision = await this.decisionStore.getById(decisionId);
     this._validateDecision(decision, companyId);
@@ -52,11 +53,14 @@ class RelevanceRationaleService {
       validateResult: validateT03Output,
     });
     const rationale = await this.rationaleStore.create({
+      tenantId,
       decisionId,
       companyId,
       promptVersion: T03_PROMPT_VERSION,
       rationale: execution.data.rationale,
-      provenance: execution.provenance,
+      provenance: withPipelineTrace(execution.provenance, pipelineId),
+      pipelineId,
+      inputFingerprint: decision.inputFingerprint,
     });
     return { rationale, decision, reused: false };
   }

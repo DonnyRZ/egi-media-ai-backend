@@ -2,9 +2,9 @@ const { randomUUID } = require("crypto");
 class InMemoryClaimLabelStore {
   constructor({ uuid = randomUUID, now = Date.now } = {}) { this.uuid = uuid; this.now = now; this.labelsByKey = new Map(); }
   get({ analysisId, promptVersion }) { const value = this.labelsByKey.get(this._key({ analysisId, promptVersion })); return value ? cloneForRead(value) : null; }
-  create({ tenantId, companyId, analysisId, issueId, promptVersion, labels, provenance }) {
+  create({ tenantId, companyId, analysisId, issueId, promptVersion, labels, provenance, pipelineId = null, inputFingerprint = null }) {
     const key = this._key({ analysisId, promptVersion }); const existing = this.labelsByKey.get(key); if (existing) return cloneForRead(existing);
-    const value = { labelRunId: this.uuid(), tenantId, companyId, analysisId, issueId, promptVersion, labels: structuredClone(labels), provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString() };
+    const value = { labelRunId: this.uuid(), tenantId, companyId, analysisId, issueId, promptVersion, labels: structuredClone(labels), provenance: structuredClone(provenance), pipelineId, inputFingerprint, createdAt: new Date(this.now()).toISOString() };
     this.labelsByKey.set(key, value); return cloneForRead(value);
   }
   list() { return [...this.labelsByKey.values()].map(cloneForRead); }

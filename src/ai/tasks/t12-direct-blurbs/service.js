@@ -6,6 +6,7 @@ const { T12_PROMPT_ID, T12_PROMPT_VERSION } = require("./definition");
 const { T12_OUTPUT_SCHEMA } = require("./schema");
 const { buildT12Input } = require("./prompt");
 const { validateT12Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class DirectAlertBlurbService {
   constructor({ eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getEffectiveContext = null, authorizeCompany = denyByDefault }) {
@@ -16,7 +17,7 @@ class DirectAlertBlurbService {
     Object.assign(this, { eventStore, issueStore, analysisStore, priorityStore, reasonStore, blurbStore, promptExecutionService, companyStore, resolveOutputLanguage, getEffectiveContext, authorizeCompany });
   }
 
-  async generate({ tenantId, companyId, alertEventId }) {
+  async generate({ tenantId, companyId, alertEventId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const event = await this.eventStore.get({ tenantId, companyId, alertEventId });
     if (!event || event.channel !== "langsung" || event.status !== "eligible") {
@@ -39,7 +40,8 @@ class DirectAlertBlurbService {
       const blurb = await this.blurbStore.create({
         tenantId, companyId, issueId: event.issueId, developmentId: event.developmentId, alertEventId,
         promptVersion: T12_PROMPT_VERSION, newDevelopmentBlurb: execution.data.newDevelopmentBlurb,
-        shortImpactBlurb: execution.data.shortImpactBlurb, sourceClaimIds: execution.data.sourceClaimIds, provenance: execution.provenance,
+        shortImpactBlurb: execution.data.shortImpactBlurb, sourceClaimIds: execution.data.sourceClaimIds,
+        provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
       });
       return { blurb, event, reused: false };
     } catch (error) {

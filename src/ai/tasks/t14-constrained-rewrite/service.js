@@ -5,6 +5,7 @@ const { T14_PROMPT_ID, T14_PROMPT_VERSION } = require("./definition");
 const { T14_OUTPUT_SCHEMA } = require("./schema");
 const { buildT14Input } = require("./prompt");
 const { validateT14Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class ConstrainedRewriteService {
   constructor({ reportDraftStore, narrativeStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, authorizeCompany = denyByDefault }) {
@@ -13,7 +14,7 @@ class ConstrainedRewriteService {
     if (!promptExecutionService?.executeActive) throw new AiConfigurationError("T14 requires prompt execution service");
     Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany });
   }
-  async rewrite({ tenantId, companyId, reportId, reportNarrativeId, expectedVersion, allowedSpanId, humanInstruction, actor }) {
+  async rewrite({ tenantId, companyId, reportId, reportNarrativeId, expectedVersion, allowedSpanId, humanInstruction, actor, pipelineId = null }) {
     assertHumanActor(actor); assertInstruction(humanInstruction);
     await this._authorizeCompany({ tenantId, companyId, actor });
     const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
@@ -31,7 +32,7 @@ class ConstrainedRewriteService {
       budgetScope: { tenantId, companyId },
       validateResult: validateT14Output,
     });
-    const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: execution.provenance });
+    const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: withPipelineTrace(execution.provenance, pipelineId) });
     if (!result?.narrative) throw new AiConfigurationError("T14 target narrative version conflict");
     return { narrative: result.narrative, report, rewrittenSpan: { spanId: span.spanId, sourceClaimIds: span.sourceClaimIds }, reused: false };
   }

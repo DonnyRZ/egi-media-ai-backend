@@ -39,12 +39,13 @@ class InMemoryIssueAnalysisStore {
     return cloneForRead(analysis);
   }
 
-  create({ tenantId, companyId, issueId, contextVersion, inputFingerprint, promptVersion, analysis, evidence, provenance }) {
+  create({ tenantId, companyId, issueId, contextVersion, inputFingerprint, promptVersion, analysis, evidence, provenance, pipelineId = null }) {
     const key = this._key({ tenantId, companyId, issueId, inputFingerprint, promptVersion });
     const existing = this.analysesByKey.get(key);
     if (existing) return cloneForRead(existing);
     const value = {
       analysisId: this.uuid(), tenantId, companyId, issueId, contextVersion, inputFingerprint, promptVersion,
+      pipelineId,
       status: "validated", analysis: structuredClone(analysis),
       evidence: evidence.map((item) => ({ sourceArticleId: item.sourceArticleId, locale: item.requestedLocale, canonicalUrl: item.canonicalUrl, updatedAt: item.article.updatedAt })),
       provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString(),

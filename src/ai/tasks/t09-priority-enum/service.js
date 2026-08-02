@@ -3,6 +3,7 @@ const { T09_PROMPT_ID, T09_PROMPT_VERSION } = require("./definition");
 const { T09_OUTPUT_SCHEMA } = require("./schema");
 const { buildT09Input } = require("./prompt");
 const { validateT09Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class IssuePriorityEnumService {
   constructor({ issueStore, analysisStore, getEffectiveContext, priorityStore, promptExecutionService, authorizeCompany = denyByDefault }) {
@@ -14,7 +15,7 @@ class IssuePriorityEnumService {
     Object.assign(this, { issueStore, analysisStore, getEffectiveContext, priorityStore, promptExecutionService, authorizeCompany });
   }
 
-  async evaluate({ tenantId, companyId, issueId, analysisId }) {
+  async evaluate({ tenantId, companyId, issueId, analysisId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !["baru", "berkembang", "dipantau"].includes(issue.status)) throw new AiConfigurationError("T09 requires an active issue in the same tenant and company");
@@ -43,7 +44,8 @@ class IssuePriorityEnumService {
     });
     const priority = await this.priorityStore.create({
       tenantId, companyId, issueId, analysisId, contextVersion: context.version,
-      promptVersion: T09_PROMPT_VERSION, priority: execution.data.priority, provenance: execution.provenance,
+      promptVersion: T09_PROMPT_VERSION, priority: execution.data.priority,
+      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
     });
     const applied = await this.issueStore.applyCurrentPriority({
       tenantId, companyId, issueId, analysisId, priorityDecisionId: priority.priorityDecisionId, priority: priority.priority,

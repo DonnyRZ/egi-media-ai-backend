@@ -4,6 +4,7 @@ const { T13_PROMPT_ID, T13_PROMPT_VERSION } = require("./definition");
 const { T13_OUTPUT_SCHEMA } = require("./schema");
 const { buildT13Input } = require("./prompt");
 const { validateT13Output } = require("./output-validator");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class ReportNarrativeService {
   constructor({ reportDraftStore, narrativeStore, promptExecutionService, companyStore = null, resolveOutputLanguage = null, getCompanyContextVersion = null, authorizeCompany = denyByDefault }) {
@@ -12,7 +13,7 @@ class ReportNarrativeService {
     Object.assign(this, { reportDraftStore, narrativeStore, promptExecutionService, companyStore, resolveOutputLanguage, getCompanyContextVersion, authorizeCompany });
   }
 
-  async generate({ tenantId, companyId, reportId }) {
+  async generate({ tenantId, companyId, reportId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
     if (!report || report.reviewStatus !== "draft") throw new AiConfigurationError("T13 requires a draft report in the same tenant and company");
@@ -30,7 +31,7 @@ class ReportNarrativeService {
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT13Output(data, { report }),
       });
-      const narrative = await this.narrativeStore.create({ tenantId, companyId, reportId, promptVersion: T13_PROMPT_VERSION, narrative: execution.data, provenance: execution.provenance });
+      const narrative = await this.narrativeStore.create({ tenantId, companyId, reportId, promptVersion: T13_PROMPT_VERSION, narrative: execution.data, provenance: withPipelineTrace(execution.provenance, pipelineId) });
       return { narrative, report, reused: false };
     } catch (error) {
       await this.reportDraftStore.markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode: error?.code === "AI_OUTPUT_SCHEMA_INVALID" ? "invalid_narrative_output" : "report_narrative_gate_failed" });

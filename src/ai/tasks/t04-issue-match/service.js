@@ -6,6 +6,7 @@ const { validateT04Output } = require("./output-validator");
 const { fingerprint, resolveT02InputOptions } = require("../t02-relevance-class/service");
 const { shouldFormIssue } = require("../t02-relevance-class/relevance-policy");
 const { ACTIVE_ISSUE_STATUSES } = require("./issue-candidate.store");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 class IssueMatchService {
   constructor({ cmsSourceGate, decisionStore, issueCandidateStore, matchDecisionStore, promptExecutionService, authorizeCompany = denyByDefault }) {
@@ -22,7 +23,7 @@ class IssueMatchService {
     this.authorizeCompany = authorizeCompany;
   }
 
-  async match({ tenantId, companyId, relevanceDecisionId }) {
+  async match({ tenantId, companyId, relevanceDecisionId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const relevanceDecision = await this.decisionStore.getById(relevanceDecisionId);
     this._validateRelevanceDecision(relevanceDecision, companyId);
@@ -58,11 +59,13 @@ class IssueMatchService {
           candidate_issue_id: existingSource.issue.issueId,
           reason_code: "same_event",
         },
-        provenance: {
+        provenance: withPipelineTrace({
           policy: existingSource.policy,
           sourceArticleId: relevanceDecision.articleId,
           canonicalUrl: source.canonicalUrl,
-        },
+        }, pipelineId),
+        pipelineId,
+        inputFingerprint: relevanceDecision.inputFingerprint,
       });
       return { match, relevanceDecision, reused: false };
     }
@@ -77,7 +80,8 @@ class IssueMatchService {
     });
     const match = await this.matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION,
-      output: execution.data, provenance: execution.provenance,
+      output: execution.data, provenance: withPipelineTrace(execution.provenance, pipelineId),
+      pipelineId, inputFingerprint: relevanceDecision.inputFingerprint,
     });
     return { match, relevanceDecision, reused: false };
   }

@@ -18,14 +18,14 @@ class InMemoryIssueMatchDecisionStore {
     return value ? cloneForRead(value) : null;
   }
 
-  create({ tenantId, companyId, relevanceDecisionId, promptVersion, output, provenance }) {
+  create({ tenantId, companyId, relevanceDecisionId, promptVersion, output, provenance, pipelineId = null, inputFingerprint = null }) {
     const key = this._key({ tenantId, companyId, relevanceDecisionId, promptVersion });
     const existing = this.decisionsByKey.get(key);
     if (existing) return cloneForRead(existing);
     const value = {
       matchDecisionId: this.uuid(), tenantId, companyId, relevanceDecisionId, promptVersion,
       decision: output.decision, candidateIssueId: output.candidate_issue_id, reasonCode: output.reason_code,
-      provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString(),
+      provenance: structuredClone(provenance), pipelineId, inputFingerprint, createdAt: new Date(this.now()).toISOString(),
     };
     this.decisionsByKey.set(key, value);
     this.decisionsById.set(value.matchDecisionId, value);

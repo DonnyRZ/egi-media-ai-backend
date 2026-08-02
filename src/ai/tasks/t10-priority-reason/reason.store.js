@@ -12,13 +12,13 @@ class InMemoryPriorityReasonStore {
     return value ? cloneForRead(value) : null;
   }
 
-  create({ tenantId, companyId, issueId, analysisId, priorityDecisionId, promptVersion, reason, sourceClaimIds, provenance }) {
+  create({ tenantId, companyId, issueId, analysisId, priorityDecisionId, promptVersion, reason, sourceClaimIds, provenance, pipelineId = null, inputFingerprint = null }) {
     const key = this._key({ priorityDecisionId, promptVersion });
     const existing = this.reasonsByKey.get(key);
     if (existing) return cloneForRead(existing);
     const value = {
       priorityReasonId: this.uuid(), tenantId, companyId, issueId, analysisId, priorityDecisionId,
-      promptVersion, reason, sourceClaimIds: structuredClone(sourceClaimIds), provenance: structuredClone(provenance), createdAt: new Date(this.now()).toISOString(),
+      promptVersion, reason, sourceClaimIds: structuredClone(sourceClaimIds), provenance: structuredClone(provenance), pipelineId, inputFingerprint, createdAt: new Date(this.now()).toISOString(),
     };
     this.reasonsByKey.set(key, value);
     return cloneForRead(value);

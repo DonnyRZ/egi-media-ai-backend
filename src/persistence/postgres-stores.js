@@ -1,6 +1,7 @@
 const { randomUUID } = require("crypto");
 const { PostgresRecordStore } = require("./postgres-record-store");
 const { branchForDecision } = require("../ai/tasks/t02-relevance-class/relevance-policy");
+const { resolvePipelineId } = require("../pipeline/pipeline-trace");
 
 const json = (value) => JSON.stringify(value ?? {});
 const payload = (row) => row.payload_jsonb || {};
@@ -23,7 +24,7 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
     );
     return result.rows[0] ? mapRelevance(result.rows[0]) : null;
   }
-  async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance }) {
+  async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance, pipelineId = null }) {
     const subjectRelation = output.subject_relation ?? null;
     const competitorOptIn = output.competitor_opt_in === true;
     const id = this.uuid();
@@ -32,7 +33,7 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
       relevance: output.relevance, confidence: output.confidence,
       subjectRelation, competitorOptIn,
       branch: branchForDecision({ relevance: output.relevance, subjectRelation }),
-      provenance, createdAt: new Date().toISOString(),
+      provenance, pipelineId, createdAt: new Date().toISOString(),
     };
     const payload = json({ ...value, source, inputFingerprint });
     // Upsert when fingerprint changes so identity-gate reclassifications replace stale continues.
@@ -56,7 +57,7 @@ class PostgresIssueMatchDecisionStore extends PostgresRecordStore {
   constructor(options) { super({ ...options, table: "ai.stage_runs", mapRow: payload }); }
   async get({ tenantId, companyId, relevanceDecisionId, promptVersion }) { const values = await this.list({tenantId, companyId}); return values.find((v) => v.task === "T04" && v.relevanceDecisionId === relevanceDecisionId && v.promptVersion === promptVersion) || null; }
   async getById(matchDecisionId) { return this.findOne({ id:matchDecisionId }); }
-  async create({ tenantId, companyId, relevanceDecisionId, promptVersion, output, provenance }) { const id=this.uuid(); const value={matchDecisionId:id,tenantId,companyId,relevanceDecisionId,promptVersion,decision:output.decision,candidateIssueId:output.candidate_issue_id,reasonCode:output.reason_code,provenance,createdAt:new Date().toISOString(),task:"T04"}; await this.db.query("INSERT INTO ai.stage_runs (id,tenant_id,company_id,task,prompt_version,output_jsonb,payload_jsonb) VALUES ($1,$2,$3,'T04',$4,$5::jsonb,$6::jsonb)",[id,tenantId,companyId,promptVersion,json(output),json(value)]); return value; }
+  async create({ tenantId, companyId, relevanceDecisionId, promptVersion, output, provenance, pipelineId = null, inputFingerprint = null }) { const id=this.uuid(); const value={matchDecisionId:id,tenantId,companyId,relevanceDecisionId,promptVersion,decision:output.decision,candidateIssueId:output.candidate_issue_id,reasonCode:output.reason_code,provenance,pipelineId,inputFingerprint,createdAt:new Date().toISOString(),task:"T04"}; const pipelineRunId=resolvePipelineId(value); await this.db.query("INSERT INTO ai.stage_runs (id,pipeline_run_id,tenant_id,company_id,task,input_fingerprint,output_jsonb,validation_status,model,prompt_id,prompt_version,provider_request_id,attempts,started_at,completed_at,payload_jsonb) VALUES ($1,$2,$3,$4,'T04',$5,$6::jsonb,'validated',$7,$8,$9,$10,1,$11,$12,$13::jsonb)",[id,pipelineRunId,tenantId,companyId,inputFingerprint,json(output),provenance?.model || null,provenance?.promptId || null,promptVersion,provenance?.providerRequestId || null,provenance?.createdAt || null,value.createdAt,json(value)]); return value; }
 }
 
 class PostgresIssueAnalysisStore extends PostgresRecordStore {

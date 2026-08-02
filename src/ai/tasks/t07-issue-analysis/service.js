@@ -16,6 +16,7 @@ const {
   buildPerspectiveReviewInput,
   validatePerspectiveReview,
 } = require("./perspective-review");
+const { withPipelineTrace } = require("../../../pipeline/pipeline-trace");
 
 const ACTIVE_STATUSES = new Set(["baru", "berkembang", "dipantau"]);
 const RELATION_RANK = Object.freeze({ unrelated: 0, market: 1, competitor: 2, self: 3 });
@@ -30,7 +31,7 @@ class IssueAnalysisService {
     Object.assign(this, { cmsSourceGate, issueStore, relevanceDecisionStore, getEffectiveContext, analysisStore, promptExecutionService, companyStore, resolveOutputLanguage, authorizeCompany, timeoutMs, enablePerspectiveReview: enablePerspectiveReview !== false });
   }
 
-  async analyze({ tenantId, companyId, issueId }) {
+  async analyze({ tenantId, companyId, issueId, pipelineId = null }) {
     await this._authorizeCompany({ tenantId, companyId });
     const issue = await this.issueStore.getIssue({ tenantId, companyId, issueId });
     if (!issue || !ACTIVE_STATUSES.has(issue.status)) throw new AiConfigurationError("T07 requires an active issue in the same tenant and company");
@@ -107,11 +108,12 @@ class IssueAnalysisService {
       tenantId, companyId, issueId, contextVersion: context.version, inputFingerprint, promptVersion: T07_PROMPT_VERSION,
       analysis: reviewedAnalysis,
       evidence,
-      provenance: {
+      pipelineId,
+      provenance: withPipelineTrace({
         ...execution.provenance,
         subjectRelation,
         managementPerspectiveReview: reviewProvenance,
-      },
+      }, pipelineId),
     });
     return { analysis, reused: false };
   }
