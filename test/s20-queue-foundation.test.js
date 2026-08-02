@@ -42,3 +42,21 @@ test("S20 rate-limit retries respect provider reset hints", async () => {
   assert.equal(result.retried, true);
   assert.equal(result.delayMs, 120000);
 });
+
+test("S20 preserves a bounded diagnostic reason on dead-lettered AI failures", async () => {
+  const { queue } = build();
+  enqueue(queue);
+  const result = await queue.processNext({
+    queueName: "ai-pipeline",
+    handler: async () => {
+      throw Object.assign(new Error("T07 output has an invalid analysis shape"), {
+        code: "AI_OUTPUT_SCHEMA_INVALID",
+        retryable: false,
+        details: { validationReason: "subject_relation_mismatch", sensitive: "must-not-persist" },
+      });
+    },
+  });
+  assert.equal(result.deadLettered, true);
+  assert.equal(result.job.lastErrorMessage, "T07 output has an invalid analysis shape [diagnostic:subject_relation_mismatch]");
+  assert.doesNotMatch(result.job.lastErrorMessage, /must-not-persist/);
+});

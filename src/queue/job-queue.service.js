@@ -53,7 +53,14 @@ function retryAfterDelay(error) {
   const details = error.details || {};
   return Math.min(600000, Math.max(Number(details.retryAfterMs) || 0, Number(details.resetRequestsMs) || 0, Number(details.resetTokensMs) || 0));
 }
-function safeErrorMessage(error) { return typeof error?.message === "string" && error.message.length <= 500 ? error.message : "Job handler failed"; }
+function safeErrorMessage(error) {
+  const message = typeof error?.message === "string" && error.message.length <= 500 ? error.message : "Job handler failed";
+  const details = error?.details || {};
+  const diagnostic = [details.validationReason, details.providerErrorType, details.providerErrorCode]
+    .find((value) => typeof value === "string" && value.trim() && value.length <= 120);
+  if (!diagnostic) return message;
+  return `${message} [diagnostic:${diagnostic.trim()}]`.slice(0, 500);
+}
 function validationError(message) { const error = new Error(message); error.code = "VALIDATION_ERROR"; error.statusCode = 400; return error; }
 
 module.exports = { JobQueueService, defaultBackoff, defaultRetryable };
