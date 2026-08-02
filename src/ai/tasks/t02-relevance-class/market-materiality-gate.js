@@ -34,6 +34,48 @@ const GENERIC_CAPABILITY_TOKENS = new Set([
 const MACRO_CUSTOMER_SIGNAL_RE = /\b(kredit|credit|loan|pinjaman|suku\s+bunga|interest\s+rate|inflasi|inflation|daya\s+beli|purchasing\s+power|investasi|investment|business\s+confidence|dunia\s+usaha)\b/i;
 
 /**
+ * Generic event bridges for cases where the model is conservative but the
+ * article contains a concrete management event that directly matches a
+ * company risk, product, dependency, or priority. These are event/context
+ * semantics only; they do not contain a brand, industry, or pilot-company
+ * rule.
+ */
+const CONTEXT_EVENT_BRIDGES = Object.freeze([
+  {
+    hook: "context_safety_or_disruption_event",
+    context: /\b(safety|keselamatan|security|keamanan|resilience|resil|disruption|disrupsi|business\s+continuity|transport|logistics|freight|carrier|supply\s+chain|critical\s+utilities|operational\s+capacity|patient\s+safety|clinical\s+governance)\b/i,
+    article: /\b(kecelakaan|accident|insiden|incident|tewas|meninggal|serangan|gangguan|disruption|krisis|kritis|bab\s+al[- ]?mandab|red\s+sea|maritim|maritime|shipping|lintasan\s+ka|rail\s+crossing|dokter|perawat|internship|tenaga\s+kesehatan|burnout)\b/i,
+  },
+  {
+    hook: "context_regulatory_quality_event",
+    context: /\b(regulat|compliance|kepatuhan|governance|tata\s+kelola|quality|kualitas|traceability|ketertelusuran|food\s+safety|keamanan\s+pangan|customs|kepabeanan|licensing|perizinan|accreditation|akreditasi|standar|standard|assurance|audit)\b/i,
+    article: /\b(audit|pelanggaran|bermasalah|bermasalahnya|wajib|mandat|regulasi|regulation|peraturan|kebijakan|policy|sertifikasi|certification|verifikasi|verification|standar|standard|lisensi|izin|pajak|bpjs|fortifikasi|fortified|beras|rice|dapur)\b/i,
+  },
+  {
+    hook: "context_environmental_or_utility_disruption",
+    context: /\b(critical\s+utilities|water|air|climate|iklim|crop|tanaman|energy|energi|power|listrik|supply\s+disruption|business\s+disruption|resilience|resil)\b/i,
+    article: /\b(kekeringan|drought|krisis\s+listrik|power\s+crisis|gangguan\s+listrik|water\s+shortage|kekurangan\s+air)\b/i,
+  },
+  {
+    hook: "context_cost_supply_energy_change",
+    context: /\b(cost|biaya|price|harga|procurement|pengadaan|supply|pasokan|logistics|logistik|energy|energi|power|listrik|fuel|bahan\s+bakar|transport|schedule|procurement\s+delay)\b/i,
+    article: /\b(bb[mn]|bahan\s+bakar|fuel|energy|energi|listrik|electricity|harga|price|biaya|cost|pasokan|supply|shipping|freight|logistik)\b/i,
+    change: /\b(naik|turun|tinggi|rendah|melonjak|merosot|berubah|tetap|berpotensi|potensi|tekanan|krisis|disruption|disrupsi|hingga|sampai)\b/i,
+  },
+  {
+    hook: "context_digital_payment_product_change",
+    context: /\b(payment|pembayaran|qris|mobile|digital\s+banking|onboarding|merchant|platform|api|transaction|transaksi)\b/i,
+    article: /\b(qris|pembayaran|payment|transaksi|transaction|mobile\s+banking|digital\s+banking)\b/i,
+    change: /\b(bisa\s+pakai|meluas|meningkat|melonjak|ekspansi|expansion|antar\s+negara|cross[- ]border|diluncurkan|launch|tersedia|available)\b/i,
+  },
+  {
+    hook: "context_clinical_technology_or_reimbursement_change",
+    context: /\b(surgery|bedah|clinical|klinis|diagnostic|diagnostik|healthcare|kesehatan|technology\s+adoption|reimbursement|pembiayaan|patient\s+care)\b/i,
+    article: /\b(bedah\s+robotik|robotic\s+surgery|robotik|bpjs|reimbursement|pembiayaan)\b/i,
+  },
+]);
+
+/**
  * Expand product/industry stems already present in company context into common
  * article phrasings. Rules never fire unless the tenant's own fields match `field`.
  */
@@ -52,7 +94,7 @@ const PRODUCT_CATEGORY_EXPAND = Object.freeze([
   },
   {
     field: /payment|pembayaran|lender|kredit|credit|fintech|merchant|bank/i,
-    article: /\b(payment|pembayaran|lender|kredit|credit|fintech|merchant|bank|pinjaman)\b/i,
+    article: /\b(payment|pembayaran|qris|fintech|merchant|bank|mobile\s+banking|digital\s+banking)\b/i,
   },
 ]);
 
@@ -66,7 +108,7 @@ function normalizeText(value) {
 
 function fieldBlob(fields = {}) {
   return []
-    .concat(fields.products || [], fields.topics || [], fields.priorities || [], fields.goals || [], fields.dependencies || [])
+    .concat(fields.products || [], fields.topics || [], fields.priorities || [], fields.goals || [], fields.risks || [], fields.dependencies || [])
     .concat([fields.industry, fields.sub_industry, fields.description].filter(Boolean))
     .map((item) => String(item))
     .join("\n");
@@ -143,6 +185,19 @@ function hasDependencyHit(fields, text) {
   return false;
 }
 
+function contextEventBridge(fields, text) {
+  const context = fieldBlob({
+    ...fields,
+    risks: fields.risks || [],
+  });
+  for (const bridge of CONTEXT_EVENT_BRIDGES) {
+    if (!bridge.context.test(context) || !bridge.article.test(text)) continue;
+    if (bridge.change && !bridge.change.test(text)) continue;
+    return { hook: bridge.hook, matched: [] };
+  }
+  return null;
+}
+
 /**
  * @returns {{ relevance, confidence, gated, reason, hook, matched }}
  */
@@ -163,6 +218,28 @@ function applyMarketMaterialityGate({
   const dependency = hasDependencyHit(fields, text);
   const hasOperatingRegions = Array.isArray(fields.regions) && fields.regions.length > 0;
   const macroCustomerSignal = MACRO_CUSTOMER_SIGNAL_RE.test(text) && hasEnterpriseCustomer(fields);
+  const eventBridge = contextEventBridge(fields, text);
+
+  if (eventBridge && subjectRelation === "market") {
+    if (!isContinuingRelevance(relevance)) {
+      return {
+        relevance: "medium",
+        confidence: Math.max(typeof confidence === "number" ? confidence : 0.5, 0.55),
+        gated: true,
+        reason: "context_event_bridge_upgrade",
+        hook: eventBridge.hook,
+        matched: eventBridge.matched,
+      };
+    }
+    return {
+      relevance,
+      confidence,
+      gated: false,
+      reason: null,
+      hook: eventBridge.hook,
+      matched: eventBridge.matched,
+    };
+  }
 
   // Rescue true-positive peer/product moves the model underrates as low/none.
   // Only product/category + commercial action — never region/project upgrades.
