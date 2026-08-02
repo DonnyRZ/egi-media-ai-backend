@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const { withPipelineTrace } = require("../src/pipeline/pipeline-trace");
+const { InMemoryIssueStore } = require("../src/issues/issue.store");
 const { PostgresClaimLabelStore } = require("../src/persistence/postgres-stage-stores");
 const { PostgresIssueMatchDecisionStore, PostgresRelevanceDecisionStore } = require("../src/persistence/postgres-stores");
 
@@ -81,4 +82,21 @@ test("Postgres T04 and T02 persistence retain pipeline trace in new rows", async
   const t02Insert = t02.calls.find((call) => call.sql.startsWith("INSERT INTO ai.article_relevance"));
   assert.equal(JSON.parse(t02Insert.values[7]).pipelineId, "pipeline-1");
   assert.equal(JSON.parse(t02Insert.values[7]).inputFingerprint, "input-fp-3");
+});
+
+test("issue aggregate retains T05/T06 pipeline trace in its durable payload", () => {
+  const store = new InMemoryIssueStore({ uuid: () => "generation-1", now: () => 0 });
+  store.seed({
+    issueId: "issue-1", tenantId: "tenant-1", companyId: "company-1", status: "baru", version: 1,
+    title: null, oneLiner: null, firstSeenAt: "2026-08-02T00:00:00.000Z", lastDevelopedAt: "2026-08-02T00:00:00.000Z",
+    createdAt: "2026-08-02T00:00:00.000Z", updatedAt: "2026-08-02T00:00:00.000Z", closedAt: null,
+  });
+  store.applyGeneratedTitle({
+    tenantId: "tenant-1", companyId: "company-1", issueId: "issue-1", developmentId: "development-1",
+    promptVersion: "1.5.0", title: "A grounded issue title", pipelineId: "pipeline-1",
+    provenance: { providerRequestId: "provider-req-5" },
+  });
+  const issue = store.getIssue({ tenantId: "tenant-1", companyId: "company-1", issueId: "issue-1" });
+  assert.equal(issue.aiOutputTrace.T05.pipelineId, "pipeline-1");
+  assert.equal(issue.aiOutputTrace.T05.provenance.providerRequestId, "provider-req-5");
 });

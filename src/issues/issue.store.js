@@ -101,6 +101,7 @@ class InMemoryIssueStore {
       titleGenerationId: this.uuid(), tenantId, companyId, issueId, developmentId, promptVersion,
       title, provenance: structuredClone(provenance), pipelineId, createdAt: now,
     };
+    recordAiOutputTrace(issue, "T05", generated);
     this.titleGenerationsByKey.set(key, generated);
     return { title: cloneForRead(generated), reused: false };
   }
@@ -126,6 +127,7 @@ class InMemoryIssueStore {
       oneLinerGenerationId: this.uuid(), tenantId, companyId, issueId, developmentId, promptVersion,
       oneLiner, provenance: structuredClone(provenance), pipelineId, createdAt: now,
     };
+    recordAiOutputTrace(issue, "T06", generated);
     this.oneLinerGenerationsByKey.set(key, generated);
     return { oneLiner: cloneForRead(generated), reused: false };
   }
@@ -295,6 +297,19 @@ function deepFreeze(value) {
     for (const nested of Object.values(value)) deepFreeze(nested);
   }
   return value;
+}
+
+function recordAiOutputTrace(issue, task, generated) {
+  issue.aiOutputTrace = {
+    ...(issue.aiOutputTrace || {}),
+    [task]: {
+      generationId: generated.titleGenerationId || generated.oneLinerGenerationId,
+      pipelineId: generated.pipelineId || null,
+      promptVersion: generated.promptVersion,
+      provenance: structuredClone(generated.provenance || {}),
+      createdAt: generated.createdAt,
+    },
+  };
 }
 
 module.exports = { InMemoryIssueStore, ACTIVE_ISSUE_STATUSES };
