@@ -20,6 +20,19 @@ const PROJECT_REG_RE = /\b(infrastruktur|bandara|pelabuhan|regulasi|peraturan|un
 /** Accessibility / demand-pressure signals in an operating geography. */
 const OPERATING_DEMAND_RE = /\b(pariwisata|tourism|destinasi|destination|wisatawan|visitor|kunjungan|konektivitas|connectivity|kemacetan|aksesibilitas|accessibility|congest)\b/i;
 
+// Broad capability terms are useful for semantic routing but are not, by
+// themselves, a product or operating exposure. Keep this industry-neutral so
+// a shared word such as "digital" cannot upgrade an unrelated sub-sector.
+const GENERIC_CAPABILITY_TOKENS = new Set([
+  "digital", "technology", "technologies", "teknologi", "innovation", "inovasi",
+  "transformasi", "transformation", "platform", "platforms", "software", "perangkat",
+  "solution", "solutions", "solusi", "service", "services", "layanan", "system", "systems",
+  "data", "engineering", "operations", "operational", "managed", "management", "industry",
+  "industri", "business", "bisnis", "customer", "customers", "pelanggan",
+]);
+
+const MACRO_CUSTOMER_SIGNAL_RE = /\b(kredit|credit|loan|pinjaman|suku\s+bunga|interest\s+rate|inflasi|inflation|daya\s+beli|purchasing\s+power|investasi|investment|business\s+confidence|dunia\s+usaha)\b/i;
+
 /**
  * Expand product/industry stems already present in company context into common
  * article phrasings. Rules never fire unless the tenant's own fields match `field`.
@@ -72,10 +85,15 @@ function productIndustryTokens(fields = {}) {
   const tokens = new Set();
   for (const item of [].concat(fields.products || [], [fields.industry, fields.sub_industry].filter(Boolean))) {
     for (const token of tokenize(String(item))) {
-      if (!regions.has(token)) tokens.add(token);
+      if (!regions.has(token) && !GENERIC_CAPABILITY_TOKENS.has(token)) tokens.add(token);
     }
   }
   return tokens;
+}
+
+function hasEnterpriseCustomer(fields = {}) {
+  return [].concat(fields.customers || [], fields.products || [], fields.priorities || [])
+    .some((item) => /enterprise|corporate|business|commercial|sme|umkm|perusahaan|usaha/i.test(String(item)));
 }
 
 function dependencyPhrases(fields = {}) {
@@ -144,6 +162,7 @@ function applyMarketMaterialityGate({
   const productCategory = hasExpandedProductCategoryHit(fields, text);
   const dependency = hasDependencyHit(fields, text);
   const hasOperatingRegions = Array.isArray(fields.regions) && fields.regions.length > 0;
+  const macroCustomerSignal = MACRO_CUSTOMER_SIGNAL_RE.test(text) && hasEnterpriseCustomer(fields);
 
   // Rescue true-positive peer/product moves the model underrates as low/none.
   // Only product/category + commercial action — never region/project upgrades.
@@ -181,6 +200,16 @@ function applyMarketMaterialityGate({
       reason: null,
       hook: "product_industry_overlap",
       matched: pi.matched,
+    };
+  }
+  if (macroCustomerSignal) {
+    return {
+      relevance,
+      confidence,
+      gated: false,
+      reason: null,
+      hook: "macro_customer_market_signal",
+      matched: [],
     };
   }
   if (productCategory && commercial) {
