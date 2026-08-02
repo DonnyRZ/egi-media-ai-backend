@@ -30,6 +30,7 @@ test("pipeline trace adds bounded run and context identifiers", () => {
     identityFingerprint: "identity-fp-1",
   });
   assert.deepEqual(withPipelineTrace({ runId: "run-1" }, null), { runId: "run-1" });
+  assert.equal(withPipelineTrace(null, null), null);
 });
 
 test("Postgres stage stores persist pipeline and provider trace columns", async () => {
