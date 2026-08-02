@@ -73,6 +73,41 @@ const CONTEXT_EVENT_BRIDGES = Object.freeze([
     context: /\b(surgery|bedah|clinical|klinis|diagnostic|diagnostik|healthcare|kesehatan|technology\s+adoption|reimbursement|pembiayaan|patient\s+care)\b/i,
     article: /\b(bedah\s+robotik|robotic\s+surgery|robotik|bpjs|reimbursement|pembiayaan)\b/i,
   },
+  {
+    hook: "context_food_safety_or_product_quality_event",
+    context: /\b(food\s+and\s+product\s+safety|food\s+safety|keamanan\s+pangan|product\s+safety|consumer\s+safety|supplier\s+quality|quality\s+systems?|kualitas|traceability|ketertelusuran|nutrition|wellness)\b/i,
+    article: /\b(mual|keracunan|keracunan\s+makanan|sakit|terdampak|terkontaminasi|kontaminasi|ditarik|penarikan|recall|keluhan|kualitas\s+pangan|keamanan\s+pangan)\b/i,
+  },
+  {
+    hook: "context_platform_content_liability_event",
+    context: /\b(content\s+responsibility|content\s+liability|rights\s+management|moderation|age\s+controls|advertising\s+standards|digital\s+platforms?|messaging|media\s+and\s+content|lawful\s+obligations|regulatory\s+compliance)\b/i,
+    article: /\b(telegram|whatsapp|platform|aplikasi\s+pesan|messaging|media\s+sosial|digital\s+platform)\b/i,
+    change: /\b(tersangka|teror|terror|terorisme|penangkapan|ditangkap|tuduhan|investigasi|penyelidikan|diblokir|pelanggaran|denda|regulator|pemerintah|pengawasan)\b/i,
+  },
+  {
+    hook: "context_digital_platform_product_change",
+    context: /\b(digital\s+platforms?|mobile|messaging|customer\s+experience|digital\s+services?|technology\s+innovation|platforms?|aplikasi)\b/i,
+    article: /\b(whatsapp|telegram|platform|aplikasi\s+pesan|messaging|digital\s+platform)\b/i,
+    change: /\b(uji|menguji|fitur|folder|diluncurkan|meluncurkan|launch|tersedia|available|perubahan|update|pembaruan)\b/i,
+  },
+  {
+    hook: "context_climate_environmental_policy_change",
+    context: /\b(climate|iklim|environment|lingkungan|sustainability|keberlanjutan|regenerative|water\s+stewardship|nature|environmental\s+performance)\b/i,
+    article: /\b(iklim|climate|lingkungan|environment|perubahan\s+iklim|perlindungan\s+lingkungan)\b/i,
+    change: /\b(kerja\s+sama|kerjasama|perjanjian|kebijakan|policy|target|investasi|program|kesepakatan|perlindungan)\b/i,
+  },
+  {
+    hook: "context_education_funding_or_access_change",
+    context: /\b(education|pendidikan|learner|student|scholarship|beasiswa|access|affordability|learning|akademik|kampus|sekolah)\b/i,
+    article: /\b(pendidikan|edukasi|beasiswa|anggaran\s+pendidikan|sekolah|kampus|mahasiswa|siswa|makan\s+bergizi)\b/i,
+    change: /\b(anggaran|budget|20\s*persen|putusan|kebijakan|policy|skema|alokasi|dana|beasiswa|wajib|dibahas)\b/i,
+  },
+  {
+    hook: "context_urban_water_infrastructure_project",
+    context: /\b(water|air|utilities|urban|transport|infrastructure|infrastruktur|flood|banjir|drainage|drainase|public\s+works)\b/i,
+    article: /\b(ruang\s+terbuka\s+biru|sungai|waduk|embung|pengendalian\s+banjir|drainase|stasiun|kereta|infrastruktur\s+air)\b/i,
+    change: /\b(pengembangan|mengembangkan|pembangunan|membangun|memperluas|perluas|meresmikan|pemugaran|proyek|infrastruktur)\b/i,
+  },
 ]);
 
 /**

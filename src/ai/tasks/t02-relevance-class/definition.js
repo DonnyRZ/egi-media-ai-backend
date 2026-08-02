@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.14.0";
+const T02_PROMPT_VERSION = "1.15.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {
@@ -10,7 +10,7 @@ function createT02PromptDefinition({ modelName }) {
     modelCompatibility: [modelName],
     inputSchemaVersion: "1.13",
     outputSchemaVersion: "2.0",
-    changeSummary: "FULL CONTEXT: generic context-event bridges plus adjacency and direct-regulator boundaries",
+    changeSummary: "FULL CONTEXT: generic context-event bridges for concrete quality, platform, climate, education, and infrastructure signals",
     approvedBy: null,
     rollbackVersion: "1.9.2",
   };

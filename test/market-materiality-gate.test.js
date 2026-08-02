@@ -273,3 +273,66 @@ test("credit macro news is not upgraded by the payment product category", () => 
   assert.equal(gated.relevance, "low");
   assert.equal(gated.reason, null);
 });
+
+test("generic context event bridges cover quality, platform, climate, education, and infrastructure signals", () => {
+  const fmcg = {
+    industry: "Fast-moving consumer goods",
+    products: ["Food and snacks", "Beverages"],
+    risks: ["Food and product safety", "Supplier quality failures"],
+    priorities: ["Trusted product quality and safety"],
+  };
+  const quality = applyMarketMaterialityGate({
+    relevance: "none", confidence: 0.9, subjectRelation: "market", fields: fmcg,
+    title: "Keluhan mual usai susu, puluhan siswa terdampak",
+    summary: "Rumah sakit menangani korban dan otoritas memeriksa keamanan pangan.",
+  });
+  assert.equal(quality.relevance, "medium");
+  assert.equal(quality.hook, "context_food_safety_or_product_quality_event");
+
+  const communications = {
+    industry: "Telecommunications and media",
+    products: ["Messaging", "Digital platforms", "Content distribution"],
+    risks: ["Content responsibility, rights management, moderation, and advertising standards"],
+    priorities: ["Responsible content practices"],
+  };
+  const liability = applyMarketMaterialityGate({
+    relevance: "none", confidence: 0.9, subjectRelation: "market", fields: communications,
+    title: "Pendiri Telegram jadi tersangka kasus terorisme",
+    summary: "Pemerintah menerbitkan surat perintah penangkapan internasional.",
+  });
+  assert.equal(liability.relevance, "medium");
+  assert.equal(liability.hook, "context_platform_content_liability_event");
+  const productChange = applyMarketMaterialityGate({
+    relevance: "none", confidence: 0.9, subjectRelation: "market", fields: communications,
+    title: "WhatsApp uji folder baru untuk chat promo",
+    summary: "Fitur baru mengubah cara pesan perusahaan ditampilkan kepada pengguna.",
+  });
+  assert.equal(productChange.relevance, "medium");
+  assert.equal(productChange.hook, "context_digital_platform_product_change");
+
+  const education = {
+    industry: "Education",
+    products: ["Schools", "Higher education", "Digital learning"],
+    priorities: ["Expand access and affordability through scholarships"],
+  };
+  const educationPolicy = applyMarketMaterialityGate({
+    relevance: "none", confidence: 0.9, subjectRelation: "market", fields: education,
+    title: "Mahkamah Konstitusi ingatkan anggaran pendidikan tidak boleh dikurangi",
+    summary: "Putusan menegaskan alokasi minimal 20 persen dari APBN.",
+  });
+  assert.equal(educationPolicy.relevance, "medium");
+  assert.equal(educationPolicy.hook, "context_education_funding_or_access_change");
+
+  const infrastructure = {
+    industry: "Construction and infrastructure",
+    products: ["Infrastructure delivery", "Water and utilities"],
+    priorities: ["Long-term asset performance"],
+  };
+  const waterProject = applyMarketMaterialityGate({
+    relevance: "none", confidence: 0.9, subjectRelation: "market", fields: infrastructure,
+    title: "Jakarta perluas ruang terbuka biru untuk pengendalian banjir",
+    summary: "Pengembangan sungai, waduk, dan embung menjadi bagian dari infrastruktur air kota.",
+  });
+  assert.equal(waterProject.relevance, "medium");
+  assert.equal(waterProject.hook, "context_urban_water_infrastructure_project");
+});
