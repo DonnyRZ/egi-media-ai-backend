@@ -57,7 +57,7 @@ class PriorityReasonService {
     const reason = await this.reasonStore.create({
       tenantId, companyId, issueId, analysisId, priorityDecisionId, promptVersion: T10_PROMPT_VERSION,
       reason: execution.data.reason, sourceClaimIds: execution.data.sourceClaimIds,
-      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId, inputFingerprint: analysis.inputFingerprint,
+      provenance: withPipelineTrace(execution.provenance, pipelineId, context), pipelineId, inputFingerprint: analysis.inputFingerprint,
     });
     return { reason, priorityDecision, analysis, reused: false };
   }

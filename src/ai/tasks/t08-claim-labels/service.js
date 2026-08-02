@@ -28,7 +28,7 @@ class ClaimLabelService {
       budgetScope: { tenantId, companyId },
       validateResult: (data) => validateT08Output(data, { claimIds }),
     });
-    const labels = await this.labelStore.create({ tenantId, companyId, analysisId, issueId: analysis.issueId, promptVersion: T08_PROMPT_VERSION, labels: execution.data.labels, provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId, inputFingerprint: analysis.inputFingerprint });
+    const labels = await this.labelStore.create({ tenantId, companyId, analysisId, issueId: analysis.issueId, promptVersion: T08_PROMPT_VERSION, labels: execution.data.labels, provenance: withPipelineTrace(execution.provenance, pipelineId, { contextVersion: analysis.contextVersion, identityFingerprint: analysis.provenance?.identityFingerprint }), pipelineId, inputFingerprint: analysis.inputFingerprint });
     return { labels, analysis, reused: false };
   }
   async _authorizeCompany({ tenantId, companyId }) { const granted = await this.authorizeCompany({ tenantId, companyId, action: "analysis.claims.label" }); if (granted !== true) throw new AiConfigurationError("T08 tenant/company authorization was not granted"); }

@@ -41,7 +41,7 @@ class DirectAlertBlurbService {
         tenantId, companyId, issueId: event.issueId, developmentId: event.developmentId, alertEventId,
         promptVersion: T12_PROMPT_VERSION, newDevelopmentBlurb: execution.data.newDevelopmentBlurb,
         shortImpactBlurb: execution.data.shortImpactBlurb, sourceClaimIds: execution.data.sourceClaimIds,
-        provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
+        provenance: withPipelineTrace(execution.provenance, pipelineId, context), pipelineId,
       });
       return { blurb, event, reused: false };
     } catch (error) {

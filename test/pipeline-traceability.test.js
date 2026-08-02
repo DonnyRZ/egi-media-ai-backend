@@ -19,8 +19,16 @@ function fakeDb() {
   };
 }
 
-test("pipeline trace adds only the bounded pipeline identifier", () => {
-  assert.deepEqual(withPipelineTrace({ runId: "run-1" }, "pipeline-1"), { runId: "run-1", pipelineId: "pipeline-1" });
+test("pipeline trace adds bounded run and context identifiers", () => {
+  assert.deepEqual(withPipelineTrace({ runId: "run-1" }, "pipeline-1", {
+    version: 3,
+    managementIdentity: { fingerprint: "identity-fp-1" },
+  }), {
+    runId: "run-1",
+    pipelineId: "pipeline-1",
+    contextVersion: 3,
+    identityFingerprint: "identity-fp-1",
+  });
   assert.deepEqual(withPipelineTrace({ runId: "run-1" }, null), { runId: "run-1" });
 });
 
@@ -71,7 +79,7 @@ test("Postgres T04 and T02 persistence retain pipeline trace in new rows", async
   const t02 = fakeDb();
   const relevanceStore = new PostgresRelevanceDecisionStore({ db: t02.db, uuid: () => "decision-1" });
   await relevanceStore.create({
-    tenantId: "tenant-1", companyId: "company-1", articleId: "article-1", contextVersion: 2, inputFingerprint: "input-fp-3",
+    tenantId: "tenant-1", companyId: "company-1", articleId: "article-1", contextVersion: 2, identityFingerprint: "identity-fp-3", inputFingerprint: "input-fp-3",
     source: {
       sourceArticleId: "article-1", canonicalUrl: "https://example.test/article-1", requestedLocale: "id", contentLocale: "id",
       article: { publishedAt: "2026-08-02T00:00:00.000Z", updatedAt: "2026-08-02T00:00:00.000Z" },
@@ -82,6 +90,7 @@ test("Postgres T04 and T02 persistence retain pipeline trace in new rows", async
   const t02Insert = t02.calls.find((call) => call.sql.startsWith("INSERT INTO ai.article_relevance"));
   assert.equal(JSON.parse(t02Insert.values[7]).pipelineId, "pipeline-1");
   assert.equal(JSON.parse(t02Insert.values[7]).inputFingerprint, "input-fp-3");
+  assert.equal(JSON.parse(t02Insert.values[7]).identityFingerprint, "identity-fp-3");
 });
 
 test("issue aggregate retains T05/T06 pipeline trace in its durable payload", () => {

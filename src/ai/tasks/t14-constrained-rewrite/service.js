@@ -32,7 +32,7 @@ class ConstrainedRewriteService {
       budgetScope: { tenantId, companyId },
       validateResult: validateT14Output,
     });
-    const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: withPipelineTrace(execution.provenance, pipelineId) });
+    const result = await this.narrativeStore.applyConstrainedRewrite({ tenantId, companyId, reportNarrativeId, expectedVersion, allowedSpanId, replacementText: execution.data.replacementText, actor, humanInstruction, provenance: withPipelineTrace(execution.provenance, pipelineId, { contextVersion: report.contextVersion, identityFingerprint: narrative.provenance?.identityFingerprint }) });
     if (!result?.narrative) throw new AiConfigurationError("T14 target narrative version conflict");
     return { narrative: result.narrative, report, rewrittenSpan: { spanId: span.spanId, sourceClaimIds: span.sourceClaimIds }, reused: false };
   }

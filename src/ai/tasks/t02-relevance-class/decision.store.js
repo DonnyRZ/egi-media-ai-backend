@@ -29,7 +29,7 @@ class InMemoryRelevanceDecisionStore {
     return matches[0] ? cloneForRead(matches[0]) : null;
   }
 
-  create({ tenantId = null, articleId, companyId, contextVersion, inputFingerprint, source, output, provenance, pipelineId = null }) {
+  create({ tenantId = null, articleId, companyId, contextVersion, identityFingerprint = null, inputFingerprint, source, output, provenance, pipelineId = null }) {
     const key = this._key({ tenantId, articleId, companyId, contextVersion, inputFingerprint });
     const existing = this.decisionsByKey.get(key);
     if (existing) return cloneForRead(existing);
@@ -42,6 +42,7 @@ class InMemoryRelevanceDecisionStore {
       articleId,
       companyId,
       contextVersion,
+      identityFingerprint,
       inputFingerprint,
       pipelineId,
       relevance: output.relevance,

@@ -31,7 +31,7 @@ class ReportNarrativeService {
         budgetScope: { tenantId, companyId },
         validateResult: (data) => validateT13Output(data, { report }),
       });
-      const narrative = await this.narrativeStore.create({ tenantId, companyId, reportId, promptVersion: T13_PROMPT_VERSION, narrative: execution.data, provenance: withPipelineTrace(execution.provenance, pipelineId) });
+      const narrative = await this.narrativeStore.create({ tenantId, companyId, reportId, promptVersion: T13_PROMPT_VERSION, narrative: execution.data, provenance: withPipelineTrace(execution.provenance, pipelineId, context || { contextVersion: report.contextVersion }) });
       return { narrative, report, reused: false };
     } catch (error) {
       await this.reportDraftStore.markNarrativeInvalid({ tenantId, companyId, reportId, reasonCode: error?.code === "AI_OUTPUT_SCHEMA_INVALID" ? "invalid_narrative_output" : "report_narrative_gate_failed" });

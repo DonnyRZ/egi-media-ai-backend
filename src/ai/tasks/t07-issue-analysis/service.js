@@ -113,7 +113,7 @@ class IssueAnalysisService {
         ...execution.provenance,
         subjectRelation,
         managementPerspectiveReview: reviewProvenance,
-      }, pipelineId),
+      }, pipelineId, context),
     });
     return { analysis, reused: false };
   }

@@ -67,7 +67,10 @@ class IssueTitleService {
     const applied = await this.issueStore.applyGeneratedTitle({
       tenantId, companyId, issueId, developmentId: development.developmentId,
       promptVersion: T05_PROMPT_VERSION, title: execution.data.title,
-      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
+      provenance: withPipelineTrace(execution.provenance, pipelineId, context || {
+        contextVersion: relevanceDecision.contextVersion,
+        identityFingerprint: relevanceDecision.identityFingerprint || relevanceDecision.provenance?.identityFingerprint,
+      }), pipelineId,
     });
     return { title: applied.title, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }

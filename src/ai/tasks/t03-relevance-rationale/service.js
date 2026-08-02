@@ -58,7 +58,7 @@ class RelevanceRationaleService {
       companyId,
       promptVersion: T03_PROMPT_VERSION,
       rationale: execution.data.rationale,
-      provenance: withPipelineTrace(execution.provenance, pipelineId),
+      provenance: withPipelineTrace(execution.provenance, pipelineId, context),
       pipelineId,
       inputFingerprint: decision.inputFingerprint,
     });

@@ -63,7 +63,10 @@ class IssueMatchService {
           policy: existingSource.policy,
           sourceArticleId: relevanceDecision.articleId,
           canonicalUrl: source.canonicalUrl,
-        }, pipelineId),
+        }, pipelineId, {
+          contextVersion: relevanceDecision.contextVersion,
+          identityFingerprint: relevanceDecision.identityFingerprint || relevanceDecision.provenance?.identityFingerprint,
+        }),
         pipelineId,
         inputFingerprint: relevanceDecision.inputFingerprint,
       });
@@ -80,7 +83,11 @@ class IssueMatchService {
     });
     const match = await this.matchDecisionStore.create({
       tenantId, companyId, relevanceDecisionId, promptVersion: T04_PROMPT_VERSION,
-      output: execution.data, provenance: withPipelineTrace(execution.provenance, pipelineId),
+      output: execution.data,
+      provenance: withPipelineTrace(execution.provenance, pipelineId, {
+        contextVersion: relevanceDecision.contextVersion,
+        identityFingerprint: relevanceDecision.identityFingerprint || relevanceDecision.provenance?.identityFingerprint,
+      }),
       pipelineId, inputFingerprint: relevanceDecision.inputFingerprint,
     });
     return { match, relevanceDecision, reused: false };

@@ -24,12 +24,12 @@ class PostgresRelevanceDecisionStore extends PostgresRecordStore {
     );
     return result.rows[0] ? mapRelevance(result.rows[0]) : null;
   }
-  async create({ tenantId = "unknown", articleId, companyId, contextVersion, inputFingerprint, source, output, provenance, pipelineId = null }) {
+  async create({ tenantId = "unknown", articleId, companyId, contextVersion, identityFingerprint = null, inputFingerprint, source, output, provenance, pipelineId = null }) {
     const subjectRelation = output.subject_relation ?? null;
     const competitorOptIn = output.competitor_opt_in === true;
     const id = this.uuid();
     const value = {
-      decisionId: id, tenantId, articleId, companyId, contextVersion, inputFingerprint, source,
+      decisionId: id, tenantId, articleId, companyId, contextVersion, identityFingerprint, inputFingerprint, source,
       relevance: output.relevance, confidence: output.confidence,
       subjectRelation, competitorOptIn,
       branch: branchForDecision({ relevance: output.relevance, subjectRelation }),

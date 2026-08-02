@@ -61,7 +61,11 @@ class IssueOneLinerService {
     });
     const applied = await this.issueStore.applyGeneratedOneLiner({
       tenantId, companyId, issueId, developmentId: development.developmentId, promptVersion: T06_PROMPT_VERSION,
-      oneLiner: execution.data.oneLiner, provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
+      oneLiner: execution.data.oneLiner,
+      provenance: withPipelineTrace(execution.provenance, pipelineId, context || {
+        contextVersion: relevanceDecision.contextVersion,
+        identityFingerprint: relevanceDecision.provenance?.identityFingerprint,
+      }), pipelineId,
     });
     return { oneLiner: applied.oneLiner, issue: await this.issueStore.getIssue({ tenantId, companyId, issueId }), reused: applied.reused };
   }

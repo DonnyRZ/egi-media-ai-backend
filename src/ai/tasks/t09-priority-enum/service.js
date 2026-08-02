@@ -45,7 +45,7 @@ class IssuePriorityEnumService {
     const priority = await this.priorityStore.create({
       tenantId, companyId, issueId, analysisId, contextVersion: context.version,
       promptVersion: T09_PROMPT_VERSION, priority: execution.data.priority,
-      provenance: withPipelineTrace(execution.provenance, pipelineId), pipelineId,
+      provenance: withPipelineTrace(execution.provenance, pipelineId, context), pipelineId,
     });
     const applied = await this.issueStore.applyCurrentPriority({
       tenantId, companyId, issueId, analysisId, priorityDecisionId: priority.priorityDecisionId, priority: priority.priority,

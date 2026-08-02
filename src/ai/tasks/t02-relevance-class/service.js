@@ -191,10 +191,11 @@ class RelevanceClassificationService {
       articleId,
       companyId,
       contextVersion: context.version,
+      identityFingerprint: context.managementIdentity?.fingerprint || null,
       inputFingerprint,
       source,
       output: persistedOutput,
-      provenance: withPipelineTrace(provenance, pipelineId),
+      provenance: withPipelineTrace(provenance, pipelineId, context),
       pipelineId,
     });
 
