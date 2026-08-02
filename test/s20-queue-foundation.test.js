@@ -43,6 +43,42 @@ test("S20 rate-limit retries respect provider reset hints", async () => {
   assert.equal(result.delayMs, 120000);
 });
 
+test("S20 rate-limit retry does not truncate a long provider reset hint", async () => {
+  const { queue } = build();
+  enqueue(queue);
+  const failure = Object.assign(new Error("token limit"), {
+    code: "AI_PROVIDER_RATE_LIMITED",
+    retryable: true,
+    details: { resetTokensMs: 3600000 },
+  });
+  const result = await queue.processNext({ queueName: "ai-pipeline", handler: async () => { throw failure; } });
+  assert.equal(result.retried, true);
+  assert.equal(result.delayMs, 3600000);
+});
+
+test("S20 persists provider rate-limit dimension and reset hints in bounded diagnostics", async () => {
+  const { queue, store } = build();
+  enqueue(queue);
+  const failure = Object.assign(new Error("token limit"), {
+    code: "AI_PROVIDER_RATE_LIMITED",
+    retryable: false,
+    details: {
+      providerErrorType: "tokens",
+      providerErrorCode: "rate_limit_exceeded",
+      retryAfterMs: 2000,
+      resetRequestsMs: 1000,
+      resetTokensMs: 360000,
+      secret: "must-not-persist",
+    },
+  });
+  const result = await queue.processNext({ queueName: "ai-pipeline", handler: async () => { throw failure; } });
+  assert.equal(result.deadLettered, true);
+  const saved = store.get({ ...scope, jobId: result.job.jobId });
+  assert.match(saved.lastErrorMessage, /rate_limit:tokens\/rate_limit_exceeded/);
+  assert.match(saved.lastErrorMessage, /reset_tokens_ms=360000/);
+  assert.doesNotMatch(saved.lastErrorMessage, /must-not-persist/);
+});
+
 test("S20 preserves a bounded diagnostic reason on dead-lettered AI failures", async () => {
   const { queue } = build();
   enqueue(queue);

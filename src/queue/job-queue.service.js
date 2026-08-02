@@ -51,15 +51,33 @@ function defaultRetryable(error) { return error?.retryable === true || ["ETIMEDO
 function retryAfterDelay(error) {
   if (error?.code !== "AI_PROVIDER_RATE_LIMITED") return 0;
   const details = error.details || {};
-  return Math.min(600000, Math.max(Number(details.retryAfterMs) || 0, Number(details.resetRequestsMs) || 0, Number(details.resetTokensMs) || 0));
+  // Honor provider reset hints long enough to avoid burning all bounded retries
+  // before a token/request window has actually reset. Keep a finite ceiling so
+  // malformed upstream values cannot schedule an unbounded queue delay.
+  const providerResetMs = Math.max(Number(details.retryAfterMs) || 0, Number(details.resetRequestsMs) || 0, Number(details.resetTokensMs) || 0);
+  return Math.min(24 * 60 * 60 * 1000, providerResetMs);
 }
 function safeErrorMessage(error) {
   const message = typeof error?.message === "string" && error.message.length <= 500 ? error.message : "Job handler failed";
   const details = error?.details || {};
   const diagnostic = [details.validationReason, details.providerErrorType, details.providerErrorCode]
     .find((value) => typeof value === "string" && value.trim() && value.length <= 120);
-  if (!diagnostic) return message;
-  return `${message} [diagnostic:${diagnostic.trim()}]`.slice(0, 500);
+  const diagnostics = diagnostic ? [diagnostic.trim()] : [];
+  if (error?.code === "AI_PROVIDER_RATE_LIMITED") {
+    const provider = [details.providerErrorType, details.providerErrorCode]
+      .filter((value) => typeof value === "string" && value.trim() && value.length <= 120)
+      .map((value) => value.trim())
+      .join("/");
+    const hints = [
+      ["retry_after_ms", details.retryAfterMs],
+      ["reset_requests_ms", details.resetRequestsMs],
+      ["reset_tokens_ms", details.resetTokensMs],
+    ].filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
+      .map(([name, value]) => `${name}=${Math.ceil(Number(value))}`);
+    if (provider || hints.length) diagnostics.push(`rate_limit:${[provider, ...hints].filter(Boolean).join(",")}`);
+  }
+  if (diagnostics.length === 0) return message;
+  return `${message} [diagnostic:${diagnostics.join(";")}]`.slice(0, 500);
 }
 function validationError(message) { const error = new Error(message); error.code = "VALIDATION_ERROR"; error.statusCode = 400; return error; }
 
