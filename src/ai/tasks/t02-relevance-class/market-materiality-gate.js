@@ -44,7 +44,7 @@ const CONTEXT_EVENT_BRIDGES = Object.freeze([
   {
     hook: "context_safety_or_disruption_event",
     context: /\b(safety|keselamatan|security|keamanan|resilience|resil|disruption|disrupsi|business\s+continuity|transport|logistics|freight|carrier|supply\s+chain|critical\s+utilities|operational\s+capacity|patient\s+safety|clinical\s+governance)\b/i,
-    article: /\b(kecelakaan|accident|insiden|incident|tewas|meninggal|serangan|gangguan|disruption|krisis|kritis|bab\s+al[- ]?mandab|red\s+sea|maritim|maritime|shipping|lintasan\s+ka|rail\s+crossing|dokter|perawat|internship|tenaga\s+kesehatan|burnout)\b/i,
+    article: /\b(kecelakaan|accident|insiden|incident|tewas|meninggal|serangan|gangguan|disruption|bab\s+al[- ]?mandab|red\s+sea|maritim|maritime|shipping|lintasan\s+ka|rail\s+crossing|dokter|perawat|internship|tenaga\s+kesehatan|burnout)\b/i,
   },
   {
     hook: "context_regulatory_quality_event",
@@ -101,6 +101,7 @@ const CONTEXT_EVENT_BRIDGES = Object.freeze([
     context: /\b(education|pendidikan|learner|student|scholarship|beasiswa|access|affordability|learning|akademik|kampus|sekolah)\b/i,
     article: /\b(pendidikan|edukasi|beasiswa|anggaran\s+pendidikan|sekolah|kampus|mahasiswa|siswa|makan\s+bergizi)\b/i,
     change: /\b(anggaran|budget|20\s*persen|putusan|kebijakan|policy|skema|alokasi|dana|beasiswa|wajib|dibahas)\b/i,
+    exclude: /\b(mbg|makan\s+bergizi\s+gratis)\b/i,
   },
   {
     hook: "context_urban_water_infrastructure_project",
@@ -227,6 +228,7 @@ function contextEventBridge(fields, text) {
   });
   for (const bridge of CONTEXT_EVENT_BRIDGES) {
     if (!bridge.context.test(context) || !bridge.article.test(text)) continue;
+    if (bridge.exclude?.test(text)) continue;
     if (bridge.change && !bridge.change.test(text)) continue;
     return { hook: bridge.hook, matched: [] };
   }

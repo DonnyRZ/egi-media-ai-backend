@@ -1,5 +1,5 @@
 const T02_PROMPT_ID = "T02_relevance_class";
-const T02_PROMPT_VERSION = "1.15.0";
+const T02_PROMPT_VERSION = "1.16.0";
 
 function createT02PromptDefinition({ modelName }) {
   return {

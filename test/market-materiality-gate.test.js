@@ -336,3 +336,30 @@ test("generic context event bridges cover quality, platform, climate, education,
   assert.equal(waterProject.relevance, "medium");
   assert.equal(waterProject.hook, "context_urban_water_infrastructure_project");
 });
+
+test("generic bridges do not turn broad crisis or adjacent MBG budget commentary into issues", () => {
+  const technology = {
+    industry: "Technology services",
+    products: ["Digital product strategy and engineering"],
+    risks: ["Operational resilience and reliability risks"],
+    priorities: ["Deliver measurable business outcomes"],
+  };
+  const macro = applyMarketMaterialityGate({
+    relevance: "low", confidence: 0.9, subjectRelation: "market", fields: technology,
+    title: "KPR subsidi 40 tahun bisa jadi solusi atau bumerang",
+    summary: "Ekonom membahas krisis AS 2008 dan risiko pembiayaan perumahan.",
+  });
+  assert.equal(macro.relevance, "low");
+
+  const education = {
+    industry: "Education",
+    products: ["Digital learning"],
+    priorities: ["Expand access and affordability through scholarships"],
+  };
+  const mbg = applyMarketMaterialityGate({
+    relevance: "low", confidence: 0.9, subjectRelation: "market", fields: education,
+    title: "Respons Istana soal putusan MK larang program MBG sedot anggaran pendidikan",
+    summary: "Perdebatan anggaran program Makan Bergizi Gratis kembali mengemuka.",
+  });
+  assert.equal(mbg.relevance, "low");
+});
