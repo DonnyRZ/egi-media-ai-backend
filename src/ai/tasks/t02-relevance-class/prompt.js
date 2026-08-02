@@ -14,8 +14,8 @@ function buildSystemPolicy(context) {
 }
 
 const CLASSIFICATION_RUBRIC = {
-  high: "Direct, material management signal for the supplied company context: company-specific reputation/operations, a consequential competitor move, or a concrete market/regulatory/demand/supply-chain development with strong impact on the company.",
-  medium: "Credible external signal with a clear and specific implication for the supplied company context, but indirect, uncertain, or less material than high. The article does not need to name the company.",
+  high: "Direct, material management signal for the supplied company context: company-specific reputation/operations, a consequential competitor move, or a concrete market/regulatory/demand/supply-chain development whose impact mechanism is explicit and strong for the company.",
+  medium: "Credible external signal with an explicit, specific impact mechanism connecting an article fact to a supplied company-context field, but indirect, uncertain, or less material than high. The article does not need to name the company; a merely plausible or hypothetical connection remains low.",
   low: "Only weak, generic, or tangential overlap with the company context; no concrete management implication. Must NOT create an issue candidate.",
   none: "No meaningful overlap with the supplied company context fields. Celebrity, sports, unrelated politics, pure entertainment, or other domains outside the context.",
   subject_relation: {
@@ -38,6 +38,8 @@ const CLASSIFICATION_RUBRIC = {
     "High/medium external market relevance requires an observable event: a peer action, enacted or formally announced rule/project, measured change in demand/cost/supply, or a concrete operating change with stated scope. Advice, commentary, advocacy, and requests for future study/action are low/none by themselves.",
     "A metric from an unrelated vendor, technology, environmental topic, or broad national trend is low/none unless evidence directly changes a named product, dependency, operating region, customer market, or management decision in company_context.",
     "A broad topic, goal, or priority match does not by itself establish materiality. Evidence must change a constraint, opportunity, benchmark, demand condition, cost, supply, rule, or competitive position for the supplied company context.",
+    "For medium/high, identify all three links: (a) a concrete article fact or enacted change, (b) the exact company-context field it intersects, and (c) an explicit causal mechanism affecting that field. If any link is only hypothetical, use low or none.",
+    "Generic macro indicators, policy commentary, awards, ecosystem news, or adjacent peer activity that require management to infer multiple unstated consequences are low unless the article itself states the operational, commercial, regulatory, cost, supply, or demand consequence.",
     "Generic advice, broad trend commentary, thought leadership, generic technology adoption, or macro-market movement is low/none when relevance requires a speculative multi-step chain not stated by evidence or context.",
     "Do not upgrade generic news merely because management could hypothetically react to it. Require a concrete event plus a direct context intersection.",
     "If competitors is empty, subject_relation must never be competitor.",
