@@ -129,7 +129,10 @@ test("T07 generation and review contracts target dashboard-company management", 
   const reviewText = reviewInput.map((item) => item.content).join("\n");
   assert.match(generationText, /management \/ leadership of the company|management_identity/i);
   assert.match(generationText, /never write an operations brief for the external company/i);
+  assert.match(generationText, /what_happened and why_matters are string arrays/i);
+  assert.match(generationText, /impacts, risks, and watch are cited object arrays/i);
   assert.match(reviewText, /your company's leadership|leadership persona/i);
   assert.match(reviewText, /invents company|invented company facts/i);
+  assert.match(reviewText, /exact issue_analysis_v3 shape/i);
 });
 
