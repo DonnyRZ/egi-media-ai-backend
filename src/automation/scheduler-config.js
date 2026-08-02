@@ -12,6 +12,8 @@ const schema = Joi.object({
   AI_INGEST_MAX_ATTEMPTS: Joi.number().integer().min(1).max(10).default(3),
   AI_INGEST_WORKER_CONCURRENCY: Joi.number().integer().min(1).max(50).default(1),
   AI_PIPELINE_WORKER_CONCURRENCY: Joi.number().integer().min(1).max(50).default(1),
+  // Must exceed the longest provider request so a live AI job is not reclaimed as stale.
+  AI_WORKER_STALE_TIMEOUT_MS: Joi.number().integer().min(1000).max(86400000).default(900000),
   AI_SCHEDULER_CATCH_UP: Joi.boolean().truthy("true").falsy("false").default(true),
 }).unknown(true);
 
@@ -28,6 +30,7 @@ function readSchedulerConfig(env = process.env) {
     maxAttempts: value.AI_INGEST_MAX_ATTEMPTS,
     ingestConcurrency: value.AI_INGEST_WORKER_CONCURRENCY,
     pipelineConcurrency: value.AI_PIPELINE_WORKER_CONCURRENCY,
+    workerStaleTimeoutMs: value.AI_WORKER_STALE_TIMEOUT_MS,
     catchUp: value.AI_SCHEDULER_CATCH_UP,
   };
 }

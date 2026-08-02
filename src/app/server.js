@@ -678,7 +678,7 @@ class Server {
     const pollEnqueue = new PollEnqueueService({ queue: ingest.queue, maxAttempts: automation.maxAttempts });
     this.scheduler = new MultiTenantIngestScheduler({ config: automation, listEligible: () => this._getPipelineRuntime().companyStore.listEligible(), enqueuePoll: (input) => pollEnqueue.enqueuePoll(input), stateStore: this.schedulerStateStore, logger: this.logger });
     const taskQueues = ["T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T12", "T13", "T14"].map((taskId) => `ai-task-${taskId}`);
-    this.workerRunner = new QueueWorkerRunner({ queueNames: ["ingest", "pipeline-stage", ...taskQueues], concurrency: Math.max(automation.ingestConcurrency, automation.pipelineConcurrency), recoverStale: () => ingest.jobStore.recoverStale?.({ olderThanMs: automation.timeoutMs * 2 }), processNext: (queueName) => {
+    this.workerRunner = new QueueWorkerRunner({ queueNames: ["ingest", "pipeline-stage", ...taskQueues], concurrency: Math.max(automation.ingestConcurrency, automation.pipelineConcurrency), recoverStale: () => ingest.jobStore.recoverStale?.({ olderThanMs: automation.workerStaleTimeoutMs }), processNext: (queueName) => {
       if (queueName === "ingest") return ingest.runNext();
       if (queueName === "pipeline-stage") return ingest.queue.processNext({ queueName, workerId: "pipeline-stage-worker", handler: (job) => pipeline.dispatcher.dispatch(job.payload) });
       if (queueName.startsWith("ai-task-")) return pipeline.worker.processNext({ taskId: queueName.replace("ai-task-", "") });
