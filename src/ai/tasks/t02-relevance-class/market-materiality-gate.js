@@ -49,11 +49,11 @@ const CONTEXT_EVENT_BRIDGES = Object.freeze([
   {
     hook: "context_regulatory_quality_event",
     context: /\b(regulat|compliance|kepatuhan|governance|tata\s+kelola|quality|kualitas|traceability|ketertelusuran|food\s+safety|keamanan\s+pangan|customs|kepabeanan|licensing|perizinan|accreditation|akreditasi|standar|standard|assurance|audit)\b/i,
-    article: /\b(audit|pelanggaran|bermasalah|bermasalahnya|wajib|mandat|regulasi|regulation|peraturan|kebijakan|policy|sertifikasi|certification|verifikasi|verification|standar|standard|lisensi|izin|pajak|bpjs|fortifikasi|fortified|beras|rice|dapur)\b/i,
+    article: /\b(audit|pelanggaran|bermasalah|bermasalahnya|mandat|regulasi|regulation|peraturan|sertifikasi|certification|verifikasi|verification|standar|standard|lisensi|izin|pajak|bpjs|fortifikasi|fortified|beras|rice|dapur)\b/i,
   },
   {
     hook: "context_environmental_or_utility_disruption",
-    context: /\b(critical\s+utilities|water|air|climate|iklim|crop|tanaman|energy|energi|power|listrik|supply\s+disruption|business\s+disruption|resilience|resil)\b/i,
+    context: /\b(critical\s+utilities|water|air|climate|iklim|crop|tanaman|energy|energi|power|listrik)\b/i,
     article: /\b(kekeringan|drought|krisis\s+listrik|power\s+crisis|gangguan\s+listrik|water\s+shortage|kekurangan\s+air)\b/i,
   },
   {

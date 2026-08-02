@@ -362,4 +362,16 @@ test("generic bridges do not turn broad crisis or adjacent MBG budget commentary
     summary: "Perdebatan anggaran program Makan Bergizi Gratis kembali mengemuka.",
   });
   assert.equal(mbg.relevance, "low");
+
+  const logistics = {
+    industry: "Logistics and supply chain",
+    products: ["Domestic transportation", "Warehousing"],
+    priorities: ["Business continuity and resilience"],
+  };
+  const drought = applyMarketMaterialityGate({
+    relevance: "low", confidence: 0.9, subjectRelation: "market", fields: logistics,
+    title: "Kementerian PU optimalkan sumur bor hadapi ancaman kekeringan",
+    summary: "Pemerintah menyiapkan sumber air untuk menghadapi musim kering.",
+  });
+  assert.equal(drought.relevance, "low");
 });
