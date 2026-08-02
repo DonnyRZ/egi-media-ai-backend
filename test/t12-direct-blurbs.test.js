@@ -7,6 +7,7 @@ const { InMemoryIssuePriorityStore, T09_PROMPT_VERSION } = require("../src/ai/ta
 const { InMemoryPriorityReasonStore, T10_PROMPT_VERSION } = require("../src/ai/tasks/t10-priority-reason");
 const { InMemoryAlertEventStore } = require("../src/alerts");
 const { createT12DirectBlurbsRuntime } = require("../src/ai/tasks/t12-direct-blurbs");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -45,6 +46,7 @@ function buildRuntime({ output = validOutput(), channel = "langsung", status = "
       return { data: output, model: { alias: "nano", name: "nano-test-model" }, correlation: { requestId: request.requestId, providerRequestId: "req_t12" }, providerResponseId: "resp_t12", usage: { inputTokens: 30, outputTokens: 20, totalTokens: 50 }, latencyMs: 10 };
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" }, eventStore, issueStore, analysisStore, priorityStore, reasonStore,
+    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "alert.direct_blurb.generate",
   });
   return { runtime, eventStore, event, kernelCalls: () => kernelCalls };

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 process.env.APP_PORT = "0";
 process.env.AI_LOCAL_PREVIEW_AUTH = "true";
+require("./support/test-env");
 const Server = require("../src/app/server");
 
 test("tenant membership API is backend-scoped and supports invite/revoke lifecycle", async () => {

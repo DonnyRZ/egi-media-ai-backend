@@ -14,6 +14,7 @@ const {
 const {
   buildPerspectiveReviewInput,
 } = require("../src/ai/tasks/t07-issue-analysis/perspective-review");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const contexts = [
   {
@@ -83,7 +84,7 @@ test("subject relation controls framing while unrelated content still stops", ()
 });
 
 test("T07 generation and review contracts target dashboard-company management", () => {
-  const context = { companyId: "company-1", version: 1, status: "effective", fields: contexts[0] };
+  const context = { companyId: "company-1", version: 1, status: "effective", fields: contexts[0], managementIdentity: readyManagementIdentity(contexts[0].name) };
   const evidence = [{
     sourceArticleId: "article-1",
     requestedLocale: "id",

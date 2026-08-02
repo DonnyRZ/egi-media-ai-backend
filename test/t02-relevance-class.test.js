@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const { createT02RelevanceRuntime } = require("../src/ai/tasks/t02-relevance-class");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const articleId = "123e4567-e89b-12d3-a456-426614174000";
 const companyId = "company-1";
@@ -11,9 +12,10 @@ function context() {
     companyId,
     version: 3,
     status: "effective",
+    managementIdentity: readyManagementIdentity("PT Example Logistics"),
     fields: {
-      name: "PT Example Logistics", industry: "Logistics", sub_industry: null, description: null,
-      products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],
+      name: "PT Example Logistics", industry: "Logistics", sub_industry: null, description: "Fleet tracking and transport visibility for logistics operators.",
+      products: ["Fleet tracking"], customers: ["Logistics operators"], regions: ["Indonesia"], competitors: [],
       brands_aliases: [],
       key_people: [],
       priorities: ["Reduce costs"], goals: [], risks: [], topics: [], dependencies: [],

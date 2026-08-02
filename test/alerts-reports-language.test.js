@@ -13,6 +13,7 @@ const { createT13ReportNarrativeRuntime } = require("../src/ai/tasks/t13-report-
 const { createT14ConstrainedRewriteRuntime } = require("../src/ai/tasks/t14-constrained-rewrite");
 const { buildT14Input, SYSTEM_POLICY: T14_SYSTEM_POLICY } = require("../src/ai/tasks/t14-constrained-rewrite/prompt");
 const { T13_PROMPT_VERSION } = require("../src/ai/tasks/t13-report-narrative");
+const { readyManagementIdentity } = require("./support/management-context");
 
 // No backfill: changing company language preference does not rewrite existing blurbs/narratives.
 
@@ -107,6 +108,7 @@ function buildT12Fixture({ locale, onKernelRequest }) {
     }, onKernelRequest),
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     eventStore, issueStore, analysisStore, priorityStore, reasonStore,
+    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     companyStore: companyStore(locale),
     authorizeCompany: async () => true,
   });
@@ -155,6 +157,7 @@ function buildT13Fixture({ locale, onKernelRequest }) {
     aiTaskKernel: kernelOk(t13Output(items), onKernelRequest),
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     reportDraftStore,
+    getCompanyContextVersion: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     companyStore: companyStore(locale),
     authorizeCompany: async () => true,
   });
@@ -240,6 +243,7 @@ test("T12 taskContract/system still forbids URL and recipient invent", () => {
     priority: "tinggi",
     sourceClaims: [{ claimId: "c1", text: "Claim text" }],
     outputLanguage: "en",
+    context: { version: 3, fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") },
   });
   assert.match(T12_SYSTEM_POLICY, /Do not create URLs, recipients/);
   assert.match(input[1].content, /"forbidden":\["URL","recipient"/);

@@ -15,6 +15,7 @@ const { InMemoryClaimLabelStore } = require("../src/ai/tasks/t08-claim-labels");
 const { InMemoryIssuePriorityStore, T09_PROMPT_VERSION } = require("../src/ai/tasks/t09-priority-enum");
 const { createT10PriorityReasonRuntime } = require("../src/ai/tasks/t10-priority-reason");
 const { InMemoryIssueStore } = require("../src/issues");
+const { readyManagementIdentity } = require("./support/management-context");
 
 // No backfill: changing company language preference does not rewrite existing issue prose fields.
 
@@ -53,6 +54,7 @@ function context() {
     companyId,
     version: 3,
     status: "effective",
+    managementIdentity: readyManagementIdentity("PT Example"),
     fields: { name: "PT Example", industry: "Logistics" },
   };
 }
@@ -145,6 +147,7 @@ for (const [label, locale, expected] of [
       openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
       cmsSourceGate: { requirePublishedArticle: async () => source },
       issueStore, matchDecisionStore, relevanceDecisionStore,
+      getEffectiveContext: async () => context(),
       companyStore: companyStore(locale),
       authorizeCompany: async () => true,
     });
@@ -174,6 +177,7 @@ for (const [label, locale, expected] of [
       openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
       cmsSourceGate: { requirePublishedArticle: async () => source },
       issueStore, matchDecisionStore, relevanceDecisionStore,
+      getEffectiveContext: async () => context(),
       companyStore: companyStore(locale),
       authorizeCompany: async () => true,
     });

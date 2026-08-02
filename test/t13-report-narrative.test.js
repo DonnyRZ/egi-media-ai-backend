@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const { InMemoryReportDraftStore } = require("../src/reports");
 const { createT13ReportNarrativeRuntime } = require("../src/ai/tasks/t13-report-narrative");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -42,6 +43,7 @@ function buildRuntime({ output, items = Array.from({ length: 6 }, (_, index) => 
       return { data: output || outputFor(items), model: { alias: "mini", name: "mini-test-model" }, correlation: { requestId: request.requestId, providerRequestId: "req_t13" }, providerResponseId: "resp_t13", usage: { inputTokens: 100, outputTokens: 100, totalTokens: 200 }, latencyMs: 20 };
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" }, reportDraftStore,
+    getCompanyContextVersion: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "report.narrative.generate",
   });
   return { runtime, reportDraftStore, report, items, kernelCalls: () => kernelCalls };

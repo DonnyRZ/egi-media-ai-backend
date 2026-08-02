@@ -6,6 +6,7 @@ const { InMemoryIssueMatchDecisionStore } = require("../src/ai/tasks/t04-issue-m
 const { InMemoryIssueStore } = require("../src/issues");
 const { createT06IssueOneLinerRuntime } = require("../src/ai/tasks/t06-issue-oneliner");
 const { fingerprint } = require("../src/ai/tasks/t02-relevance-class/service");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -49,6 +50,10 @@ function buildRuntime({ output = { one_liner: "Regulasi baru berpotensi memengar
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" }, cmsSourceGate: { requirePublishedArticle: async () => sourceResult },
     issueStore, matchDecisionStore, relevanceDecisionStore,
+    getEffectiveContext: async () => ({
+      companyId, version: 3, status: "effective", fields: { name: "Acme Logistics", industry: "Logistics" },
+      managementIdentity: readyManagementIdentity("Acme Logistics"),
+    }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.one_liner.generate",
   });
   return { runtime, issueStore, matchDecisionStore, mutation, kernelCalls: () => kernelCalls };

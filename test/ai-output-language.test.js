@@ -21,8 +21,10 @@ const { buildT10Input } = require("../src/ai/tasks/t10-priority-reason/prompt");
 const { buildT12Input } = require("../src/ai/tasks/t12-direct-blurbs/prompt");
 const { buildT13Input } = require("../src/ai/tasks/t13-report-narrative/prompt");
 const { buildT14Input } = require("../src/ai/tasks/t14-constrained-rewrite/prompt");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const SOURCE_DIFFERS_PHRASE = "source material may be in a different language";
+const managementIdentity = readyManagementIdentity("Acme");
 
 const articleStub = {
   sourceArticleId: "art-1",
@@ -101,7 +103,7 @@ test("T01 buildT01Input embeds output_language and language rule", () => {
 test("T03 buildT03Input embeds output_language and language rule", () => {
   const messages = buildT03Input({
     companyId: "c1",
-    context: { version: 1, fields: { name: "Acme" } },
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
     decision: { decisionId: "d1", relevance: "high", confidence: 0.9 },
     source: articleStub,
   });
@@ -116,6 +118,7 @@ test("T05 buildT05Input embeds output_language and language rule", () => {
     development: { developmentId: "dev-1", developmentType: "new", observedAt: "2026-07-01T00:00:00.000Z" },
     matchDecision: { matchDecisionId: "m1", decision: "new", reasonCode: "new_event" },
     source: articleStub,
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
   });
   assertProseLanguageContract(messages);
 });
@@ -128,6 +131,7 @@ test("T06 buildT06Input embeds output_language and language rule", () => {
     development: { developmentId: "dev-1", developmentType: "new", observedAt: "2026-07-01T00:00:00.000Z" },
     matchDecision: { matchDecisionId: "m1", decision: "new", reasonCode: "new_event" },
     source: articleStub,
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
   });
   assertProseLanguageContract(messages);
 });
@@ -137,7 +141,7 @@ test("T07 buildT07Input embeds output_language and language rule", () => {
     tenantId: "t1",
     companyId: "c1",
     issue: { issueId: "i1", status: "active", title: "Title", oneLiner: "One liner" },
-    context: { version: 1, fields: { name: "Acme" } },
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
     evidence: [articleStub],
     subjectRelation: "self",
   });
@@ -161,7 +165,7 @@ test("T10 buildT10Input embeds output_language and language rule", () => {
         watch: [],
       },
     },
-    context: { version: 1, fields: { name: "Acme" } },
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
     priorityDecision: { priorityDecisionId: "p1", analysisId: "a1", priority: "tinggi" },
     labeledClaims: [{ claimId: "cl-1", text: "claim", label: "fact" }],
   });
@@ -177,6 +181,7 @@ test("T12 buildT12Input embeds output_language and language rule", () => {
     detailUrl: "https://app.example/issues/i1",
     priority: "tinggi",
     sourceClaims: [{ claimId: "cl-1", text: "claim" }],
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
   });
   assertProseLanguageContract(messages);
 });
@@ -206,6 +211,7 @@ test("T13 buildT13Input embeds output_language and language rule", () => {
         citations: [{ sourceArticleId: "art-1", canonicalUrl: "https://example.com/a" }],
       }],
     },
+    context: { version: 1, fields: { name: "Acme" }, managementIdentity },
   });
   assertProseLanguageContract(messages);
 });

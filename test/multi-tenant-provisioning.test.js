@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 process.env.APP_PORT = "0";
+require("./support/test-env");
 const Server = require("../src/app/server");
 
 async function request(base, path, options = {}) { const response = await fetch(`${base}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } }); return { response, body: await response.json() }; }

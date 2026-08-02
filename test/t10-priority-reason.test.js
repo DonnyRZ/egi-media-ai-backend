@@ -6,6 +6,7 @@ const { InMemoryIssueAnalysisStore } = require("../src/ai/tasks/t07-issue-analys
 const { InMemoryClaimLabelStore } = require("../src/ai/tasks/t08-claim-labels");
 const { InMemoryIssuePriorityStore, T09_PROMPT_VERSION } = require("../src/ai/tasks/t09-priority-enum");
 const { createT10PriorityReasonRuntime } = require("../src/ai/tasks/t10-priority-reason");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -54,7 +55,7 @@ function buildRuntime({ output = { reason: "Perubahan regulasi berpotensi memeng
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     issueStore, analysisStore, priorityStore, labelStore,
-    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" } }),
+    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.priority.reason.generate",
   });
   return { runtime, issueStore, analysisStore, analysis, priority, kernelCalls: () => kernelCalls };

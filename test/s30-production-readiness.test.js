@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { validateProductionEnvironment } = require("../src/config/environment");
 const { createLogger, MetricsRegistry, safeValue, REDACTED } = require("../src/observability");
+require("./support/test-env");
 const Server = require("../src/app/server");
 
 const baseEnv = { APP_ENV: "production", APP_HOST: "0.0.0.0", APP_PORT: "5003", CORS_ORIGINS: "https://portal.example.com", CMS_BASE_URL: "https://cms.example.com", PORTAL_BASE_URL: "https://portal.example.com", AUTH_ACCESS_TOKEN_SECRET: "x".repeat(40), OPENAI_API_KEY: "sk-test", OPENAI_MODEL: "gpt-5.6-luna", OPENAI_MINI_MODEL: "gpt-5.6-luna", OPENAI_NANO_MODEL: "gpt-5.6-luna", SOURCE_DATABASE_URL: "postgresql://source:secret@db:5432/main", AI_DATABASE_URL: "postgresql://ai:secret@db:5432/ai", CRAWL_DATABASE_URL: "postgresql://crawl:secret@db:5432/crawl", EMAIL_TRANSPORT: "smtp", EMAIL_SMTP_HOST: "smtp.gmail.com", EMAIL_SMTP_USER: "egi.egiholding@gmail.com", EMAIL_SMTP_APP_PASSWORD: "app-password", EMAIL_FROM_ADDRESS: "egi.egiholding@gmail.com" };

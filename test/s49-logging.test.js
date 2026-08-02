@@ -36,7 +36,7 @@ test("S57 maps unknown failures to UNKNOWN_INTERNAL_ERROR without leaking intern
 test("S53 preserves safe provider diagnostics for rejected requests", () => {
   const normalized = normalizeProviderError({ status: 400, request_id: "provider-request", error: { type: "invalid_request_error", code: "context_length_exceeded", message: "private provider detail" } });
   assert.equal(normalized.code, "AI_PROVIDER_REJECTED");
-  assert.deepEqual(normalized.details, { status: 400, providerRequestId: "provider-request", providerErrorType: "invalid_request_error", providerErrorCode: "context_length_exceeded" });
+  assert.deepEqual(normalized.details, { status: 400, providerRequestId: "provider-request", providerErrorType: "invalid_request_error", providerErrorCode: "context_length_exceeded", retryAfterMs: 0, resetRequestsMs: 0, resetTokensMs: 0 });
 });
 
 test("S51 error envelope remains client-safe while logger receives the root cause", () => {

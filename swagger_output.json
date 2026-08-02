@@ -482,6 +482,46 @@
           "409": { "$ref": "#/components/responses/Conflict" },
           "422": { "$ref": "#/components/responses/BusinessRuleError" }
         }
+      },
+      "delete": {
+        "tags": ["Company Context"],
+        "summary": "Clear the effective Company Context",
+        "description": "Archives the effective context and removes it from the intake and judgmental-AI readiness path.",
+        "operationId": "deleteCompanyContext",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Effective Company Context cleared" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/context/management-identity/retry": {
+      "post": {
+        "tags": ["Company Context"],
+        "summary": "Retry Management Identity generation",
+        "description": "Regenerates the identity draft for the effective context version; intake remains blocked until the identity is ready.",
+        "operationId": "retryManagementIdentity",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "$ref": "#/components/parameters/IdempotencyKeyHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Management Identity retry accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
       }
     },
     "/api/v1/company-context/draft": {

@@ -4,6 +4,7 @@ const test = require("node:test");
 const { InMemoryIssueStore } = require("../src/issues");
 const { InMemoryIssueAnalysisStore } = require("../src/ai/tasks/t07-issue-analysis");
 const { createT09PriorityEnumRuntime } = require("../src/ai/tasks/t09-priority-enum");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const tenantId = "tenant-h";
 const companyId = "company-a";
@@ -41,7 +42,7 @@ function buildRuntime({ output = { priority: "tinggi" }, onKernelRequest, curren
     } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     issueStore, analysisStore,
-    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" } }),
+    getEffectiveContext: async () => ({ companyId, version: 3, status: "effective", fields: { name: "PT Example", industry: "Logistics" }, managementIdentity: readyManagementIdentity("PT Example") }),
     authorizeCompany: async (scope) => scope.tenantId === tenantId && scope.companyId === companyId && scope.action === "issue.priority.evaluate",
   });
   return { runtime, issueStore, analysisStore, analysis, kernelCalls: () => kernelCalls };

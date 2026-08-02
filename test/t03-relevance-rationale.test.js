@@ -4,13 +4,14 @@ const test = require("node:test");
 const { InMemoryRelevanceDecisionStore } = require("../src/ai/tasks/t02-relevance-class");
 const { createT03RelevanceRationaleRuntime } = require("../src/ai/tasks/t03-relevance-rationale");
 const { fingerprint } = require("../src/ai/tasks/t02-relevance-class/service");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const articleId = "123e4567-e89b-12d3-a456-426614174000";
 const companyId = "company-1";
 
 function context() {
   return {
-    companyId, version: 3, status: "effective",
+    companyId, version: 3, status: "effective", managementIdentity: readyManagementIdentity("PT Example"),
     fields: {
       name: "PT Example", industry: "Logistics", sub_industry: null, description: null,
       products: ["Fleet tracking"], customers: [], regions: ["Indonesia"], competitors: [],

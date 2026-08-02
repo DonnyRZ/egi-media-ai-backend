@@ -27,6 +27,7 @@ const { createT02RelevanceRuntime } = require("../src/ai/tasks/t02-relevance-cla
 const { createSourceRouter } = require("../src/routes/source");
 const { createIngestRouter } = require("../src/routes/ingest");
 const { InMemorySourceSnapshotStore, InMemoryWatermarkStore } = require("../src/ingest");
+const { readyManagementIdentity } = require("./support/management-context");
 
 const CMS_UUID = "123e4567-e89b-12d3-a456-426614174000";
 const CONTENT_HASH = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -379,12 +380,13 @@ test("F4 T02 classifies a crawl-sourced article through the same service entry p
       companyId: "company-1",
       version: 3,
       status: "effective",
+      managementIdentity: readyManagementIdentity("PT Example"),
       fields: {
-        name: "PT Example", industry: "Media logistics", sub_industry: null, description: null,
-        products: ["Media distribution", "Fleet tracking"], customers: [], regions: [], competitors: [],
+        name: "PT Example", industry: "Media logistics", sub_industry: null, description: "Media distribution and logistics operations.",
+        products: ["Media distribution", "Fleet tracking"], customers: ["Logistics operators"], regions: ["Indonesia"], competitors: [],
         brands_aliases: [],
         key_people: [],
-        priorities: [], goals: [], risks: [], topics: [], dependencies: [],
+        priorities: ["Reduce delivery cost"], goals: [], risks: [], topics: [], dependencies: [],
       },
     }),
     authorizeCompany: async ({ companyId }) => companyId === "company-1",
@@ -409,7 +411,14 @@ test("F4 T02 refuses a viral article id without calling the model", async () => 
     aiTaskKernel: { execute: async () => { kernelCalls += 1; return {}; } },
     openaiConfig: { nanoModel: "nano-test-model", miniModel: "mini-test-model" },
     cmsSourceGate: resolver,
-    getEffectiveContext: async () => ({ companyId: "company-1", version: 1, status: "effective", fields: {} }),
+    getEffectiveContext: async () => ({
+      companyId: "company-1", version: 1, status: "effective", managementIdentity: readyManagementIdentity("PT Example"),
+      fields: {
+        name: "PT Example", industry: "Logistics", sub_industry: null, description: "Logistics operations.",
+        products: ["Fleet tracking"], customers: ["Logistics operators"], regions: ["Indonesia"], competitors: [],
+        brands_aliases: [], key_people: [], priorities: ["Reduce delivery cost"], goals: [], risks: [], topics: [], dependencies: [],
+      },
+    }),
     authorizeCompany: async () => true,
   });
   await assert.rejects(
