@@ -5,40 +5,40 @@ const ALLOWED_SUBJECT = new Set(["self", "competitor", "market", "unrelated"]);
 function validateT07Output(data, { allowedArticleIds, expectedSubjectRelation = null }) {
   const required = ["what_happened", "why_matters", "impacts", "risks", "watch", "claims", "subject_relation"];
   if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length !== required.length
-    || required.some((field) => !Object.hasOwn(data, field))) throw invalid();
-  if (!ALLOWED_SUBJECT.has(data.subject_relation)) throw invalid();
-  if (expectedSubjectRelation && data.subject_relation !== expectedSubjectRelation) throw invalid();
+    || required.some((field) => !Object.hasOwn(data, field))) throw invalid("required_fields", { keys: data && typeof data === "object" ? Object.keys(data) : [] });
+  if (!ALLOWED_SUBJECT.has(data.subject_relation)) throw invalid("subject_relation_enum", { value: data.subject_relation });
+  if (expectedSubjectRelation && data.subject_relation !== expectedSubjectRelation) throw invalid("subject_relation_mismatch", { expected: expectedSubjectRelation, actual: data.subject_relation });
   for (const field of ["what_happened", "why_matters"]) {
-    validatePointList(data[field]);
+    validatePointList(data[field], field);
   }
   for (const field of ["impacts", "risks", "watch"]) {
-    if (!Array.isArray(data[field]) || data[field].length > 6) throw invalid();
-    data[field].forEach((item) => validateCitedItem(item, allowedArticleIds));
+    if (!Array.isArray(data[field]) || data[field].length > 6) throw invalid("cited_list_shape", { field, length: Array.isArray(data[field]) ? data[field].length : null });
+    data[field].forEach((item, index) => validateCitedItem(item, allowedArticleIds, `${field}[${index}]`));
   }
-  if (!Array.isArray(data.claims) || data.claims.length < 1 || data.claims.length > 12) throw invalid();
+  if (!Array.isArray(data.claims) || data.claims.length < 1 || data.claims.length > 12) throw invalid("claims_list_shape", { length: Array.isArray(data.claims) ? data.claims.length : null });
   const claimIds = new Set();
-  data.claims.forEach((claim) => {
+  data.claims.forEach((claim, index) => {
     if (!claim || typeof claim !== "object" || Array.isArray(claim) || Object.keys(claim).length !== 3
-      || typeof claim.claim_id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(claim.claim_id) || claimIds.has(claim.claim_id)) throw invalid();
+      || typeof claim.claim_id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(claim.claim_id) || claimIds.has(claim.claim_id)) throw invalid("claim_shape", { index });
     claimIds.add(claim.claim_id);
-    validateCitedItem(claim, allowedArticleIds);
+    validateCitedItem(claim, allowedArticleIds, `claims[${index}]`);
   });
   return normalize(data);
 }
 
-function validatePointList(value) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 6) throw invalid();
+function validatePointList(value, field) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) throw invalid("point_list_shape", { field, length: Array.isArray(value) ? value.length : null });
   value.forEach((point) => {
-    if (typeof point !== "string" || !point.trim() || point.trim().length > 280) throw invalid();
+    if (typeof point !== "string" || !point.trim() || point.trim().length > 280) throw invalid("point_text", { field });
   });
 }
 
-function validateCitedItem(item, allowedArticleIds) {
+function validateCitedItem(item, allowedArticleIds, field) {
   if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.text !== "string"
     || !item.text.trim() || item.text.trim().length > 500 || !Array.isArray(item.source_article_ids)
     || item.source_article_ids.length < 1 || item.source_article_ids.length > 5
     || new Set(item.source_article_ids).size !== item.source_article_ids.length
-    || item.source_article_ids.some((id) => typeof id !== "string" || !allowedArticleIds.has(id))) throw invalid();
+    || item.source_article_ids.some((id) => typeof id !== "string" || !allowedArticleIds.has(id))) throw invalid("cited_item", { field, sourceArticleIds: item?.source_article_ids || [] });
 }
 
 function normalize(data) {
@@ -55,9 +55,10 @@ function normalize(data) {
 // Provider completions can occasionally violate the strict citation/shape
 // contract. Let the queue perform its bounded retry policy; a persistent
 // violation still dead-letters after maxAttempts and never gets persisted.
-function invalid() {
+function invalid(validationReason = "contract", details = {}) {
   const error = new AiOutputError("T07 output has an invalid analysis shape or out-of-evidence citation", {
     code: "AI_OUTPUT_SCHEMA_INVALID",
+    details: { validationReason, ...details },
   });
   error.retryable = true;
   return error;
