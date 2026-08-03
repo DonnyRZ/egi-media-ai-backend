@@ -33,6 +33,8 @@ function normalizeProviderError(error) {
 
   const status = error?.status || error?.statusCode;
   const name = error?.name || "";
+  const message = String(error?.message || "");
+  const transportCode = String(error?.code || "");
   const providerRequestId = error?.request_id || error?._request_id || null;
   const providerError = error?.error || {};
   const providerDetails = {
@@ -43,7 +45,7 @@ function normalizeProviderError(error) {
     ...extractRateLimitDetails(error),
   };
 
-  if (name === "APIConnectionTimeoutError" || status === 408 || /timed out|timeout/i.test(error?.message || "")) {
+  if (name === "APIConnectionTimeoutError" || status === 408 || /timed out|timeout/i.test(message)) {
     return new AiProviderError("OpenAI request timed out", {
       code: "AI_PROVIDER_TIMEOUT",
       retryable: true,
@@ -53,6 +55,15 @@ function normalizeProviderError(error) {
   }
 
   if (name === "APIConnectionError") {
+    return new AiProviderError("OpenAI connection failed", {
+      code: "AI_PROVIDER_UNAVAILABLE",
+      retryable: true,
+      details: providerDetails,
+      cause: error,
+    });
+  }
+
+  if (/connection error|network error|socket|connect/i.test(message) || ["ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ECONNABORTED"].includes(transportCode)) {
     return new AiProviderError("OpenAI connection failed", {
       code: "AI_PROVIDER_UNAVAILABLE",
       retryable: true,

@@ -16,7 +16,7 @@ const { createMembershipRouter } = require("./memberships");
 const { createPlatformRouter } = require("./platform");
 const { createAutomationRouter } = require("./automation");
 
-module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake, assertIntakeReady, getIntakeReadiness }) => {
+module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAccessAuditStore, getPlatformHealth, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake, assertIntakeReady, getIntakeReadiness }) => {
   server.use(createCompanyContextRouter({
     companyContextService,
     getCompanyContextDraftService,
@@ -25,8 +25,8 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   }));
   server.use(createAuthRouter({ getCompanyStore, getTenantStore }));
   server.use(createCompanyRouter({ getCompanyStore }));
-  server.use(createMembershipRouter({ getMembershipStore }));
-  server.use(createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore }));
+  server.use(createMembershipRouter({ getMembershipStore, getAccessAuditStore }));
+  server.use(createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore, getAccessAuditStore, getPlatformHealth }));
   server.use(createSourceRouter({ cmsSourceGate, getIssueSourceResolver }));
   server.use(createRelevanceRouter({ getT02Service, getT03Service }));
   server.use(createIssueFormationRouter({ getT04Service, getIssueMutationService, getT05Service, getT06Service, getSavedIssueStore, getIssueReadService, getIssueStore }));

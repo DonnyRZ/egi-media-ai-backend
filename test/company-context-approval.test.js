@@ -163,6 +163,24 @@ test("human manual write creates the next effective context version", async () =
   );
 });
 
+test("Company Context version registry keeps newest effective and archived snapshots", async () => {
+  const { service } = createService();
+  await service.replaceEffectiveContext({
+    actor, companyId: "company-1", version: 1, fields: contextFields(), changeReason: "Initial context",
+  });
+  await service.replaceEffectiveContext({
+    actor, companyId: "company-1", version: 2, fields: { ...contextFields(), industry: "Updated industry" }, changeReason: "Revision",
+  });
+
+  const versions = await service.listContextVersions({ actor, companyId: "company-1" });
+  assert.equal(versions.total, 2);
+  assert.deepEqual(versions.items.map(({ context }) => [context.version, context.status]), [[2, "effective"], [1, "archived"]]);
+
+  await service.clearEffectiveContext({ actor, companyId: "company-1" });
+  const afterDelete = await service.listContextVersions({ actor, companyId: "company-1" });
+  assert.deepEqual(afterDelete.items.map(({ context }) => context.status), ["archived", "archived"]);
+});
+
 test("Company Context API activates from draft without submit-review", async () => {
   const { draftStore, service } = createService({
     authorize: async ({ actor: authorizedActor, companyId, action }) => authorizedActor.id === "human-1" && companyId === "company-1" && action.startsWith("company_context."),
@@ -208,6 +226,13 @@ test("Company Context API activates from draft without submit-review", async () 
     const current = await fetch(`${baseUrl}/api/v1/companies/company-1/context`);
     assert.equal(current.status, 200);
     assert.equal((await current.json()).data.version, 1);
+
+    const versions = await fetch(`${baseUrl}/api/v1/companies/company-1/context/versions`);
+    assert.equal(versions.status, 200);
+    const versionBody = await versions.json();
+    assert.equal(versionBody.data.meta.total, 1);
+    assert.equal(versionBody.data.items[0].version, 1);
+    assert.equal(versionBody.data.items[0].status, "effective");
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }

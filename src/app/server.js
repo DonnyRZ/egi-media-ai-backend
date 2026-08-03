@@ -7,6 +7,7 @@ const http = require("http");
 const config = require("../config/global_config");
 const { validateEnvironment, validateProductionEnvironment } = require("../config/environment");
 const { createDatabaseRuntime } = require("../database");
+const { checkDatabaseHealth } = require("../database/health");
 const { createHealthHandlers } = require("./health");
 const { requestContextMiddleware } = require("./request-context");
 const { errorMiddleware, sendError } = require("./error-contract");
@@ -95,6 +96,7 @@ class Server {
       ? {
         resolve: (args) => this._getPersistenceRuntime().membershipStore.resolve(args),
         list: (args) => this._getPersistenceRuntime().membershipStore.list(args),
+        get: (args) => this._getPersistenceRuntime().membershipStore.get(args),
         listForUser: (args) => this._getPersistenceRuntime().membershipStore.listForUser(args),
         invite: (args) => this._getPersistenceRuntime().membershipStore.invite(args),
         activateByUser: (args) => this._getPersistenceRuntime().membershipStore.activateByUser(args),
@@ -107,7 +109,10 @@ class Server {
         { userId: "ai-worker-local", tenantId: "system", companyId: "source-ingest", role: "ai_worker" },
       ] : [] });
     this.accessAuditStore = process.env.AI_PERSISTENCE_MODE === "postgres"
-      ? { record: (input) => this._getPersistenceRuntime().accessAuditStore.record(input) }
+      ? {
+        record: (input) => this._getPersistenceRuntime().accessAuditStore.record(input),
+        list: (input) => this._getPersistenceRuntime().accessAuditStore.list(input),
+      }
       : new InMemoryAccessAuditStore();
     this.app.locals.accessAuditStore = this.accessAuditStore;
     this.tenantStore = process.env.AI_PERSISTENCE_MODE === "postgres"
@@ -129,7 +134,7 @@ class Server {
     } : null;
     this.localAuthService = new LocalAuthService({ email: config.get("/auth/bootstrapAdminEmail"), password: config.get("/auth/bootstrapAdminPassword"), secret: config.get("/auth/accessTokenSecret"), accountStore });
     this.platformBootstrapPromise = this.platformStore.upsert?.({ userId: `user:${String(config.get("/auth/bootstrapAdminEmail")).toLowerCase()}`, role: "platform_superadmin" }) || Promise.resolve();
-    this.authorizationService = new AuthorizationService({ membershipStore: this.membershipStore, platformStore: this.platformStore, auditStore: this.accessAuditStore, logger: this.logger, strictMembership: config.get("/env") === "production" || process.env.AI_PERSISTENCE_MODE === "postgres" });
+    this.authorizationService = new AuthorizationService({ tenantStore: this.tenantStore, membershipStore: this.membershipStore, platformStore: this.platformStore, auditStore: this.accessAuditStore, logger: this.logger, strictMembership: config.get("/env") === "production" || process.env.AI_PERSISTENCE_MODE === "postgres" });
     this.app.locals.authorizationService = this.authorizationService;
     this.app.locals.membershipStore = this.membershipStore;
     this.app.locals.platformStore = this.platformStore;
@@ -139,6 +144,38 @@ class Server {
 
     this._middlewares();
     this._routes();
+  }
+
+  async _getPlatformHealthPayload() {
+    const checks = {
+      environment: "ok",
+      persistence: process.env.AI_PERSISTENCE_MODE === "postgres" ? "postgres" : "memory",
+      ai_provider: config.get("/openai/apiKey") ? "configured" : "not_configured",
+      automation: this.automaticIntakeController ? "configured" : "not_configured",
+      metrics: "ok",
+    };
+    try {
+      validateEnvironment(process.env);
+    } catch {
+      checks.environment = "failed";
+    }
+    if (process.env.AI_PERSISTENCE_MODE === "postgres") {
+      try {
+        const database = await checkDatabaseHealth(this.getDatabaseRuntime());
+        Object.assign(checks, database.checks);
+      } catch {
+        checks.database_runtime = "failed";
+      }
+    }
+    const failed = Object.values(checks).some((value) => value === "failed");
+    return {
+      service: "egi-media-ai-backend",
+      status: failed ? "degraded" : "ready",
+      environment: config.get("/env"),
+      checked_at: new Date().toISOString(),
+      checks,
+      metrics: this.metrics.snapshot(),
+    };
   }
 
   _middlewares() {
@@ -206,6 +243,8 @@ class Server {
       getMembershipStore: () => this._getMembershipStore(),
       getTenantStore: () => this.tenantStore,
       getCompanyStore: () => this.companyStore,
+      getAccessAuditStore: () => this.accessAuditStore,
+      getPlatformHealth: () => this._getPlatformHealthPayload(),
       getAutomationStatus: async () => this._getAutomationStatusPayload(),
       setAutomaticIntake: async ({ desired, actorId, role } = {}) => {
         if (!this.automaticIntakeController) {

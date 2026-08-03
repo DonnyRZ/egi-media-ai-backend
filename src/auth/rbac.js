@@ -11,7 +11,7 @@ const ROLE_PERMISSIONS = Object.freeze({
   // tenant_owner/admin get all non-platform perms except ai.pipeline.run (includes news.intake.*)
   tenant_owner: new Set(PERMISSIONS.filter((p) => !p.startsWith("platform." ) && p !== "ai.pipeline.run")),
   tenant_admin: new Set(PERMISSIONS.filter((p) => !p.startsWith("platform." ) && p !== "ai.pipeline.run")),
-  // company_admin: read + trigger only (no manage / settings persistence yet)
+  // company_admin: administers memberships inside the active assigned company; tenant-wide access remains unavailable.
   company_admin: new Set(["dashboard.read", "issue.read", "issue.complete", "issue.save", "company_context.read", "company_context.draft", "company_context.review", "company_context.approve", "report.read", "report.create", "report.review.submit", "report.approve", "report.share", "report.rewrite", "alert.read", "alert.preference.manage", "company.language.manage", "company.users.manage", "news.intake.read", "news.intake.trigger"]),
   executive: new Set(["dashboard.read", "issue.read", "issue.save", "company_context.read", "report.read", "report.approve", "report.share", "alert.read", "alert.preference.manage", "company.language.manage"]),
   executive_viewer: new Set(["dashboard.read", "issue.read", "issue.save", "company_context.read", "report.read", "alert.read"]),

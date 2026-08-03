@@ -2,10 +2,21 @@ const express = require("express");
 const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
+const { validateTenantStatus } = require("../auth/tenant.store");
 
-function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore } = {}) {
+function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore, getAccessAuditStore, getPlatformHealth } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({ tenant: false, company: false, permission: "platform.tenants.manage", humanOnly: true, platform: true });
+  const auditScope = requireAuthContext({ tenant: false, company: false, permission: "platform.audit.read", humanOnly: true, platform: true });
+  router.get("/api/v1/platform/health", scope, asyncHandler(async (req, res) => {
+    if (typeof getPlatformHealth !== "function") throw Object.assign(new Error("Platform health is not configured"), { code: "NOT_READY", statusCode: 503 });
+    return success(res, await getPlatformHealth(), req);
+  }));
+  router.get("/api/v1/platform/audit-events", auditScope, asyncHandler(async (req, res) => {
+    if (!getAccessAuditStore()?.list) throw Object.assign(new Error("Platform audit log is not configured"), { code: "NOT_READY", statusCode: 503 });
+    const items = await getAccessAuditStore().list({ tenantId: req.query.tenant_id || null, companyId: req.query.company_id || null, actorId: req.query.actor_id || null, action: req.query.action || null, outcome: req.query.outcome || null, limit: boundedInt(req.query.limit, 100, 200) });
+    return success(res, { items: items.map(serializeAuditEvent), meta: { limit: boundedInt(req.query.limit, 100, 200), total: items.length } }, req);
+  }));
   router.get("/api/v1/platform/tenants", scope, asyncHandler(async (req, res) => {
     const result = await getTenantStore().list({ page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 50, 100) });
     return success(res, { items: result.items.map(serialize), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
@@ -16,8 +27,22 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
     return success(res, { tenant: serialize(result.tenant), reused: result.reused }, req, result.reused ? 200 : 201);
   }));
   router.patch("/api/v1/platform/tenants/:tenantId", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
-    const result = await getTenantStore().update({ tenantId: req.params.tenantId, name: req.body?.name, legalName: req.body?.legal_name, status: req.body?.status, timezone: req.body?.timezone, defaultLocale: req.body?.default_locale, metadata: req.body?.metadata });
-    return success(res, { tenant: serialize(result.tenant) }, req);
+    const status = req.body?.status;
+    if (status !== undefined) validateTenantStatus(status);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (reason.length > 500) throw validationError("Lifecycle reason must be 500 characters or fewer");
+    const result = await getTenantStore().update({ tenantId: req.params.tenantId, name: req.body?.name, legalName: req.body?.legal_name, status, timezone: req.body?.timezone, defaultLocale: req.body?.default_locale, metadata: req.body?.metadata });
+    if (status !== undefined && result.previousStatus !== status) {
+      await getAccessAuditStore()?.record?.({
+        actorId: req.authContext?.actor?.actorId,
+        actorType: req.authContext?.actor?.actorType || "human",
+        tenantId: req.params.tenantId,
+        action: "tenant.lifecycle.change",
+        outcome: "allowed",
+        metadata: { previousStatus: result.previousStatus, nextStatus: status, reason: reason || null },
+      });
+    }
+    return success(res, { tenant: serialize(result.tenant), previous_status: result.previousStatus, lifecycle_changed: status !== undefined && result.previousStatus !== status }, req);
   }));
   router.get("/api/v1/platform/tenants/:tenantId/companies", scope, asyncHandler(async (req, res) => {
     const result = await getCompanyStore().list({ tenantId: req.params.tenantId, page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 50, 100) });
@@ -48,6 +73,7 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
 function serialize(item) { return { tenant_id: item.tenantId, name: item.name, legal_name: item.legalName || null, status: item.status, timezone: item.timezone || "UTC", default_locale: item.defaultLocale || "id", metadata: item.metadata || {}, created_at: item.createdAt, updated_at: item.updatedAt }; }
 function serializeCompany(item) { return { company_id: item.companyId, tenant_id: item.tenantId, name: item.name, legal_name: item.legalName || null, status: item.status, timezone: item.timezone || null, locale: item.locale || null, metadata: item.metadata || {}, created_at: item.createdAt, updated_at: item.updatedAt }; }
 function serializeMembership(item) { return { membership_id: item.membershipId, user_id: item.userId, tenant_id: item.tenantId, company_id: item.companyId, role: item.role, status: item.status, version: item.version, permissions: item.permissions || [] }; }
+function serializeAuditEvent(item) { return { event_id: item.id || item.eventId, actor_id: item.actorId || null, actor_type: item.actorType || "unknown", tenant_id: item.tenantId || null, company_id: item.companyId || null, action: item.action, outcome: item.outcome, request_id: item.requestId || null, metadata: item.metadata || {}, created_at: item.createdAt || item.created_at }; }
 function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
 function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
 function validationError(message) { return Object.assign(new Error(message), { code: "VALIDATION_ERROR", statusCode: 400 }); }

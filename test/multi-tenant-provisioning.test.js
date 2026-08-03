@@ -35,5 +35,93 @@ test("generic tenant provisioning never requires an EGI company and can issue a 
     assert.equal(customerLogin.body.data.authorized_companies[0]?.company_id, companyId);
     assert.equal(customerLogin.body.data.authorized_companies[0]?.tenant_id, tenantId);
     assert.equal(customerLogin.body.data.authorized_companies[0]?.name, "Acme Main");
+    const secondCompanyId = `acme-second-${suffix}`;
+    const secondCompany = await request(base, "/api/v1/tenant/companies", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}`, "Idempotency-Key": `tenant-company-${suffix}` },
+      body: json({ company_id: secondCompanyId, name: "Acme Second", status: "active" }),
+    });
+    assert.equal(secondCompany.response.status, 201);
+
+    const registry = await request(base, "/api/v1/tenant/companies", {
+      headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}` },
+    });
+    assert.equal(registry.response.status, 200);
+    assert.deepEqual(registry.body.data.items.map((item) => item.company_id), [secondCompanyId, companyId]);
+
+    const expandedCompanies = await request(base, "/api/v1/companies", { headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}` } });
+    assert.equal(expandedCompanies.response.status, 200);
+    assert.deepEqual(expandedCompanies.body.data.items.map((item) => item.company_id), [secondCompanyId, companyId]);
+
+    const switched = await request(base, "/api/v1/auth/switch-context", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}` },
+      body: json({ tenant_id: tenantId, company_id: secondCompanyId }),
+    });
+    assert.equal(switched.response.status, 200);
+    assert.equal(switched.body.data.company_name, "Acme Second");
+
+    const session = await request(base, "/api/v1/auth/session", { headers: { Authorization: `Bearer ${switched.body.data.access_token}` } });
+    assert.equal(session.response.status, 200);
+    assert.deepEqual(session.body.data.authorized_companies.map((item) => item.company_id), [secondCompanyId, companyId]);
+
+    const adminEmail = `admin-${suffix}@acme.example`;
+    const invitedAdmin = await request(base, "/api/v1/tenant/memberships", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}`, "Idempotency-Key": `tenant-admin-${suffix}` },
+      body: json({ email: adminEmail, full_name: "Acme Tenant Admin", role: "tenant_admin" }),
+    });
+    assert.equal(invitedAdmin.response.status, 201);
+    assert.equal(invitedAdmin.body.data.membership.company_id, null);
+    assert.equal(invitedAdmin.body.data.membership.role, "tenant_admin");
+    const adminSignup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: adminEmail, full_name: "Acme Tenant Admin", password: "AcmeTenantAdmin123!" }) });
+    assert.equal(adminSignup.response.status, 201);
+    const adminLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: adminEmail, password: "AcmeTenantAdmin123!" }) });
+    assert.equal(adminLogin.response.status, 200);
+    assert.equal(adminLogin.body.data.actor.role, "tenant_admin");
+    assert.equal(adminLogin.body.data.tenant_id, tenantId);
+    assert.equal(adminLogin.body.data.company_id, null);
+    assert.ok(adminLogin.body.data.permissions.includes("tenant.companies.manage"));
+    assert.deepEqual(adminLogin.body.data.authorized_companies.map((item) => item.company_id), [secondCompanyId, companyId]);
+    const adminSession = await request(base, "/api/v1/auth/session", { headers: { Authorization: `Bearer ${adminLogin.body.data.access_token}` } });
+    assert.equal(adminSession.response.status, 200);
+    assert.equal(adminSession.body.data.role, "tenant_admin");
+    assert.equal(adminSession.body.data.company_id, null);
+    const adminSwitched = await request(base, "/api/v1/auth/switch-context", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminLogin.body.data.access_token}` },
+      body: json({ tenant_id: tenantId, company_id: secondCompanyId }),
+    });
+    assert.equal(adminSwitched.response.status, 200);
+    assert.equal(adminSwitched.body.data.role, "tenant_admin");
+
+    const companyAdminEmail = `company-admin-${suffix}@acme.example`;
+    const invitedCompanyAdmin = await request(base, "/api/v1/tenant/memberships", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}`, "Idempotency-Key": `company-admin-${suffix}` },
+      body: json({ email: companyAdminEmail, full_name: "Acme Company Admin", company_id: companyId, role: "company_admin" }),
+    });
+    assert.equal(invitedCompanyAdmin.response.status, 201);
+    assert.equal(invitedCompanyAdmin.body.data.membership.company_id, companyId);
+    assert.equal(invitedCompanyAdmin.body.data.membership.role, "company_admin");
+    const companyAdminSignup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: companyAdminEmail, full_name: "Acme Company Admin", password: "AcmeCompanyAdmin123!" }) });
+    assert.equal(companyAdminSignup.response.status, 201);
+    const companyAdminLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: companyAdminEmail, password: "AcmeCompanyAdmin123!" }) });
+    assert.equal(companyAdminLogin.response.status, 200);
+    assert.equal(companyAdminLogin.body.data.actor.role, "company_admin");
+    assert.deepEqual(companyAdminLogin.body.data.authorized_companies.map((item) => item.company_id), [companyId]);
+    const companyAdminCompanies = await request(base, "/api/v1/companies", { headers: { Authorization: `Bearer ${companyAdminLogin.body.data.access_token}` } });
+    assert.equal(companyAdminCompanies.response.status, 200);
+    assert.deepEqual(companyAdminCompanies.body.data.items.map((item) => item.company_id), [companyId]);
+    const companyAdminSession = await request(base, "/api/v1/auth/session", { headers: { Authorization: `Bearer ${companyAdminLogin.body.data.access_token}` } });
+    assert.equal(companyAdminSession.response.status, 200);
+    assert.equal(companyAdminSession.body.data.role, "company_admin");
+    assert.deepEqual(companyAdminSession.body.data.authorized_companies.map((item) => item.company_id), [companyId]);
+    const unauthorizedSwitch = await request(base, "/api/v1/auth/switch-context", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${companyAdminLogin.body.data.access_token}` },
+      body: json({ tenant_id: tenantId, company_id: secondCompanyId }),
+    });
+    assert.equal(unauthorizedSwitch.response.status, 403);
   } finally { await server.stop(); }
 });

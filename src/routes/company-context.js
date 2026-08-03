@@ -98,6 +98,20 @@ function createCompanyContextRouter({ companyContextService, companyContextDraft
     success(res, serializeContext(context, managementIdentity), req);
   }));
 
+  router.get("/api/v1/companies/:companyId/context/versions", scope, asyncHandler(async (req, res) => {
+    const result = await companyContextService.listContextVersions({
+      actor: req.authContext?.actor || req.user,
+      tenantId: req.authContext?.tenantId || null,
+      companyId: req.params.companyId,
+      page: positiveInt(req.query.page, 1),
+      limit: boundedInt(req.query.limit, 100, 100),
+    });
+    success(res, {
+      items: result.items.map(({ context, managementIdentity }) => serializeContext(context, managementIdentity)),
+      meta: { page: result.page, limit: result.limit, total: result.total },
+    }, req);
+  }));
+
   router.put("/api/v1/companies/:companyId/context", draftScope, requireIdempotencyKey, requireIfMatch, asyncHandler(async (req, res) => {
     const result = await companyContextService.replaceEffectiveContext({
       actor: req.authContext?.actor || req.user,
@@ -232,6 +246,13 @@ function readExpectedRevision(req) {
   }
   return Number(header);
 }
+
+function positiveInt(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
 
 function success(res, data, req) {
   res.status(200).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });

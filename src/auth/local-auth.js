@@ -33,8 +33,15 @@ class LocalAuthService {
   }
 
   issueScopedToken({ actor, tenantId, companyId, membershipId, role }) {
-    if (!actor?.id || !tenantId || !companyId || !role) throw Object.assign(new Error("A verified tenant and company membership is required"), { code: "FORBIDDEN", statusCode: 403 });
-    return jwt.sign({ ...actor, tenant_id: tenantId, company_id: companyId, membership_id: membershipId || undefined, role }, this.secret, { expiresIn: "8h" });
+    const tenantOperator = role === "tenant_owner" || role === "tenant_admin";
+    if (!actor?.id || !tenantId || !role || (!companyId && !tenantOperator)) throw Object.assign(new Error("A verified tenant and company membership is required"), { code: "FORBIDDEN", statusCode: 403 });
+    return jwt.sign({
+      ...actor,
+      tenant_id: tenantId,
+      ...(companyId ? { company_id: companyId } : {}),
+      ...(membershipId ? { membership_id: membershipId } : {}),
+      role,
+    }, this.secret, { expiresIn: "8h" });
   }
 }
 

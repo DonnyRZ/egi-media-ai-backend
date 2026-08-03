@@ -46,3 +46,9 @@ test("normalizes rate-limit headers without losing token-based provider signals"
   assert.equal(normalized.details.resetRequestsMs, 1000);
   assert.equal(normalized.details.resetTokensMs, 360000);
 });
+
+test("normalizes generic provider connection failures as retryable unavailability", () => {
+  const normalized = normalizeProviderError(new Error("Connection error."));
+  assert.equal(normalized.code, "AI_PROVIDER_UNAVAILABLE");
+  assert.equal(normalized.retryable, true);
+});

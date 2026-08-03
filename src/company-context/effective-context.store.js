@@ -20,6 +20,19 @@ class InMemoryEffectiveCompanyContextStore {
     return context ? cloneForRead(context) : null;
   }
 
+  listByCompany({ tenantId = null, companyId, page = 1, limit = 100 } = {}) {
+    const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || this.contextsByCompany.get(scopeKey(null, companyId)) || (tenantId == null ? [...this.contextsByCompany.entries()].find(([key]) => key.endsWith(`:${companyId}`))?.[1] : null) || [];
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 100));
+    const start = (safePage - 1) * safeLimit;
+    return {
+      items: contexts.slice().sort((left, right) => right.version - left.version).slice(start, start + safeLimit).map(cloneForRead),
+      page: safePage,
+      limit: safeLimit,
+      total: contexts.length,
+    };
+  }
+
   activate({ tenantId = null, companyId, fields, fieldSources = [], missingFields = [], fieldReview = null, completeness = null, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
     const contexts = this.contextsByCompany.get(scopeKey(tenantId, companyId)) || [];
     const nextVersion = contexts.length + 1;

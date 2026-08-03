@@ -21,6 +21,65 @@
     { "name": "Internal Pipeline", "description": "Service/operator-only pipeline operations" }
   ],
   "paths": {
+    "/api/v1/tenant/audit-events": {
+      "get": {
+        "tags": ["Tenant Administration"],
+        "summary": "List tenant-scoped audit events",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "name": "company_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "actor_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "outcome", "in": "query", "schema": { "type": "string", "enum": ["allowed", "denied"] } },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Tenant audit events" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/company/memberships": { "get": { "tags": ["Access Control"], "summary": "List memberships in the active company", "description": "Company-admin access is fixed to the authenticated active company and never returns tenant-wide or cross-company memberships.", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/PageQuery" }, { "$ref": "#/components/parameters/LimitQuery" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Active company memberships" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }, "post": { "tags": ["Access Control"], "summary": "Invite a member to the active company", "description": "Creates or reuses a company membership in the authenticated active company. Tenant-wide roles and company reassignment are not accepted.", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["role"], "properties": { "user_id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "full_name": { "type": "string" }, "role": { "type": "string", "enum": ["company_admin", "executive", "executive_viewer", "analyst", "reviewer", "viewer"] } } } } } }, "responses": { "201": { "description": "Company membership created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
+    "/api/v1/company/memberships/{membershipId}": { "patch": { "tags": ["Access Control"], "summary": "Update a member in the active company", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "membershipId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/IfMatchHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "role": { "type": "string", "enum": ["company_admin", "executive", "executive_viewer", "analyst", "reviewer", "viewer"] } } } } } }, "responses": { "200": { "description": "Company membership updated" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } } }, "delete": { "tags": ["Access Control"], "summary": "Revoke a member from the active company", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "membershipId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/IfMatchHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Company membership revoked" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } } } },
+    "/api/v1/platform/health": {
+      "get": {
+        "tags": ["Platform Operations"],
+        "summary": "Read platform system health",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/RequestIdHeader" }],
+        "responses": {
+          "200": { "description": "Platform health" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/platform/audit-events": {
+      "get": {
+        "tags": ["Platform Operations"],
+        "summary": "List platform audit events",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/LimitQuery" },
+          { "name": "tenant_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "company_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "actor_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "outcome", "in": "query", "schema": { "type": "string", "enum": ["allowed", "denied"] } },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Platform audit events" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/api/v1/auth/session": {
       "get": {
         "tags": ["Auth"], "summary": "Read the authenticated session context", "operationId": "getAuthSession", "security": [{ "bearerAuth": [] }],
@@ -503,6 +562,27 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/context/versions": {
+      "get": {
+        "tags": ["Company Context"],
+        "summary": "List Company Context versions",
+        "description": "Returns the newest Company Context snapshots first. One version is effective; earlier approved versions remain archived for audit and review.",
+        "operationId": "listCompanyContextVersions",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanyIdPath" },
+          { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1 } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Company Context version registry" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/context/management-identity/retry": {
       "post": {
         "tags": ["Company Context"],
@@ -869,7 +949,7 @@
     "/api/v1/internal/reports/{reportId}/narrative": { "post": { "tags": ["Report Draft"], "summary": "Generate the draft report narrative", "description": "Runs T13 Mini only on the backend-created draft's validated issue and insight pack. It cannot select issues, calculate metrics, approve, share, or send the report.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/ReportIdPath" }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "maxProperties": 0 } } } }, "responses": { "200": { "description": "Draft narrative generated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportNarrativeResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
     "/api/v1/internal/alerts/{alertEventId}/direct-blurb": { "post": { "tags": ["Direct Alert"], "summary": "Generate T12 direct-alert blurb", "description": "Runs Nano only after the backend has produced an eligible direct alert event. The model receives validated issue evidence and claim references, never recipient, subject, email address, or delivery instructions. This endpoint generates content only and never sends email.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "name": "alertEventId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "maxProperties": 0 } } } }, "responses": { "200": { "description": "Validated T12 direct-alert blurb", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DirectBlurbResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" } } } },
     "/api/v1/internal/alerts/{alertEventId}/deliver": { "post": { "tags": ["Email Delivery"], "summary": "Deliver an eligible direct alert", "description": "Uses the backend Gmail SMTP adapter with a backend-rendered template. Recipient and subject are read from backend persistence/template logic; request and model output cannot override them. Delivery is deduplicated by alert event, retried for retryable provider failures, and audited.", "security": [{ "internalServiceAuth": [] }], "parameters": [{ "name": "alertEventId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "maxProperties": 0 } } } }, "responses": { "200": { "description": "Delivery audit result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailDeliveryResponse" } } } }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/BusinessRuleError" }, "502": { "$ref": "#/components/responses/ProviderError" }, "503": { "$ref": "#/components/responses/ServiceUnavailable" } } } },
-    "/api/v1/tenant/memberships": { "get": { "tags": ["Access Control"], "summary": "List tenant memberships", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/PageQuery" }, { "$ref": "#/components/parameters/LimitQuery" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Tenant memberships" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }, "post": { "tags": ["Access Control"], "summary": "Invite or assign tenant membership", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["role"], "properties": { "user_id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "full_name": { "type": "string" }, "company_id": { "type": ["string", "null"] }, "role": { "type": "string", "enum": ["tenant_admin", "company_admin", "executive", "analyst", "viewer"] } } } } } }, "responses": { "201": { "description": "Membership created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
+    "/api/v1/tenant/memberships": { "get": { "tags": ["Access Control"], "summary": "List tenant memberships", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/PageQuery" }, { "$ref": "#/components/parameters/LimitQuery" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Tenant memberships" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }, "post": { "tags": ["Access Control"], "summary": "Invite or assign tenant membership", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["role"], "properties": { "user_id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "full_name": { "type": "string" }, "company_id": { "type": ["string", "null"] }, "role": { "type": "string", "enum": ["tenant_admin", "company_admin", "executive", "executive_viewer", "analyst", "reviewer", "viewer"] } } } } } }, "responses": { "201": { "description": "Membership created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
     "/api/v1/tenant/memberships/{membershipId}": { "patch": { "tags": ["Access Control"], "summary": "Update tenant membership", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "membershipId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/IfMatchHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Membership updated" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } } }, "delete": { "tags": ["Access Control"], "summary": "Revoke tenant membership", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "membershipId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/IfMatchHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Membership revoked" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } } } },
     "/api/v1/platform/tenants": { "get": { "tags": ["Platform Access Control"], "summary": "List customer tenants", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/PageQuery" }, { "$ref": "#/components/parameters/LimitQuery" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "responses": { "200": { "description": "Customer tenants" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }, "post": { "tags": ["Platform Access Control"], "summary": "Create customer tenant", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }, { "$ref": "#/components/parameters/RequestIdHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "tenant_id": { "type": "string" }, "name": { "type": "string", "minLength": 1, "maxLength": 255 } } } } } }, "responses": { "201": { "description": "Customer tenant created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } } },
     "/api/v1/platform/tenants/{tenantId}": {
@@ -911,6 +991,7 @@
       "post": { "tags": ["Platform Access Control"], "summary": "Assign a tenant owner", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKeyHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email"], "properties": { "email": { "type": "string", "format": "email" }, "full_name": { "type": "string" }, "company_id": { "type": "string" } } } } } }, "responses": { "201": { "description": "Tenant owner assigned" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
     },
     "/api/v1/tenant/companies": {
+      "get": { "tags": ["Access Control"], "summary": "List companies in the active tenant", "security": [{ "bearerAuth": [] }], "parameters": [{ "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1 } }, { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100 } }], "responses": { "200": { "description": "Tenant company registry" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } },
       "post": { "tags": ["Access Control"], "summary": "Create a company in the active tenant", "security": [{ "bearerAuth": [] }], "parameters": [{ "$ref": "#/components/parameters/IdempotencyKeyHeader" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "company_id": { "type": "string" }, "name": { "type": "string" }, "status": { "type": "string" } } } } } }, "responses": { "201": { "description": "Company created" }, "400": { "$ref": "#/components/responses/ValidationError" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
     },
     "/api/v1/tenant/companies/{companyId}": {

@@ -150,6 +150,25 @@ class CompanyContextService {
     return { context, managementIdentity: record };
   }
 
+  async listContextVersions({ actor, tenantId = null, companyId, page = 1, limit = 100 }) {
+    await this._authorize(actor, tenantId, companyId, "company_context.read");
+    if (typeof this.effectiveContextStore.listByCompany !== "function") {
+      throw new CompanyContextError("Company Context version history is not configured", { code: "NOT_READY", statusCode: 503 });
+    }
+    const result = await this.effectiveContextStore.listByCompany({ tenantId, companyId, page, limit });
+    const items = await Promise.all(result.items.map(async (context) => ({
+      context,
+      managementIdentity: this.managementIdentityService
+        ? await this.managementIdentityService.get({
+          tenantId: tenantId ?? context.tenantId ?? null,
+          companyId,
+          contextVersion: context.version,
+        })
+        : null,
+    })));
+    return { items, page: result.page, limit: result.limit, total: result.total };
+  }
+
   async clearEffectiveContext({ actor, tenantId = null, companyId }) {
     await this._authorize(actor, tenantId, companyId, "company_context.approve");
     if (typeof this.effectiveContextStore.clearEffective !== "function") {

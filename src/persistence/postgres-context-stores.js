@@ -19,6 +19,16 @@ class PostgresEffectiveCompanyContextStore {
   constructor({ db, uuid = randomUUID } = {}) { this.db = db; this.uuid = uuid; }
   async getEffective(companyId, tenantId = null) { const row = tenantId ? await this.db.query("SELECT * FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2 AND status='effective' LIMIT 1", [tenantId, companyId]) : await this.db.query("SELECT * FROM ai.company_contexts WHERE company_id=$1 AND status='effective' LIMIT 1", [companyId]); return row.rows[0] ? mapContext(row.rows[0]) : null; }
   async getVersion(companyId, version, tenantId = null) { const row = tenantId ? await this.db.query("SELECT * FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2 AND version=$3 LIMIT 1", [tenantId, companyId, version]) : await this.db.query("SELECT * FROM ai.company_contexts WHERE company_id=$1 AND version=$2 LIMIT 1", [companyId, version]); return row.rows[0] ? mapContext(row.rows[0]) : null; }
+  async listByCompany({ tenantId, companyId, page = 1, limit = 100 } = {}) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 100));
+    const offset = (safePage - 1) * safeLimit;
+    const [rows, count] = await Promise.all([
+      this.db.query("SELECT * FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2 ORDER BY version DESC LIMIT $3 OFFSET $4", [tenantId, companyId, safeLimit, offset]),
+      this.db.query("SELECT COUNT(*)::int AS total FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2", [tenantId, companyId]),
+    ]);
+    return { items: rows.rows.map(mapContext), page: safePage, limit: safeLimit, total: count.rows[0]?.total ?? rows.rowCount };
+  }
   async activate({ tenantId = "unknown", companyId, fields, fieldSources = [], missingFields = [], fieldReview = null, completeness = null, source, actorId, draftId = null, changeReason = null, expectedNextVersion }) {
     const current = await this.db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM ai.company_contexts WHERE tenant_id=$1 AND company_id=$2", [tenantId, companyId]); const nextVersion = current.rows[0].version + 1;
     if (expectedNextVersion !== undefined && expectedNextVersion !== nextVersion) return { conflict: { expectedNextVersion, actualNextVersion: nextVersion } };

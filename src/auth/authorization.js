@@ -4,9 +4,10 @@ const { permissionsForRole, isRole } = require("./rbac");
 const LEGACY_ROLE_MAP = Object.freeze({ human_reviewer: "analyst" });
 
 class AuthorizationService {
-  constructor({ membershipStore = null, platformStore = null, strictMembership = false, auditStore = null, logger = null } = {}) {
+  constructor({ membershipStore = null, platformStore = null, tenantStore = null, strictMembership = false, auditStore = null, logger = null } = {}) {
     this.membershipStore = membershipStore;
     this.platformStore = platformStore;
+    this.tenantStore = tenantStore;
     this.strictMembership = strictMembership;
     this.auditStore = auditStore;
     this.logger = logger || { info() {}, warn() {}, error() {} };
@@ -15,6 +16,18 @@ class AuthorizationService {
   async resolve(context) {
     const actor = context?.actor;
     if (!actor?.actorId || !context?.tenantId) throw new AuthContextError("Authentication and tenant context are required");
+    if (this.tenantStore?.get) {
+      const tenant = await this.tenantStore.get({ tenantId: context.tenantId });
+      if (tenant && tenant.status !== "active") {
+        await this._audit(context, "scope.resolve", "denied", { reason: "tenant_status", status: tenant.status });
+        const label = tenant.status === "archived" ? "archived" : "temporarily suspended";
+        throw new AuthContextError(`This customer workspace is ${label}`, { code: "TENANT_NOT_ACTIVE", statusCode: 403 });
+      }
+      if (!tenant && this.strictMembership) {
+        await this._audit(context, "scope.resolve", "denied", { reason: "tenant_not_found" });
+        throw new AuthContextError("Customer workspace was not found", { code: "TENANT_NOT_FOUND", statusCode: 403 });
+      }
+    }
     let membership = null;
     if (this.membershipStore?.resolve) {
       try { membership = await this.membershipStore.resolve({ userId: actor.actorId, tenantId: context.tenantId, companyId: context.companyId, actorType: actor.actorType }); } catch (error) { if (this.strictMembership) { await this._audit(context, "scope.resolve", "denied", { code: error.code }); throw error; } }

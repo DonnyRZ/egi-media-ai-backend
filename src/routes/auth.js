@@ -11,18 +11,30 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
       const result = await req.app.locals.localAuthService.login({ email: req.body?.email, password: req.body?.password });
       const memberships = await req.app.locals.membershipStore?.listForUser?.({ userId: result.actor.id }) || [];
       const isPlatformAdmin = result.actor.role === "platform_superadmin";
-      const scoped = isPlatformAdmin ? null : (await Promise.all(memberships.filter((item) => item.companyId).map(async (item) => ({ item, company: await getCompanyStore?.().get?.({ tenantId: item.tenantId, companyId: item.companyId }) })))).find(({ company }) => company?.status === "active")?.item || null;
+      const scoped = isPlatformAdmin ? null : (await Promise.all(
+        memberships
+          .filter((item) => item.companyId || isTenantOperator(item.role))
+          .map(async (item) => ({
+            item,
+            company: item.companyId ? await getCompanyStore?.().get?.({ tenantId: item.tenantId, companyId: item.companyId }) : null,
+          })),
+      )).find(({ item, company }) => (!item.companyId && isTenantOperator(item.role)) || company?.status === "active")?.item || null;
+      if (scoped) {
+        const tenant = await getTenantStore?.()?.get?.({ tenantId: scoped.tenantId });
+        if (tenant && tenant.status !== "active") {
+          const label = tenant.status === "archived" ? "archived" : "temporarily suspended";
+          throw Object.assign(new Error(`This customer workspace is ${label}`), { code: "TENANT_NOT_ACTIVE", statusCode: 403 });
+        }
+      }
       const accessToken = scoped ? req.app.locals.localAuthService.issueScopedToken({ actor: result.actor, tenantId: scoped.tenantId, companyId: scoped.companyId, membershipId: scoped.membershipId, role: scoped.role }) : result.accessToken;
       const role = isPlatformAdmin ? result.actor.role : (scoped?.role || result.actor.role);
       const permissions = [...permissionsForRole(role)];
-      const authorizedCompanies = await enrichCompanyOptions(
-        memberships.filter((item) => item.companyId).map((item) => ({
-          company_id: item.companyId,
-          tenant_id: item.tenantId,
-          role: item.role,
-        })),
-        { getCompanyStore },
-      );
+      const authorizedCompanies = await listAuthorizedCompanies({
+        tenantId: scoped?.tenantId || memberships.find((item) => item.tenantId)?.tenantId || null,
+        role,
+        memberships,
+        getCompanyStore,
+      });
       return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, permissions, authorized_companies: authorizedCompanies }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
@@ -52,12 +64,27 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
     try {
       let authorizedCompanies = [];
       if (req.authContext.tenantId) {
+        const role = req.authContext.role || req.authContext.actor?.role;
         const memberships = await req.app.locals.membershipStore?.list?.({ tenantId: req.authContext.tenantId, page: 1, limit: 100 });
-        authorizedCompanies = memberships?.items?.filter((item) => item.companyId).map((item) => ({
-          company_id: item.companyId,
-          tenant_id: item.tenantId || req.authContext.tenantId,
-          role: item.role,
-        })) || [];
+        if (isTenantOperator(role) && getCompanyStore?.()?.list) {
+          const companies = await getCompanyStore().list({ tenantId: req.authContext.tenantId, page: 1, limit: 100 });
+          authorizedCompanies = companies.items.map((item) => ({
+            company_id: item.companyId,
+            tenant_id: item.tenantId || req.authContext.tenantId,
+            role,
+          }));
+        } else {
+          const userMemberships = typeof req.app.locals.membershipStore?.listForUser === "function"
+            ? await req.app.locals.membershipStore.listForUser({ userId: req.authContext.actor.actorId })
+            : memberships?.items?.filter((item) => item.userId === req.authContext.actor.actorId) || [];
+          authorizedCompanies = userMemberships
+            .filter((item) => item.tenantId === req.authContext.tenantId && item.companyId)
+            .map((item) => ({
+            company_id: item.companyId,
+            tenant_id: item.tenantId || req.authContext.tenantId,
+            role: item.role,
+            }));
+        }
       } else if (req.authContext.actor?.actorId) {
         const forUser = await req.app.locals.membershipStore?.listForUser?.({ userId: req.authContext.actor.actorId }) || [];
         authorizedCompanies = forUser.filter((item) => item.companyId).map((item) => ({
@@ -96,4 +123,21 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
   });
   return router;
 }
+
+async function listAuthorizedCompanies({ tenantId, role, memberships = [], getCompanyStore }) {
+  if (tenantId && isTenantOperator(role) && getCompanyStore?.()?.list) {
+    const companies = await getCompanyStore().list({ tenantId, page: 1, limit: 100 });
+    return enrichCompanyOptions(
+      companies.items.map((item) => ({ company_id: item.companyId, tenant_id: item.tenantId || tenantId, role })),
+      { getCompanyStore, fallbackTenantId: tenantId },
+    );
+  }
+  return enrichCompanyOptions(
+    memberships.filter((item) => item.companyId).map((item) => ({ company_id: item.companyId, tenant_id: item.tenantId, role: item.role })),
+    { getCompanyStore },
+  );
+}
+
+function isTenantOperator(role) { return role === "tenant_owner" || role === "tenant_admin"; }
+
 module.exports = { createAuthRouter };
