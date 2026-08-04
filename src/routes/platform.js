@@ -18,13 +18,43 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
     return success(res, { items: items.map(serializeAuditEvent), meta: { limit: boundedInt(req.query.limit, 100, 200), total: items.length } }, req);
   }));
   router.get("/api/v1/platform/tenants", scope, asyncHandler(async (req, res) => {
-    const result = await getTenantStore().list({ page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 50, 100) });
-    return success(res, { items: result.items.map(serialize), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
+    const result = await getTenantStore().list({ page: positiveInt(req.query.page, 1), limit: boundedInt(req.query.limit, 50, 100), status: req.query.status || null, search: req.query.q || req.query.search || null });
+    return success(res, { items: result.items.map(serialize), meta: { page: result.page, limit: result.limit, total: result.total, counts: result.counts || null } }, req);
   }));
   router.post("/api/v1/platform/tenants", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (typeof req.body?.name !== "string" || !req.body.name.trim() || req.body.name.length > 255) throw validationError("Tenant name is required");
     const result = await getTenantStore().create({ tenantId: req.body.tenant_id, name: req.body.name.trim(), legalName: req.body.legal_name, timezone: req.body.timezone, defaultLocale: req.body.default_locale, status: req.body.status || "pending", metadata: req.body.metadata });
     return success(res, { tenant: serialize(result.tenant), reused: result.reused }, req, result.reused ? 200 : 201);
+  }));
+  router.post("/api/v1/platform/tenants/bulk-lifecycle", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
+    const status = req.body?.status;
+    if (status !== undefined) validateTenantStatus(status);
+    if (!status) throw validationError("Lifecycle status is required");
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if ((status === "suspended" || status === "archived") && !reason) throw validationError("A reason is required for this lifecycle change");
+    if (reason.length > 500) throw validationError("Lifecycle reason must be 500 characters or fewer");
+    const tenantIds = normalizeIds(req.body?.tenant_ids);
+    const filter = req.body?.filter && typeof req.body.filter === "object" ? req.body.filter : null;
+    if (!tenantIds.length && !filter) throw validationError("Provide tenant_ids or a workspace filter");
+    if (tenantIds.length && filter) throw validationError("Provide tenant_ids or a workspace filter, not both");
+    if (tenantIds.length > 500) throw validationError("A bulk action can include at most 500 workspaces");
+    const filterStatus = filter?.status || null;
+    if (filterStatus) validateTenantStatus(filterStatus);
+    const search = typeof filter?.q === "string" ? filter.q.trim() : null;
+    if (filter && !filterStatus && !search) throw validationError("A workspace filter must include a status or search term");
+    const result = await getTenantStore().bulkUpdate({ tenantIds, status, filterStatus, search });
+    for (const previous of result.previousStatuses || []) {
+      if (previous.status === status) continue;
+      await getAccessAuditStore()?.record?.({
+        actorId: req.authContext?.actor?.actorId,
+        actorType: req.authContext?.actor?.actorType || "human",
+        tenantId: previous.tenantId,
+        action: "tenant.lifecycle.change",
+        outcome: "allowed",
+        metadata: { previousStatus: previous.status, nextStatus: status, reason: reason || null, bulk: true },
+      });
+    }
+    return success(res, { tenants: result.tenants.map(serialize), updated_count: result.tenants.length, lifecycle_changed: true }, req);
   }));
   router.patch("/api/v1/platform/tenants/:tenantId", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const status = req.body?.status;
@@ -76,6 +106,7 @@ function serializeMembership(item) { return { membership_id: item.membershipId, 
 function serializeAuditEvent(item) { return { event_id: item.id || item.eventId, actor_id: item.actorId || null, actor_type: item.actorType || "unknown", tenant_id: item.tenantId || null, company_id: item.companyId || null, action: item.action, outcome: item.outcome, request_id: item.requestId || null, metadata: item.metadata || {}, created_at: item.createdAt || item.created_at }; }
 function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
 function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
+function normalizeIds(value) { return [...new Set((Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))]; }
 function validationError(message) { return Object.assign(new Error(message), { code: "VALIDATION_ERROR", statusCode: 400 }); }
 function requireIdempotencyKey(req, res, next) { const key = req.get("Idempotency-Key"); if (!key || key.length < 16 || key.length > 255) return sendError(res, req, validationError("Idempotency-Key header must be 16 to 255 characters")); return next(); }
 function success(res, data, req, statusCode = 200) { return res.status(statusCode).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); }

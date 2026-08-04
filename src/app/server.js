@@ -116,7 +116,7 @@ class Server {
       : new InMemoryAccessAuditStore();
     this.app.locals.accessAuditStore = this.accessAuditStore;
     this.tenantStore = process.env.AI_PERSISTENCE_MODE === "postgres"
-      ? { get: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).get(args), list: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).list(args), create: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).create(args), update: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).update(args) }
+      ? { get: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).get(args), list: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).list(args), create: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).create(args), update: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).update(args), bulkUpdate: (args) => new PostgresTenantStore({ db: this.getDatabaseRuntime().ai }).bulkUpdate(args) }
       : new InMemoryTenantStore();
     this.companyStore = process.env.AI_PERSISTENCE_MODE === "postgres"
       ? { get: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).get(args), list: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).list(args), create: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).create(args), update: (args) => new PostgresCompanyStore({ db: this.getDatabaseRuntime().ai }).update(args) }
