@@ -1,37 +1,34 @@
 const { AiOutputError } = require("../../provider/provider.errors");
 
+const REQUIRED_KEYS = ["report_type", "executive_summary", "overview", "issue_sections", "category_developments", "comparison", "trends", "company_impacts", "risk_opportunity", "watch_items", "follow_up_options", "source_references"];
+
 function validateT13Output(data, { report }) {
-  if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length !== 5 || !nonEmpty(data.executive_summary, 1600)
-    || !Array.isArray(data.issue_narratives) || !data.impact_narrative || !Array.isArray(data.watch_items) || !Array.isArray(data.source_references)) throw invalid();
+  if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length !== REQUIRED_KEYS.length || REQUIRED_KEYS.some((key) => !Object.hasOwn(data, key)) || data.report_type !== report.reportType || !Array.isArray(data.executive_summary) || data.executive_summary.length < 3 || data.executive_summary.length > 5 || data.executive_summary.some((item) => !bounded(item, 500)) || !Array.isArray(data.issue_sections) || !Array.isArray(data.category_developments) || !validComparison(data.comparison) || !Array.isArray(data.trends) || !Array.isArray(data.company_impacts) || !Array.isArray(data.risk_opportunity) || data.risk_opportunity.length < 1 || !Array.isArray(data.watch_items) || !Array.isArray(data.follow_up_options) || !Array.isArray(data.source_references)) throw invalid();
   const items = new Map(report.selectedIssuePack.map((item) => [item.reportItemId, item]));
-  if (data.issue_narratives.length !== items.size || data.watch_items.length < 1 || data.watch_items.length > 12 || data.source_references.length < 1 || data.source_references.length > 60) throw invalid();
-  const claimSources = claimSourceMap(report);
-  const usedClaimIds = new Set(); const usedItemIds = new Set();
-  for (const item of data.issue_narratives) {
-    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).length !== 3 || !items.has(item.report_item_id) || usedItemIds.has(item.report_item_id) || !nonEmpty(item.narrative, 1200)) throw invalid();
-    const itemClaimIds = new Set(items.get(item.report_item_id).claims.map((claim) => claim.claimId));
-    addCitations(item.source_claim_ids, itemClaimIds, usedClaimIds);
-    usedItemIds.add(item.report_item_id);
+  const claimSources = claimSourceMap(report); const usedClaims = new Set(); const usedItems = new Set();
+  for (const item of data.issue_sections) {
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).length !== 12 || !items.has(item.report_item_id) || usedItems.has(item.report_item_id) || item.issue_id !== items.get(item.report_item_id).issueId || !bounded(item.title, 180) || !["important_today", "new", "developing", "closed"].includes(item.group) || !["tinggi", "sedang", "rendah"].includes(item.priority) || !["baru", "berkembang", "dipantau", "selesai"].includes(item.status) || !textArray(item.what_happened, 6, 500) || !textArray(item.why_important, 6, 500) || !textArray(item.impact, 6, 500) || !textArray(item.risk, 6, 500, true) || !textArray(item.watch, 6, 500, true)) throw invalid();
+    addCitations(item.source_claim_ids, new Set(items.get(item.report_item_id).claims.map((claim) => claim.claimId)), usedClaims); usedItems.add(item.report_item_id);
   }
-  if (usedItemIds.size !== items.size || !validCitedText(data.impact_narrative, claimSources, usedClaimIds) || data.watch_items.some((item) => !validCitedText(item, claimSources, usedClaimIds))) throw invalid();
-  const refsByClaim = new Map();
-  for (const ref of data.source_references) {
-    if (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).length !== 2 || typeof ref.claim_id !== "string" || typeof ref.source_article_id !== "string" || !claimSources.get(ref.claim_id)?.has(ref.source_article_id)) throw invalid();
-    if (!refsByClaim.has(ref.claim_id)) refsByClaim.set(ref.claim_id, new Set());
-    refsByClaim.get(ref.claim_id).add(ref.source_article_id);
-  }
-  if ([...usedClaimIds].some((claimId) => !refsByClaim.has(claimId))) throw invalid();
-  return {
-    executiveSummary: data.executive_summary.trim(),
-    issueNarratives: data.issue_narratives.map((item) => ({ reportItemId: item.report_item_id, narrative: item.narrative.trim(), sourceClaimIds: [...item.source_claim_ids] })),
-    impactNarrative: normalizeCitedText(data.impact_narrative), watchItems: data.watch_items.map(normalizeCitedText),
-    sourceReferences: data.source_references.map((ref) => ({ claimId: ref.claim_id, sourceArticleId: ref.source_article_id })),
-  };
+  if (data.report_type === "harian" && (usedItems.size !== items.size || data.issue_sections.some((item) => item.group !== "important_today") || data.watch_items.length < 1 || data.company_impacts.length < 1)) throw invalid();
+  if (data.report_type === "mingguan" && (usedItems.size !== items.size || data.issue_sections.some((item) => !["new", "developing", "closed"].includes(item.group)) || data.watch_items.length < 1 || data.follow_up_options.length < 1)) throw invalid();
+  if (data.report_type === "bulanan" && (data.category_developments.length < 1 || data.company_impacts.length < 1 || data.watch_items.length < 1 || data.follow_up_options.length < 1)) throw invalid();
+  validateCitedArray(data.overview, claimSources, usedClaims, 0); validateCitedArray(data.trends, claimSources, usedClaims, 0); validateCitedArray(data.watch_items, claimSources, usedClaims, data.report_type === "harian" || data.report_type === "mingguan" || data.report_type === "bulanan" ? 1 : 0); validateCitedArray(data.follow_up_options, claimSources, usedClaims, data.report_type === "harian" ? 0 : 1);
+  for (const item of data.category_developments) { if (!item || Object.keys(item).length !== 5 || !bounded(item.category, 80) || !bounded(item.title, 180) || !textArray(item.points, 8, 500) || !textArray(item.impact, 6, 500, true)) throw invalid(); addCitations(item.source_claim_ids, claimSources, usedClaims); }
+  for (const item of data.company_impacts) { if (!item || Object.keys(item).length !== 3 || !bounded(item.category, 80) || !textArray(item.points, 8, 500)) throw invalid(); addCitations(item.source_claim_ids, claimSources, usedClaims); }
+  for (const item of data.risk_opportunity) { if (!item || Object.keys(item).length !== 4 || !["risk", "opportunity", "assumption"].includes(item.kind) || !bounded(item.title, 180) || !bounded(item.text, 800)) throw invalid(); addCitations(item.source_claim_ids, claimSources, usedClaims); }
+  addCitations(data.comparison.source_claim_ids, claimSources, usedClaims, true); ["new_items", "worsened", "improved", "priority_shifts"].forEach((key) => { if (!textArray(data.comparison[key], 12, 500, true)) throw invalid(); });
+  const refsByClaim = new Map(); for (const ref of data.source_references) { if (!ref || Object.keys(ref).length !== 2 || typeof ref.claim_id !== "string" || typeof ref.source_article_id !== "string" || !claimSources.get(ref.claim_id)?.has(ref.source_article_id)) throw invalid(); if (!refsByClaim.has(ref.claim_id)) refsByClaim.set(ref.claim_id, new Set()); refsByClaim.get(ref.claim_id).add(ref.source_article_id); }
+  if ([...usedClaims].some((id) => !refsByClaim.has(id))) throw invalid();
+  return normalize(data);
 }
-function validCitedText(value, claimSources, used) { if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 2 || !nonEmpty(value.narrative, 1200)) return false; try { addCitations(value.source_claim_ids, claimSources, used); return true; } catch { return false; } }
-function addCitations(ids, allowed, used) { if (!Array.isArray(ids) || ids.length < 1 || ids.length > 12) throw invalid(); const seen = new Set(); for (const id of ids) { if (typeof id !== "string" || !allowed.has(id) || seen.has(id)) throw invalid(); seen.add(id); used.add(id); } }
+
+function normalize(data) { const cited = (item) => ({ text: item.text.trim(), sourceClaimIds: [...item.source_claim_ids] }); return { reportType: data.report_type, executiveSummary: data.executive_summary.map((item) => item.trim()), overview: data.overview.map(cited), issueSections: data.issue_sections.map((item) => ({ reportItemId: item.report_item_id, issueId: item.issue_id, group: item.group, title: item.title.trim(), priority: item.priority, status: item.status, whatHappened: item.what_happened.map((v) => v.trim()), whyImportant: item.why_important.map((v) => v.trim()), impact: item.impact.map((v) => v.trim()), risk: item.risk.map((v) => v.trim()), watch: item.watch.map((v) => v.trim()), sourceClaimIds: [...item.source_claim_ids] })), categoryDevelopments: data.category_developments.map((item) => ({ category: item.category.trim(), title: item.title.trim(), points: item.points.map((v) => v.trim()), impact: item.impact.map((v) => v.trim()), sourceClaimIds: [...item.source_claim_ids] })), comparison: { label: data.comparison.label.trim(), newItems: data.comparison.new_items.map((v) => v.trim()), worsened: data.comparison.worsened.map((v) => v.trim()), improved: data.comparison.improved.map((v) => v.trim()), priorityShifts: data.comparison.priority_shifts.map((v) => v.trim()), sourceClaimIds: [...data.comparison.source_claim_ids] }, trends: data.trends.map(cited), companyImpacts: data.company_impacts.map((item) => ({ category: item.category.trim(), points: item.points.map((v) => v.trim()), sourceClaimIds: [...item.source_claim_ids] })), riskOpportunity: data.risk_opportunity.map((item) => ({ kind: item.kind, title: item.title.trim(), text: item.text.trim(), sourceClaimIds: [...item.source_claim_ids] })), watchItems: data.watch_items.map(cited), followUpOptions: data.follow_up_options.map(cited), sourceReferences: data.source_references.map((ref) => ({ claimId: ref.claim_id, sourceArticleId: ref.source_article_id })) }; }
+function validateCitedArray(value, claimSources, used, min) { if (!Array.isArray(value) || value.length < min) throw invalid(); value.forEach((item) => { if (!item || Object.keys(item).length !== 2 || !bounded(item.text, 1200)) throw invalid(); addCitations(item.source_claim_ids, claimSources, used); }); }
+function validComparison(value) { return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 6 && bounded(value.label, 160) && Array.isArray(value.new_items) && Array.isArray(value.worsened) && Array.isArray(value.improved) && Array.isArray(value.priority_shifts) && Array.isArray(value.source_claim_ids); }
+function textArray(value, maxItems, maxLength, allowEmpty = false) { return Array.isArray(value) && value.length <= maxItems && (allowEmpty || value.length >= 1) && value.every((item) => bounded(item, maxLength)); }
+function addCitations(ids, allowed, used, allowEmpty = false) { if (!Array.isArray(ids) || ids.length > 24 || (!allowEmpty && ids.length < 1)) throw invalid(); const seen = new Set(); ids.forEach((id) => { if (typeof id !== "string" || !allowed.has(id) || seen.has(id)) throw invalid(); seen.add(id); used.add(id); }); }
 function claimSourceMap(report) { const map = new Map(); for (const item of report.selectedIssuePack) for (const claim of item.claims) { if (map.has(claim.claimId)) throw invalid(); map.set(claim.claimId, new Set(claim.sourceArticleIds)); } return map; }
-function nonEmpty(value, max) { return typeof value === "string" && value.trim().length > 0 && value.length <= max; }
-function normalizeCitedText(value) { return { narrative: value.narrative.trim(), sourceClaimIds: [...value.source_claim_ids] }; }
-function invalid() { return new AiOutputError("T13 must use only the selected report items, bounded sections, and valid claim/article citation subsets", { code: "AI_OUTPUT_SCHEMA_INVALID" }); }
+function bounded(value, max) { return typeof value === "string" && value.trim().length > 0 && value.length <= max; }
+function invalid() { return new AiOutputError("T13 requires the report-type structure, grounded claim citations, and no invented metrics or facts", { code: "AI_OUTPUT_SCHEMA_INVALID" }); }
 module.exports = { validateT13Output };

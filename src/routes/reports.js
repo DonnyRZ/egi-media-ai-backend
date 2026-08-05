@@ -4,6 +4,8 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { validateReportPack } = require("../ai/tasks/t13-report-narrative/service");
 const { flattenAnalysisPoints } = require("../analysis/analysis-points");
+const { T13_PROMPT_VERSION } = require("../ai/tasks/t13-report-narrative/definition");
+const { createReportPdf } = require("../reports/report-pdf");
 
 function createReportRouter({ getReportRuntime } = {}) {
   const router = express.Router();
@@ -20,8 +22,17 @@ function createReportRouter({ getReportRuntime } = {}) {
   router.get("/api/v1/reports/:reportId", scope, asyncHandler(async (req, res) => {
     const report = await getReportRuntime().draftStore.get({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, reportId: req.params.reportId });
     if (!report) throw Object.assign(new Error("Report was not found"), { code: "NOT_FOUND", statusCode: 404 });
-    const narrative = await getReportRuntime().narrativeStore?.get({ reportId: report.reportId, promptVersion: "1.0.0" }) || null;
+    const narrative = await readCurrentNarrative(getReportRuntime(), req.authContext, report.reportId);
     return success(res, { report: serializeDraft(report), narrative: narrative ? serializeNarrative(narrative) : null, activity: report.activity || [] }, req);
+  }));
+  router.get("/api/v1/reports/:reportId/pdf", scope, asyncHandler(async (req, res) => {
+    const runtime = getReportRuntime();
+    const report = await runtime.draftStore.get({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, reportId: req.params.reportId });
+    if (!report) throw Object.assign(new Error("Report was not found"), { code: "NOT_FOUND", statusCode: 404 });
+    const narrative = await readCurrentNarrative(runtime, req.authContext, report.reportId);
+    if (!narrative) throw Object.assign(new Error("A validated report narrative is required before PDF export"), { code: "REPORT_NARRATIVE_REQUIRED", statusCode: 409 });
+    const pdf = await createReportPdf({ report, narrative: narrative.narrative });
+    res.status(200).set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="egi-media-${report.reportType}-${report.reportId}.pdf"`, "Cache-Control": "no-store" }).send(pdf);
   }));
   router.post("/api/v1/internal/reports/drafts", pipelineScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const payload = normalizeDraftPayload(req.body);
@@ -80,13 +91,21 @@ function buildDraftCandidate(auth, payload) { return { reportId: "draft-validati
 function toCamelMetrics(metrics) { const result = { ...metrics }; delete result.period_start; delete result.period_end; return { periodStart: metrics.period_start, periodEnd: metrics.period_end, ...result }; }
 function toCamelIssuePackItem(item) {
   if (!item || typeof item !== "object" || Array.isArray(item)) throw validationError("Report issue pack item is invalid");
-  const allowed = ["report_item_id", "issue_id", "analysis_id", "priority", "title", "one_liner", "analysis", "claims", "citations"];
+  const allowed = ["report_item_id", "issue_id", "analysis_id", "priority", "status", "last_developed_at", "title", "one_liner", "analysis", "claims", "citations"];
   if (Object.keys(item).some((key) => !allowed.includes(key))) throw validationError("Report draft accepts only validated issue and insight fields");
   if (Object.hasOwn(item, "raw_article_body") || Object.hasOwn(item, "article_body") || Object.hasOwn(item, "content")) throw validationError("Raw article content is not accepted in report drafts");
-  return { reportItemId: item.report_item_id, issueId: item.issue_id, analysisId: item.analysis_id, priority: item.priority, title: item.title, oneLiner: item.one_liner, analysis: { whatHappened: flattenAnalysisPoints(item.analysis?.what_happened), whyMatters: flattenAnalysisPoints(item.analysis?.why_matters) }, claims: (item.claims || []).map((claim) => ({ claimId: claim.claim_id, text: claim.text, sourceArticleIds: claim.source_article_ids })), citations: (item.citations || []).map((citation) => ({ sourceArticleId: citation.source_article_id, canonicalUrl: citation.canonical_url })) };
+  return { reportItemId: item.report_item_id, issueId: item.issue_id, analysisId: item.analysis_id, priority: item.priority, status: item.status || null, lastDevelopedAt: item.last_developed_at || null, title: item.title, oneLiner: item.one_liner, analysis: { whatHappened: flattenAnalysisPoints(item.analysis?.what_happened), whyMatters: flattenAnalysisPoints(item.analysis?.why_matters) }, claims: (item.claims || []).map((claim) => ({ claimId: claim.claim_id, text: claim.text, sourceArticleIds: claim.source_article_ids })), citations: (item.citations || []).map((citation) => ({ sourceArticleId: citation.source_article_id, canonicalUrl: citation.canonical_url })) };
 }
 function serializeDraft(draft) { return { report_id: draft.reportId, report_type: draft.reportType, period_start: draft.periodStart, period_end: draft.periodEnd, timezone: draft.timezone, context_version: draft.contextVersion, metrics: draft.metrics, selected_issue_pack: draft.selectedIssuePack, review_status: draft.reviewStatus, version: draft.version, created_at: draft.createdAt, updated_at: draft.updatedAt }; }
 function serializeNarrative(narrative) { return { report_narrative_id: narrative.reportNarrativeId, report_id: narrative.reportId, prompt_version: narrative.promptVersion, narrative: narrative.narrative, review_status: narrative.reviewStatus, version: narrative.version, created_at: narrative.createdAt, updated_at: narrative.updatedAt }; }
+async function readCurrentNarrative(runtime, authContext, reportId) {
+  const scope = { tenantId: authContext.tenantId, companyId: authContext.companyId, reportId };
+  for (const promptVersion of [T13_PROMPT_VERSION, "1.2.0", "1.1.0"]) {
+    const narrative = await runtime.narrativeStore?.get({ ...scope, promptVersion });
+    if (narrative) return narrative;
+  }
+  return null;
+}
 function actorScope(req) { return { tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, actor: req.authContext.actor }; }
 function readVersion(req) { const header = req.get("If-Match"); const value = header || req.body?.version; const version = Number(value); if (!Number.isInteger(version) || version < 1) throw validationError("A positive report version is required"); return version; }
 function nullableNote(value) { return value === undefined ? null : value; }

@@ -285,10 +285,17 @@ test("T07 and T13 schemas accept crawl issue source ids (not UUID-only)", () => 
   assert.equal(t13ArticleId.maxLength, 160);
   const validateT13 = ajv.compile(T13_OUTPUT_SCHEMA.schema);
   assert.equal(validateT13({
-    executive_summary: "Ringkasan.",
-    issue_narratives: [{ report_item_id: "item-1", narrative: "Narasi.", source_claim_ids: ["c1"] }],
-    impact_narrative: { narrative: "Dampak.", source_claim_ids: ["c1"] },
-    watch_items: [{ narrative: "Pantau.", source_claim_ids: ["c1"] }],
+    report_type: "mingguan",
+    executive_summary: ["Ringkasan.", "Dampak perlu dipantau.", "Belum ada metrik tambahan."] ,
+    overview: [],
+    issue_sections: [{ report_item_id: "item-1", issue_id: "issue-1", group: "developing", title: "Issue", priority: "sedang", status: "berkembang", what_happened: ["Narasi."], why_important: ["Penting."], impact: ["Dampak."], risk: [], watch: [], source_claim_ids: ["c1"] }],
+    category_developments: [],
+    comparison: { label: "Dibandingkan periode sebelumnya", new_items: [], worsened: [], improved: [], priority_shifts: [], source_claim_ids: [] },
+    trends: [],
+    company_impacts: [],
+    risk_opportunity: [{ kind: "assumption", title: "Asumsi terbatas", text: "Belum ada risiko terverifikasi di luar klaim yang tersedia.", source_claim_ids: ["c1"] }],
+    watch_items: [],
+    follow_up_options: [],
     source_references: [{ claim_id: "c1", source_article_id: crawlId }],
   }), true, ajv.errorsText(validateT13.errors));
 });

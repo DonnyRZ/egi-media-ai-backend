@@ -59,6 +59,15 @@ class PostgresPriorityReasonStore extends PostgresStageRunStore {
 class PostgresDirectAlertBlurbStore extends PostgresStageRunStore {
   constructor(options) { super({ ...options, task: "T12" }); }
   async get({ alertEventId, promptVersion }) { return this._find((value) => value.alertEventId === alertEventId && value.promptVersion === promptVersion); }
+  async listByAlertEventIds({ tenantId, companyId, alertEventIds, promptVersion }) {
+    const ids = Array.isArray(alertEventIds) ? alertEventIds.filter((id) => typeof id === "string" && id) : [];
+    if (!ids.length) return [];
+    const result = await this.db.query(
+      "SELECT payload_jsonb FROM ai.stage_runs WHERE task='T12' AND tenant_id=$1 AND company_id=$2 AND prompt_version=$3 AND payload_jsonb->>'alertEventId'=ANY($4::text[]) ORDER BY created_at DESC",
+      [tenantId, companyId, promptVersion, ids],
+    );
+    return result.rows.map((row) => row.payload_jsonb || {});
+  }
   async create({ tenantId, companyId, issueId, developmentId, alertEventId, promptVersion, newDevelopmentBlurb, shortImpactBlurb, sourceClaimIds, provenance, pipelineId = null, inputFingerprint = null }) { const existing = await this.get({ alertEventId, promptVersion }); if (existing) return existing; const value = { directBlurbId: this.uuid(), tenantId, companyId, issueId, developmentId, alertEventId, promptVersion, newDevelopmentBlurb, shortImpactBlurb, sourceClaimIds, provenance, pipelineId, inputFingerprint, createdAt: new Date().toISOString() }; return this._create(value, { newDevelopmentBlurb, shortImpactBlurb, sourceClaimIds }); }
 }
 

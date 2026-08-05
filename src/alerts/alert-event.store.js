@@ -48,10 +48,15 @@ class InMemoryAlertEventStore {
   }
 
   list() { return [...this.eventsById.values()].map(cloneForRead); }
-  listScoped({ tenantId, companyId, recipientId = null, page = 1, limit = 20 }) {
-    const all = [...this.eventsById.values()].filter((event) => event.tenantId === tenantId && event.companyId === companyId && (!recipientId || event.recipientId === recipientId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  listScoped({ tenantId, companyId, recipientId = null, channel = null, page = 1, limit = 20 }) {
+    const all = [...this.eventsById.values()].filter((event) => event.tenantId === tenantId && event.companyId === companyId && (!recipientId || event.recipientId === recipientId));
+    const unreadByChannel = all.reduce((counts, event) => {
+      if (!event.read) counts[event.channel] = (counts[event.channel] || 0) + 1;
+      return counts;
+    }, { langsung: 0, ringkasan: 0 });
+    const filtered = all.filter((event) => !channel || event.channel === channel).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const offset = (page - 1) * limit;
-    return { items: all.slice(offset, offset + limit).map(cloneForRead), page, limit, total: all.length };
+    return { items: filtered.slice(offset, offset + limit).map(cloneForRead), page, limit, total: filtered.length, unreadByChannel };
   }
   markRead({ tenantId, companyId, alertEventId, read = true }) {
     const event = this.eventsById.get(alertEventId);

@@ -21,10 +21,17 @@ function selectedItem(index) {
 function outputFor(items) {
   const sourceReferences = items.map((item, index) => ({ claim_id: `c${index + 1}`, source_article_id: `article-${index + 1}` }));
   return {
-    executive_summary: "Ringkasan eksekutif berdasarkan isu dan metrik yang dipilih backend.",
-    issue_narratives: items.map((item, index) => ({ report_item_id: item.reportItemId, narrative: `Narasi issue ${index + 1}.`, source_claim_ids: [`c${index + 1}`] })),
-    impact_narrative: { narrative: "Dampak gabungan perlu dipantau.", source_claim_ids: ["c1"] },
-    watch_items: [{ narrative: "Pantau perkembangan regulator.", source_claim_ids: ["c2"] }],
+    report_type: "mingguan",
+    executive_summary: ["Perubahan utama perlu dipantau.", "Tekanan pada rencana perusahaan masih berkembang.", "Dampak aktual belum dapat disimpulkan tanpa bukti tambahan."],
+    overview: [],
+    issue_sections: items.map((item, index) => ({ report_item_id: item.reportItemId, issue_id: item.issueId, group: index % 2 ? "developing" : "new", title: item.title, priority: item.priority, status: "berkembang", what_happened: [`Apa yang terjadi pada issue ${index + 1}.`], why_important: [`Mengapa issue ${index + 1} penting bagi perusahaan.`], impact: [`Dampak potensial issue ${index + 1}.`], risk: [], watch: [], source_claim_ids: [`c${index + 1}`] })),
+    category_developments: [],
+    comparison: { label: "Dibandingkan periode sebelumnya", new_items: [], worsened: [], improved: [], priority_shifts: [], source_claim_ids: [] },
+    trends: [{ text: "Pola perkembangan perlu dipantau pada periode berikutnya.", source_claim_ids: ["c1"] }],
+    company_impacts: [{ category: "Strategi", points: ["Dampak strategis perlu ditinjau."], source_claim_ids: ["c1"] }],
+    risk_opportunity: [{ kind: "risk", title: "Risiko yang perlu dipantau", text: "Perkembangan dapat menambah tekanan eksekusi.", source_claim_ids: ["c1"] }],
+    watch_items: [{ text: "Pantau perkembangan regulator.", source_claim_ids: ["c2"] }],
+    follow_up_options: [{ text: "Tinjau perkembangan pada siklus berikutnya.", source_claim_ids: ["c3"] }],
     source_references: sourceReferences,
   };
 }
@@ -56,7 +63,7 @@ test("T13 uses Mini from a backend-selected six-issue pack and never raw article
   assert.equal(kernelCalls(), 1);
   assert.equal(result.reused, false);
   assert.equal(result.narrative.reviewStatus, "draft");
-  assert.equal(result.narrative.narrative.issueNarratives.length, 6);
+  assert.equal(result.narrative.narrative.issueSections.length, 6);
   assert.equal(input[0].content.includes("Top 5"), true);
   assert.match(input[1].content, /item-6/);
   assert.doesNotMatch(input[1].content, /RAW_ARTICLE_BODY_MUST_NOT_REACH_T13/);
@@ -75,10 +82,18 @@ test("T13 is idempotent for the same backend report draft and prompt version", a
   assert.equal(kernelCalls(), 1);
 });
 
+test("T13 accepts an evidence-limited weekly report without forcing an invented trend", async () => {
+  const output = outputFor(Array.from({ length: 3 }, (_, index) => selectedItem(index + 1)));
+  output.trends = [];
+  const { runtime, report } = buildRuntime({ output, items: Array.from({ length: 3 }, (_, index) => selectedItem(index + 1)) });
+  const result = await runtime.service.generate({ tenantId, companyId, reportId: report.reportId });
+  assert.deepEqual(result.narrative.narrative.trends, []);
+});
+
 test("T13 rejects unselected report items or unsupported citations and marks the draft needs_review", async (t) => {
   await t.test("unselected report item", async () => {
     const items = [selectedItem(1), selectedItem(2)];
-    const output = outputFor(items); output.issue_narratives[1].report_item_id = "item-99";
+    const output = outputFor(items); output.issue_sections[1].report_item_id = "item-99";
     const { runtime, report, reportDraftStore } = buildRuntime({ items, output });
     await assert.rejects(runtime.service.generate({ tenantId, companyId, reportId: report.reportId }), { code: "AI_OUTPUT_SCHEMA_INVALID" });
     assert.deepEqual(runtime.narrativeStore.list(), []);

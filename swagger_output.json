@@ -367,6 +367,25 @@
         }
       }
     },
+    "/api/v1/reports/{reportId}/pdf": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Download a validated report as PDF",
+        "operationId": "downloadReportPdf",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ReportIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdQuery" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "PDF report document", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/api/v1/reports/{reportId}/review": {
       "post": {
         "tags": ["Reports"],

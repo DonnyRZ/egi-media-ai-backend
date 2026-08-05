@@ -40,12 +40,12 @@
     "openai": "^6.48.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.16.3",
+    "pdfkit": "^0.16.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1",
     "winston": "^3.18.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11",
-    "pdfkit": "^0.16.0"
+    "nodemon": "^3.1.11"
   }
 }

@@ -237,6 +237,7 @@ class Server {
       getIssueStore: () => this._getIssueStore(),
       getAlertRuntime: () => this._getAlertRuntime(),
       getT12Service: () => this._getT12Service(),
+      getAlertBlurbStore: () => this._getT12Service().blurbStore,
       getEmailDeliveryService: () => this._getEmailDeliveryService(),
       getReportRuntime: () => this._getReportRuntime(),
       getIngestRuntime: () => this._getIngestRuntime(),

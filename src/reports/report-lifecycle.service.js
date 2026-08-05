@@ -25,7 +25,7 @@ class ReportLifecycleService {
   async share({ actor, tenantId, companyId, reportId, expectedVersion, shareTarget, note = null }) {
     const report = await this._loadAndAuthorize({ action: "share", actor, tenantId, companyId, reportId });
     this._assertTransition({ report, action: "share", expectedVersion });
-    const narrative = await this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
+    const narrative = await this._getValidatedNarrative({ reportId });
     if (!narrative || narrative.reviewStatus !== "draft") throw new AiConfigurationError("Report share requires a validated draft narrative");
     await this.sharePublisher.share({ report, narrative, actor, shareTarget });
     return this._persistTransition({ report, action: "share", actor, tenantId, companyId, expectedVersion, note, shareTarget });
@@ -35,7 +35,7 @@ class ReportLifecycleService {
     const report = await this._loadAndAuthorize({ action, actor, tenantId, companyId, reportId });
     this._assertTransition({ report, action, expectedVersion });
     if (action === "submit_review" || action === "approve") {
-      const narrative = await this.narrativeStore.get({ reportId, promptVersion: T13_PROMPT_VERSION });
+      const narrative = await this._getValidatedNarrative({ reportId });
       if (!narrative || narrative.reviewStatus !== "draft") throw new AiConfigurationError(`Report ${action} requires a validated draft narrative`);
     }
     return this._persistTransition({ report, action, actor, tenantId, companyId, expectedVersion, note });
@@ -49,6 +49,14 @@ class ReportLifecycleService {
     const report = await this.reportDraftStore.get({ tenantId, companyId, reportId });
     if (!report) throw new AiConfigurationError("Report was not found in the same tenant and company");
     return report;
+  }
+
+  async _getValidatedNarrative({ reportId }) {
+    for (const promptVersion of [T13_PROMPT_VERSION, "1.2.0", "1.1.0"]) {
+      const narrative = await this.narrativeStore.get({ reportId, promptVersion });
+      if (narrative) return narrative;
+    }
+    return null;
   }
 
   _assertTransition({ report, action, expectedVersion }) {

@@ -128,12 +128,17 @@ function selectedItem(index) {
 
 function t13Output(items) {
   return {
-    executive_summary: "Executive summary from selected pack.",
-    issue_narratives: items.map((item, index) => ({
-      report_item_id: item.reportItemId, narrative: `Issue narrative ${index + 1}.`, source_claim_ids: [`c${index + 1}`],
-    })),
-    impact_narrative: { narrative: "Combined impact.", source_claim_ids: ["c1"] },
-    watch_items: [{ narrative: "Watch regulator updates.", source_claim_ids: ["c2"] }],
+    report_type: "mingguan",
+    executive_summary: ["Executive summary from selected pack.", "Dampak perlu dipantau.", "Belum ada metrik tambahan."],
+    overview: [],
+    issue_sections: items.map((item, index) => ({ report_item_id: item.reportItemId, issue_id: item.issueId, group: index === 0 ? "developing" : "new", title: item.title, priority: item.priority, status: "berkembang", what_happened: [`Issue narrative ${index + 1}.`], why_important: ["Penting bagi perusahaan."], impact: ["Combined impact."], risk: [], watch: ["Watch regulator updates."], source_claim_ids: [`c${index + 1}`] })),
+    category_developments: [],
+    comparison: { label: "Dibandingkan periode sebelumnya", new_items: [], worsened: [], improved: [], priority_shifts: [], source_claim_ids: [] },
+    trends: [],
+    company_impacts: [{ category: "Strategi", points: ["Dampak perlu dipantau."], source_claim_ids: ["c1"] }],
+    risk_opportunity: [{ kind: "risk", title: "Risiko pemantauan", text: "Perkembangan perlu dipantau.", source_claim_ids: ["c1"] }],
+    watch_items: [{ text: "Watch regulator updates.", source_claim_ids: ["c2"] }],
+    follow_up_options: [{ text: "Tinjau kembali pada siklus berikutnya.", source_claim_ids: ["c1"] }],
     source_references: items.map((item, index) => ({
       claim_id: `c${index + 1}`, source_article_id: `article-${index + 1}`,
     })),
