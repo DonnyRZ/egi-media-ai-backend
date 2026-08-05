@@ -36,7 +36,22 @@ class PostgresIssueStore extends InMemoryIssueStore {
   async listActive(args) { await this.ready; return super.listActive(args); }
   async listScoped(args) { await this.ready; return super.listScoped(args); }
   async getIssue(args) { await this.ready; return super.getIssue(args); }
-  async listArticles(args) { await this.ready; return super.listArticles(args); }
+  async listArticles(args) {
+    await this.ready;
+    const articles = await super.listArticles(args);
+    return Promise.all(articles.map(async (article) => {
+      const snapshot = await this.db.query("SELECT article_jsonb, published_at, canonical_url FROM ai.article_snapshots WHERE source_article_id=$1 AND locale=$2 ORDER BY source_updated_at DESC NULLS LAST LIMIT 1", [article.sourceArticleId, article.locale || "id"]);
+      const row = snapshot.rows[0];
+      const payload = row?.article_jsonb || {};
+      return {
+        ...article,
+        title: nonEmpty(payload.title) || null,
+        sourceName: sourceName(article.sourceArticleId, payload, article.canonicalUrl || row?.canonical_url),
+        publishedAt: row?.published_at?.toISOString?.() || row?.published_at || payload.publishedAt || null,
+        canonicalUrl: article.canonicalUrl || row?.canonical_url || null,
+      };
+    }));
+  }
   async listDevelopments(args) { await this.ready; return super.listDevelopments(args); }
   async getLatestDevelopment(args) { await this.ready; return super.getLatestDevelopment(args); }
   async getDevelopment(args) { await this.ready; return super.getDevelopment(args); }
@@ -89,5 +104,14 @@ class PostgresIssueStore extends InMemoryIssueStore {
 function mapIssue(row) { return { ...(row.payload_jsonb || {}), issueId: row.id, tenantId: row.tenant_id, companyId: row.company_id, title: row.title, oneLiner: row.one_liner, status: row.status, currentPriority: row.current_priority, firstSeenAt: new Date(row.first_seen_at).toISOString(), lastDevelopedAt: new Date(row.last_developed_at).toISOString(), version: row.version, closedAt: row.closed_at ? new Date(row.closed_at).toISOString() : null, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
 function mapArticle(row) { return { ...(row.payload_jsonb || {}), issueArticleId: row.id, tenantId: row.tenant_id, companyId: row.company_id, issueId: row.issue_id, sourceArticleId: row.article_snapshot_id, attachedAt: new Date(row.attached_at).toISOString(), relationStatus: row.relation_status }; }
 function mapDevelopment(row) { return { ...(row.payload_jsonb || {}), developmentId: row.id, tenantId: row.tenant_id, companyId: row.company_id, issueId: row.issue_id, developmentType: row.development_type, observedAt: new Date(row.observed_at).toISOString(), isMaterial: row.is_material, createdAt: new Date(row.created_at).toISOString() }; }
+
+function nonEmpty(value) { return typeof value === "string" && value.trim() ? value.trim() : null; }
+function sourceName(sourceArticleId, article, canonicalUrl) {
+  const explicit = nonEmpty(article.sourceName) || nonEmpty(article.source_name) || nonEmpty(article.publisher) || nonEmpty(article.media);
+  if (explicit) return explicit;
+  const provider = /^crawl:([^:]+):/i.exec(sourceArticleId || "")?.[1];
+  if (provider) return provider.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  try { return new URL(canonicalUrl).hostname.replace(/^www\./, ""); } catch { return "Source"; }
+}
 
 module.exports = { PostgresIssueStore };

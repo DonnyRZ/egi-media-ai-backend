@@ -23,9 +23,19 @@ function createReportPdf({ report, narrative }) {
     if (comparison) { heading(comparison.label || "Comparison"); bullets([...(comparison.newItems || comparison.new_items || []).map((value) => `New: ${value}`), ...(comparison.worsened || []).map((value) => `Worsened: ${value}`), ...(comparison.improved || []).map((value) => `Improved: ${value}`), ...(comparison.priorityShifts || comparison.priority_shifts || []).map((value) => `Priority shift: ${value}`)]); }
     const sections = [["Trends", narrative.trends], ["Company impact", narrative.companyImpacts || narrative.company_impacts], ["Risks and opportunities", narrative.riskOpportunity || narrative.risk_opportunity || narrative.risks || narrative.opportunities], ["Watch items", narrative.watchItems || narrative.watch_items], ["Follow-up options", narrative.followUpOptions || narrative.follow_up_options]];
     sections.forEach(([label, items]) => { if (Array.isArray(items) && items.length) { heading(label); bullets(items.map((item) => item.text || item.narrative || item.title || item)); } });
-    if (Array.isArray(narrative.sourceReferences || narrative.source_references) && (narrative.sourceReferences || narrative.source_references).length) { heading("Sources"); bullets((narrative.sourceReferences || narrative.source_references).map((ref) => `${ref.claimId || ref.claim_id} — ${ref.sourceArticleId || ref.source_article_id}`)); }
+    if (Array.isArray(narrative.sourceReferences || narrative.source_references) && (narrative.sourceReferences || narrative.source_references).length) { heading("Sources"); bullets((narrative.sourceReferences || narrative.source_references).map((ref) => `${ref.claimId || ref.claim_id} — ${sourceLabel(ref)}`)); }
     doc.end();
   });
+}
+
+function sourceLabel(ref) {
+  const title = ref.title || ref.articleTitle || ref.article_title;
+  if (typeof title === "string" && title.trim()) return title.trim();
+  const media = ref.sourceName || ref.source_name || ref.media;
+  if (typeof media === "string" && media.trim()) return media.trim();
+  const id = ref.sourceArticleId || ref.source_article_id;
+  const provider = typeof id === "string" ? /^crawl:([^:]+):/i.exec(id)?.[1] : null;
+  return provider ? provider.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Source article";
 }
 
 module.exports = { createReportPdf };

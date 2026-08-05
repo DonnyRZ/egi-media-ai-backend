@@ -23,11 +23,17 @@ class IssueReadService {
     if (!issue) throw Object.assign(new Error("Issue was not found"), { code: "NOT_FOUND", statusCode: 404 });
     const analysis = await this.analysisStore?.getCurrent?.({ tenantId, companyId, issueId }) || null;
     const priority = analysis && await this.priorityStore?.get?.({ tenantId, companyId, issueId, analysisId: analysis.analysisId, promptVersion: "1.0.0" }) || null;
+    const articles = await this.issueStore.listArticles({ tenantId, companyId, issueId });
+    const articleBySourceId = new Map(articles.map((article) => [article.sourceArticleId, article]));
+    const enrichEvidence = (evidence) => Array.isArray(evidence) ? evidence.map((item) => {
+      const article = articleBySourceId.get(item.sourceArticleId);
+      return article ? { ...item, title: article.title, sourceName: article.sourceName, publishedAt: article.publishedAt } : item;
+    }) : evidence;
     return {
       ...this._card(issue),
-      articles: await this.issueStore.listArticles({ tenantId, companyId, issueId }),
+      articles,
       developments: await this.issueStore.listDevelopments({ tenantId, companyId, issueId }),
-      analysis, priority,
+      analysis: analysis ? { ...analysis, evidence: enrichEvidence(analysis.evidence) } : analysis, priority,
     };
   }
   _card(issue) { return { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, status: issue.status, priority: issue.currentPriority, first_seen_at: issue.firstSeenAt, last_developed_at: issue.lastDevelopedAt, version: issue.version }; }
