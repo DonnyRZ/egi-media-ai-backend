@@ -17,6 +17,12 @@ function createIssueFormationRouter({ getT04Service, getIssueMutationService, ge
     return success(res, { items, meta: { page: saved.page, limit: saved.limit, total: saved.total } }, req);
   }));
 
+  router.get("/api/v1/issues/:issueId/saved", scope, asyncHandler(async (req, res) => {
+    const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
+    const saved = typeof getSavedIssueStore().isSaved === "function" && await getSavedIssueStore().isSaved({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });
+    return success(res, { saved: Boolean(saved) }, req);
+  }));
+
   router.post("/api/v1/issues/:issueId/saved", saveScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     const issue = await readIssue(getIssueReadService(), req, req.params.issueId);
     const result = await getSavedIssueStore().save({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId: issue.issue_id, actorId: req.authContext.actor.actorId });

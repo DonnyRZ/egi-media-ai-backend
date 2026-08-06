@@ -242,6 +242,23 @@
       }
     },
     "/api/v1/issues/{issueId}/saved": {
+      "get": {
+        "tags": ["Issues"],
+        "summary": "Read whether the current user saved an issue",
+        "operationId": "getIssueSavedStatus",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IssueIdPath" },
+          { "$ref": "#/components/parameters/CompanyIdHeader" },
+          { "$ref": "#/components/parameters/RequestIdHeader" }
+        ],
+        "responses": {
+          "200": { "description": "Saved status", "content": { "application/json": { "schema": { "type": "object", "required": ["success", "data", "meta"], "properties": { "success": { "type": "boolean", "enum": [true] }, "data": { "type": "object", "required": ["saved"], "properties": { "saved": { "type": "boolean" } } }, "meta": { "$ref": "#/components/schemas/ApiMeta" } } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
       "post": {
         "tags": ["Issues"],
         "summary": "Save an issue for the current user",

@@ -86,6 +86,7 @@ class PostgresIssuePriorityStore extends PostgresRecordStore {
 
 class PostgresSavedIssueStore {
   constructor({ db, uuid = randomUUID } = {}) { this.db = db; this.uuid = uuid; }
+  async isSaved({ tenantId, companyId, actorId, issueId }) { const result = await this.db.query("SELECT 1 FROM ai.saved_issues WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND issue_id=$4 LIMIT 1", [tenantId,companyId,actorId,issueId]); return result.rowCount > 0; }
   async save({ tenantId, companyId, actorId, issueId }) {
     const id = this.uuid(); const result = await this.db.query("INSERT INTO ai.saved_issues (id,tenant_id,company_id,actor_id,issue_id) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,company_id,actor_id,issue_id) DO UPDATE SET issue_id=EXCLUDED.issue_id RETURNING *", [id,tenantId,companyId,actorId,issueId]);
     return { saved: mapSaved(result.rows[0]), reused: result.rows[0].id !== id };

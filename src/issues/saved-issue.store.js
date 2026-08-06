@@ -20,6 +20,7 @@ class InMemorySavedIssueStore {
     this.savedByKey.set(key, value);
     return { saved: clone(value), reused: false };
   }
+  isSaved({ tenantId, companyId, issueId, actorId }) { return this.savedByKey.has(this._key({ tenantId, companyId, issueId, actorId })); }
 
   remove({ tenantId, companyId, issueId, actorId }) {
     const key = this._key({ tenantId, companyId, issueId, actorId });
