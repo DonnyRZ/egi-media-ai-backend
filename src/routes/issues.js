@@ -96,11 +96,20 @@ function cardFromDetail(detail) {
     title: detail.title,
     one_liner: detail.one_liner ?? null,
     status: detail.status,
-    priority: detail.priority ?? null,
+    priority: cardPriority(detail),
     first_seen_at: detail.first_seen_at,
     last_developed_at: detail.last_developed_at ?? null,
     version: detail.version,
   };
+}
+/** Issue detail overwrites card.priority with the priority-decision object; unwrap to a label string. */
+function cardPriority(detail) {
+  const value = detail?.priority;
+  if (typeof value === "string" && ["tinggi", "sedang", "rendah"].includes(value)) return value;
+  if (value && typeof value === "object" && typeof value.priority === "string" && ["tinggi", "sedang", "rendah"].includes(value.priority)) {
+    return value.priority;
+  }
+  return null;
 }
 function serializeIssue(issue) { return { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, status: issue.status, priority: issue.currentPriority, version: issue.version, first_seen_at: issue.firstSeenAt, last_developed_at: issue.lastDevelopedAt }; }
 function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
