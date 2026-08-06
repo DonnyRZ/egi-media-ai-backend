@@ -13,7 +13,19 @@ function createIssueFormationRouter({ getT04Service, getIssueMutationService, ge
   router.get("/api/v1/saved/issues", scope, asyncHandler(async (req, res) => {
     const page = positiveInt(req.query.page, 1); const limit = boundedInt(req.query.limit, 20, 100);
     const saved = await getSavedIssueStore().list({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, actorId: req.authContext.actor.actorId, page, limit });
-    const items = await Promise.all(saved.items.map(async (item) => ({ ...item, issue: await readIssue(getIssueReadService(), req, item.issueId) })));
+    const items = [];
+    for (const item of saved.items) {
+      const serialized = serializeSaved(item);
+      if (!serialized) continue;
+      try {
+        const detail = await readIssue(getIssueReadService(), req, item.issueId);
+        items.push({ ...serialized, issue: cardFromDetail(detail) });
+      } catch (error) {
+        // Skip orphaned bookmarks so one missing issue does not 404 the whole list.
+        if (error?.code === "NOT_FOUND" || error?.statusCode === 404) continue;
+        throw error;
+      }
+    }
     return success(res, { items, meta: { page: saved.page, limit: saved.limit, total: saved.total } }, req);
   }));
 
@@ -77,6 +89,19 @@ function requireIdempotencyKey(req, res, next) { const key = req.get("Idempotenc
 function success(res, data, req, statusCode = 200) { return res.status(statusCode).json({ success: true, data, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); }
 function readIssue(service, req, issueId) { return service.detail({ tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, issueId }); }
 function serializeSaved(value) { return value ? { saved_id: value.savedId, issue_id: value.issueId, saved_at: value.savedAt } : null; }
+function cardFromDetail(detail) {
+  if (!detail) return null;
+  return {
+    issue_id: detail.issue_id,
+    title: detail.title,
+    one_liner: detail.one_liner ?? null,
+    status: detail.status,
+    priority: detail.priority ?? null,
+    first_seen_at: detail.first_seen_at,
+    last_developed_at: detail.last_developed_at ?? null,
+    version: detail.version,
+  };
+}
 function serializeIssue(issue) { return { issue_id: issue.issueId, title: issue.title, one_liner: issue.oneLiner, status: issue.status, priority: issue.currentPriority, version: issue.version, first_seen_at: issue.firstSeenAt, last_developed_at: issue.lastDevelopedAt }; }
 function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
 function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }
