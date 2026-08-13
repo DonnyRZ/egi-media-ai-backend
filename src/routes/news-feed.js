@@ -11,6 +11,7 @@ const {
 } = require('../news-feed/crawl-article-reader');
 const { UnknownChannelError, requireChannel } = require('../news-feed/channel-registry');
 const { IT_FEED_TERMS } = require('../news-feed/it-feed-terms');
+const { readNewsFeedV4Config } = require('../news-feed/v4-config');
 const {
   assertChannelAllowed,
   listEntitledChannels,
@@ -18,7 +19,7 @@ const {
   resolveDefaultChannelId,
 } = require('../auth/tenant-news-policy');
 
-function createNewsFeedRouter({ getNewsFeedService, getTenantStore } = {}) {
+function createNewsFeedRouter({ getNewsFeedService, getTenantStore, getNewsFeedV4Config } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({
     tenant: true,
@@ -49,11 +50,16 @@ function createNewsFeedRouter({ getNewsFeedService, getTenantStore } = {}) {
         const sourceIds = listEntitledChannels(tenant)
           .filter((channel) => channel.provider === 'crawl')
           .map((channel) => channel.id);
+        const v4 = typeof getNewsFeedV4Config === 'function'
+          ? getNewsFeedV4Config()
+          : readNewsFeedV4Config();
+        const useV4 = Boolean(v4?.enabled && v4.tenantId && req.authContext.tenantId === v4.tenantId);
         const result = await getNewsFeedService().listMixedFeed({
           sourceIds,
           cursor: req.query.cursor,
           limit: req.query.limit,
-          terms: IT_FEED_TERMS,
+          terms: useV4 ? null : IT_FEED_TERMS,
+          industryFilter: useV4 ? 'it-v4' : null,
         });
         return success(res, result, req);
       }

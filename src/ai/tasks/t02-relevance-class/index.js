@@ -11,7 +11,7 @@ const {
   shouldFormIssue,
   branchForDecision,
 } = require("./relevance-policy");
-const { applySubjectIdentityGate } = require("./subject-identity-gate");
+const { applySubjectIdentityGate, hasCompanyIdentityHit } = require("./subject-identity-gate");
 
 module.exports = {
   createT02PromptDefinition,
@@ -28,4 +28,5 @@ module.exports = {
   shouldFormIssue,
   branchForDecision,
   applySubjectIdentityGate,
+  hasCompanyIdentityHit,
 };

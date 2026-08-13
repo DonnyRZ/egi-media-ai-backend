@@ -76,6 +76,17 @@ const ARTICLE_MIXED_SELECT = `
   LIMIT $4
 `;
 
+const ARTICLE_BY_KEYS_SELECT = `
+  SELECT DISTINCT ON (source_id, content_hash)
+    ${ARTICLE_COLUMNS}
+  FROM articles
+  WHERE validation_status = 'valid'
+    AND (source_id, content_hash) IN (
+      SELECT source_id, content_hash FROM unnest($1::text[], $2::text[]) AS keys(source_id, content_hash)
+    )
+  ORDER BY source_id, content_hash, COALESCE(published_at, collected_at) DESC, article_id DESC
+`;
+
 class InvalidCrawlChannelError extends Error {
   constructor(channelId) {
     super(`Channel is not a registered crawl channel: ${String(channelId)}`);
@@ -233,6 +244,34 @@ function createCrawlArticleReader(options = {}) {
     return { items, watermark: nextWatermark };
   }
 
+  async function listScoringCandidates({ sourceId, since = null, limit = DEFAULT_LIMIT } = {}) {
+    const channel = requireCrawlChannel(sourceId);
+    const pageLimit = validateLimit(limit);
+    const watermark = normalizeWatermark(since);
+    const rows = await runQuery(ARTICLE_SINCE_SELECT, [channel.crawl_source_id, watermark, pageLimit]);
+    const items = rows.map((row) => mapScoringCandidate(row, channel));
+    const nextWatermark = items.length
+      ? items[items.length - 1].effectiveTimestamp
+      : watermark;
+    return { items, watermark: nextWatermark };
+  }
+
+  async function listArticlesByKeys(keys = []) {
+    const pairs = normalizeKeys(keys);
+    if (!pairs.length) return [];
+    const rows = await runQuery(ARTICLE_BY_KEYS_SELECT, [
+      pairs.map((item) => item.sourceId),
+      pairs.map((item) => item.contentHash),
+    ]);
+    const byKey = new Map();
+    for (const row of rows) {
+      const channel = getChannel(row.source_id);
+      if (!channel || channel.provider !== "crawl") continue;
+      byKey.set(`${row.source_id}:${row.content_hash}`, mapCrawlArticle(row, channel));
+    }
+    return pairs.map((item) => byKey.get(`${item.sourceId}:${item.contentHash}`) || null);
+  }
+
   async function runQuery(sql, values) {
     try {
       if (!database) database = createCrawlDatabase({ queryTimeoutMs });
@@ -244,7 +283,14 @@ function createCrawlArticleReader(options = {}) {
     }
   }
 
-  return { listArticles, listMixedArticles, getArticleByContentHash, listArticlesSince };
+  return {
+    listArticles,
+    listMixedArticles,
+    getArticleByContentHash,
+    listArticlesSince,
+    listScoringCandidates,
+    listArticlesByKeys,
+  };
 }
 
 function requireCrawlChannel(sourceId) {
@@ -273,6 +319,36 @@ function isPassthroughError(error) {
     || error instanceof CrawlArticleNotFoundError
     || error?.code === "INVALID_CRAWL_LIMIT"
     || error?.code === "INVALID_CRAWL_WATERMARK";
+}
+
+function mapScoringCandidate(row, channel) {
+  const hash = String(row.content_hash || "");
+  return {
+    sourceId: channel.crawl_source_id,
+    contentHash: hash,
+    crawlArticleId: String(row.article_id),
+    sourceArticleId: `crawl:${channel.crawl_source_id}:${hash}`,
+    title: row.title || "",
+    summary: row.summary || "",
+    effectiveTimestamp: toIsoString(row.effective_timestamp)
+      || toIsoString(row.published_at)
+      || toIsoString(row.collected_at),
+  };
+}
+
+function normalizeKeys(keys) {
+  const seen = new Set();
+  const pairs = [];
+  for (const key of Array.isArray(keys) ? keys : []) {
+    const sourceId = typeof key?.sourceId === "string" ? key.sourceId.trim() : "";
+    const contentHash = typeof key?.contentHash === "string" ? key.contentHash.trim() : "";
+    if (!sourceId || !contentHash) continue;
+    const id = `${sourceId}:${contentHash}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    pairs.push({ sourceId, contentHash });
+  }
+  return pairs;
 }
 
 function mapCrawlArticle(row, channel) {
@@ -386,6 +462,7 @@ function withTimeout(promise, timeoutMs) {
 
 module.exports = {
   ARTICLE_BY_HASH_SELECT,
+  ARTICLE_BY_KEYS_SELECT,
   ARTICLE_SELECT,
   ARTICLE_SINCE_SELECT,
   ARTICLE_MIXED_SELECT,
@@ -397,5 +474,6 @@ module.exports = {
   decodeCursor,
   encodeCursor,
   mapCrawlArticle,
+  mapScoringCandidate,
   toIsoString,
 };

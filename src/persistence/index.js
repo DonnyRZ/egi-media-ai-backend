@@ -6,6 +6,8 @@ const contextStores = require("./postgres-context-stores");
 const { PostgresJobStore } = require("./postgres-job-store");
 const { PostgresEmailDeliveryStore } = require("./postgres-delivery-store");
 const ingestStores = require("./postgres-ingest-stores");
+const { PostgresArticleIndustryDecisionStore } = require("./postgres-industry-decision.store");
+const { PostgresCrawlIndustryDecisionStore } = require("./postgres-crawl-industry-decision.store");
 const { PostgresMembershipStore } = require("../auth/membership.store");
 const { PostgresAccessAuditStore } = require("../auth/audit.store");
 const { PostgresTenantStore } = require("../auth/tenant.store");
@@ -21,6 +23,8 @@ function createPostgresPersistence({ db } = {}) {
     uploadRequestStore: new uploadStores.PostgresCompanyContextUploadRequestStore({ db }),
     snapshotStore: new ingestStores.PostgresSourceSnapshotStore({ db }),
     watermarkStore: new ingestStores.PostgresWatermarkStore({ db }),
+    industryDecisionStore: new PostgresArticleIndustryDecisionStore({ db }),
+    crawlIndustryDecisionStore: new PostgresCrawlIndustryDecisionStore({ db }),
     jobStore: new PostgresJobStore({ db }),
     pipelineStateStore: new PostgresPipelineStateStore({ db }),
     deliveryStore: new PostgresEmailDeliveryStore({ db }),
@@ -43,4 +47,4 @@ function createPostgresPersistence({ db } = {}) {
     reportNarrativeStore: new stores.PostgresReportNarrativeStore({ db }),
   };
 }
-module.exports = { PostgresRecordStore, PostgresIssueStore, PostgresJobStore, PostgresPipelineStateStore, PostgresEmailDeliveryStore, PostgresMembershipStore, PostgresAccessAuditStore, PostgresTenantStore, ...uploadStores, createPostgresPersistence, ...stores, ...stageStores, ...contextStores, ...ingestStores };
+module.exports = { PostgresRecordStore, PostgresIssueStore, PostgresJobStore, PostgresPipelineStateStore, PostgresEmailDeliveryStore, PostgresMembershipStore, PostgresAccessAuditStore, PostgresTenantStore, PostgresArticleIndustryDecisionStore, PostgresCrawlIndustryDecisionStore, ...uploadStores, createPostgresPersistence, ...stores, ...stageStores, ...contextStores, ...ingestStores };

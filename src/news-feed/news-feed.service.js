@@ -17,6 +17,7 @@ function createNewsFeedService({
   cmsArticleClient,
   portalBaseUrl,
   defaultLocale = DEFAULT_LOCALE,
+  crawlIndustryDecisionStore = null,
 } = {}) {
   if (!crawlArticleReader?.listArticles) {
     throw new TypeError('News feed service requires a crawl article reader');
@@ -77,7 +78,15 @@ function createNewsFeedService({
     cursor = null,
     limit = DEFAULT_LIMIT,
     terms = null,
+    industryFilter = null,
   } = {}) {
+    if (industryFilter === 'it-v4') {
+      return listMixedV4Feed({
+        sourceIds,
+        cursor,
+        limit,
+      });
+    }
     if (typeof crawlArticleReader.listMixedArticles !== 'function') {
       const error = new Error('Mixed news feed is not configured');
       error.code = 'NOT_READY';
@@ -91,14 +100,46 @@ function createNewsFeedService({
       limit: normalizeLimit(limit),
       terms,
     });
-    return {
-      channel: 'mixed',
-      label: 'News Feed',
-      layout: 'card',
-      provider: 'crawl',
-      items: Array.isArray(page?.items) ? page.items : [],
-      next_cursor: page?.next_cursor ?? null,
-    };
+    return mixedPage(page);
+  }
+
+  async function listMixedV4Feed({ sourceIds, cursor, limit }) {
+    if (!crawlIndustryDecisionStore?.listAdmitted) {
+      const error = new Error('IT v4 news feed is not configured');
+      error.code = 'NOT_READY';
+      error.statusCode = 503;
+      throw error;
+    }
+    if (typeof crawlArticleReader.listArticlesByKeys !== 'function') {
+      const error = new Error('IT v4 news feed is not configured');
+      error.code = 'NOT_READY';
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const pageLimit = normalizeLimit(limit);
+    const admitted = await crawlIndustryDecisionStore.listAdmitted({
+      sourceIds,
+      cursor: emptyToNull(cursor),
+      limit: pageLimit,
+      industryId: 'it',
+      modelVersion: 'it-v4',
+    });
+    const keys = (admitted.items || []).map((row) => ({
+      sourceId: row.sourceId,
+      contentHash: row.contentHash,
+    }));
+    const hydrated = keys.length
+      ? await crawlArticleReader.listArticlesByKeys(keys)
+      : [];
+    const items = [];
+    for (const item of hydrated) {
+      if (item) items.push(item);
+    }
+    return mixedPage({
+      items,
+      next_cursor: admitted.next_cursor ?? null,
+    });
   }
 
   return { listFeed, listMixedFeed };
@@ -139,6 +180,17 @@ function feedPage(channel, { items, next_cursor }) {
     provider: channel.provider,
     items,
     next_cursor,
+  };
+}
+
+function mixedPage(page) {
+  return {
+    channel: 'mixed',
+    label: 'News Feed',
+    layout: 'card',
+    provider: 'crawl',
+    items: Array.isArray(page?.items) ? page.items : [],
+    next_cursor: page?.next_cursor ?? null,
   };
 }
 

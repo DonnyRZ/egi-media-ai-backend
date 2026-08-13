@@ -16,7 +16,7 @@ const { createMembershipRouter } = require("./memberships");
 const { createPlatformRouter } = require("./platform");
 const { createAutomationRouter } = require("./automation");
 
-module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getAlertBlurbStore, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAccessAuditStore, getPlatformHealth, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake, assertIntakeReady, getIntakeReadiness }) => {
+module.exports = (server, { companyContextService, getCompanyContextDraftService, getCompanyContextUploadStore, cmsSourceGate, getIssueSourceResolver, getNewsFeedService, getNewsFeedV4Config, getT02Service, getT03Service, getT04Service, getIssueMutationService, getT05Service, getT06Service, getT07Service, getT08Service, getCitationGate, getT09Service, getT10Service, getExecutiveSummaryService, getIssueReadService, getSavedIssueStore, getIssueStore, getAlertRuntime, getT12Service, getAlertBlurbStore, getEmailDeliveryService, getReportRuntime, getIngestRuntime, getMembershipStore, getTenantStore, getCompanyStore, getAccessAuditStore, getPlatformHealth, getAutomationStatus, getAutomationJobs, getNewsIntakeRecentRuns, setAutomaticIntake, assertIntakeReady, getIntakeReadiness }) => {
   server.use(createCompanyContextRouter({
     companyContextService,
     getCompanyContextDraftService,
@@ -33,7 +33,7 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   server.use(createAnalysisRouter({ getT07Service, getT08Service, getCitationGate }));
   server.use(createPriorityRouter({ getT09Service, getT10Service }));
   server.use(createDashboardRouter({ getExecutiveSummaryService, getIssueReadService }));
-  server.use(createNewsFeedRouter({ getNewsFeedService, getTenantStore }));
+  server.use(createNewsFeedRouter({ getNewsFeedService, getTenantStore, getNewsFeedV4Config }));
   server.use(createAlertRouter({ getAlertRuntime, getT12Service, getAlertBlurbStore, getEmailDeliveryService }));
   server.use(createReportRouter({ getReportRuntime }));
   server.use(createIngestRouter({ getIngestRuntime, assertIntakeReady, getTenantStore }));

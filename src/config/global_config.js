@@ -1,6 +1,7 @@
 require("dotenv").config();
 const confidence = require("confidence");
 const { readSchedulerConfig } = require("../automation/scheduler-config");
+const { readNewsFeedV4Config } = require("../news-feed/v4-config");
 
 function listenHost() {
   const requested = process.env.APP_HOST || "localhost";
@@ -82,6 +83,7 @@ const config = {
     url: process.env.INDUSTRY_PREFILTER_URL || "http://127.0.0.1:8091",
     timeoutMs: Number(process.env.INDUSTRY_PREFILTER_TIMEOUT_MS || 8000),
   },
+  newsFeedV4: readNewsFeedV4Config(process.env),
 };
 
 const store = new confidence.Store(config);

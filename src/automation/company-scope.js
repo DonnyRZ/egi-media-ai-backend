@@ -57,12 +57,23 @@ class PostgresPipelineCompanyStore {
         row.content_jsonb?.fieldReview || null,
         { legacyEffective: !row.content_jsonb?.fieldReview },
       ).complete)
-      .map((row) => ({
-      tenantId: row.tenant_id,
-      companyId: row.company_id,
-      hasEffectiveContext: true,
-      hasReadyManagementIdentity: true,
-      }));
+      .map((row) => {
+        const fields = row.content_jsonb?.fields || {};
+        return {
+          tenantId: row.tenant_id,
+          companyId: row.company_id,
+          hasEffectiveContext: true,
+          hasReadyManagementIdentity: true,
+          fields: {
+            name: fields.name || null,
+            industry: fields.industry || null,
+            sub_industry: fields.sub_industry || null,
+            brands_aliases: fields.brands_aliases || [],
+            key_people: fields.key_people || [],
+            competitors: fields.competitors || [],
+          },
+        };
+      });
   }
 }
 

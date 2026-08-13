@@ -20,6 +20,8 @@ const { createCmsSourceGate } = require("../cms");
 const { CrawlIngestService, createIssueSourceResolver } = require("../source");
 const { createCrawlArticleReader } = require("../news-feed/crawl-article-reader");
 const { createNewsFeedService } = require("../news-feed/news-feed.service");
+const { createCrawlIndustryScoreLoop } = require("../news-feed/crawl-industry-score.loop");
+const { readNewsFeedV4Config } = require("../news-feed/v4-config");
 const { InMemoryIssueStore, InMemorySavedIssueStore, createIssueMutationRuntime } = require("../issues");
 const { CitationAnalysisGate } = require("../analysis");
 const { ExecutiveSummaryService, IssueReadService } = require("../dashboard");
@@ -49,6 +51,7 @@ const { AiTaskRegistry, AiPipelineWorker, InMemoryPipelineStateStore } = require
 const { AutomationDownstreamBoundary } = require("../automation/downstream-boundary");
 const { createLogger, MetricsRegistry, observabilityMiddleware } = require("../observability");
 const { createPostgresPersistence } = require("../persistence");
+const { createIndustryPrefilterClient, InMemoryArticleIndustryDecisionStore } = require("../ml");
 const { AuthorizationService } = require("../auth/authorization");
 const { InMemoryMembershipStore } = require("../auth/membership.store");
 const { InMemoryAccessAuditStore } = require("../auth/audit.store");
@@ -71,6 +74,7 @@ class Server {
     this.crawlArticleReader = null;
     this.issueSourceResolver = null;
     this.newsFeedService = null;
+    this.crawlIndustryScoreLoop = null;
     this.relevanceRuntime = null;
     this.rationaleRuntime = null;
     this.issueFormationRuntime = null;
@@ -222,6 +226,7 @@ class Server {
       cmsSourceGate: this.cmsSourceGate,
       getIssueSourceResolver: () => this._getIssueSourceResolver(),
       getNewsFeedService: () => this._getNewsFeedService(),
+      getNewsFeedV4Config: () => readNewsFeedV4Config(process.env),
       getT02Service: () => this._getT02Service(),
       getT03Service: () => this._getT03Service(),
       getT04Service: () => this._getT04Service(),
@@ -323,6 +328,7 @@ class Server {
     this.stopping = true;
     this.stopPromise = (async () => {
       this.scheduler?.stop();
+      this.crawlIndustryScoreLoop?.stop();
       this.workerRunner?.stop();
       const activeServer = this.httpServer;
       if (activeServer) {
@@ -577,6 +583,7 @@ class Server {
         crawlArticleReader: this._getCrawlArticleReader(),
         cmsArticleClient: this.cmsSourceGate.cmsArticleClient,
         portalBaseUrl: config.get("/portal").baseUrl,
+        crawlIndustryDecisionStore: this._getPersistenceRuntime()?.crawlIndustryDecisionStore || null,
       });
     }
     return this.newsFeedService;
@@ -739,6 +746,7 @@ class Server {
     const { startScheduler, startWorkers } = resolveAutomationStart(automation);
     if (startScheduler) this.scheduler.start();
     if (startWorkers) this.workerRunner.start();
+    this._startNewsFeedV4Loop();
     this.logger.info("worker_tenant_policy_loaded", {
       allowEval: workerTenantPolicy.allowEval,
       excludeEval: workerTenantPolicy.excludeEval,
@@ -747,10 +755,44 @@ class Server {
     });
   }
 
+  _startNewsFeedV4Loop() {
+    const v4 = readNewsFeedV4Config(process.env);
+    if (!v4.enabled) return;
+    const store = this._getPersistenceRuntime()?.crawlIndustryDecisionStore;
+    if (!store) {
+      this.logger.warn("news_feed_v4_loop_skipped", { reason: "missing_decision_store" });
+      return;
+    }
+    const prefilter = config.get("/industryPrefilter") || {};
+    this.crawlIndustryScoreLoop = createCrawlIndustryScoreLoop({
+      crawlArticleReader: this._getCrawlArticleReader(),
+      decisionStore: store,
+      scorer: createIndustryPrefilterClient({
+        url: prefilter.url,
+        timeoutMs: v4.scoreTimeoutMs,
+      }),
+      lookbackDays: v4.lookbackDays,
+      intervalMs: v4.intervalMs,
+      pageSize: v4.pageSize,
+      maxArticlesPerTick: v4.maxArticlesPerTick,
+      industryId: v4.industryId,
+      modelVersion: v4.modelVersion,
+      logger: this.logger,
+    });
+    this.crawlIndustryScoreLoop.start();
+    this.logger.info("news_feed_v4_loop_started", {
+      tenantId: v4.tenantId,
+      lookbackDays: v4.lookbackDays,
+      intervalMs: v4.intervalMs,
+      prefilterMode: prefilter.mode || "off",
+    });
+  }
+
   _getPipelineRuntime() {
     if (this.pipelineRuntime) return this.pipelineRuntime;
     const persistence = this._getPersistenceRuntime();
-    const queue = this._getIngestRuntime().queue;
+    const ingest = this._getIngestRuntime();
+    const queue = ingest.queue;
     const stateStore = persistence?.pipelineStateStore || new InMemoryPipelineStateStore();
     const companyStore = process.env.AI_PERSISTENCE_MODE === "postgres"
       ? new PostgresPipelineCompanyStore({ db: this.getDatabaseRuntime().ai })
@@ -771,7 +813,23 @@ class Server {
     registry.register("T13", async ({ tenantId, companyId, pipelineId, input }) => ({ result: await this._getReportRuntime().narrativeService.generate({ tenantId, companyId, pipelineId, reportId: input.report_id }) }));
     registry.register("T14", async ({ tenantId, companyId, pipelineId, input }) => ({ result: await this._getReportRuntime().rewriteService.rewrite({ actor: { actorId: "ai-pipeline-worker", actorType: "ai_worker" }, tenantId, companyId, pipelineId, reportId: input.report_id, reportNarrativeId: input.report_narrative_id, allowedSpanId: input.allowed_span_id, humanInstruction: input.instruction, expectedVersion: input.expected_version }) }));
     const worker = new AiPipelineWorker({ queue, registry, stateStore, workerId: "ai-pipeline-worker" });
-    const dispatcher = new PipelineStageDispatcher({ companyStore, pipelineStateStore: stateStore, pipelineWorker: worker, logger: this.logger });
+    const prefilterConfig = config.get("/industryPrefilter") || {};
+    const prefilterMode = String(prefilterConfig.mode || "off").toLowerCase();
+    const dispatcher = new PipelineStageDispatcher({
+      companyStore,
+      pipelineStateStore: stateStore,
+      pipelineWorker: worker,
+      logger: this.logger,
+      prefilter: {
+        mode: prefilterMode,
+        scorer: prefilterMode === "off" ? null : createIndustryPrefilterClient({
+          url: prefilterConfig.url,
+          timeoutMs: prefilterConfig.timeoutMs,
+        }),
+        snapshotStore: ingest.snapshotStore,
+        decisionStore: persistence?.industryDecisionStore || new InMemoryArticleIndustryDecisionStore(),
+      },
+    });
     this.pipelineRuntime = { queue, stateStore, companyStore, registry, worker, dispatcher, downstreamBoundary };
     return this.pipelineRuntime;
   }

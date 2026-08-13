@@ -67,5 +67,8 @@ test("S04 migration file discovery is deterministic", () => {
     "0014_company_context_upload_requests.sql",
     "0015_process_settings.sql",
     "0016_management_identities.sql",
+    "0017_activate_existing_companies.sql",
+    "0017_article_industry_decisions.sql",
+    "0018_crawl_industry_decisions.sql",
   ]);
 });

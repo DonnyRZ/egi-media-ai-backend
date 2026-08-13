@@ -8,6 +8,7 @@ class InMemorySourceSnapshotStore {
     this.snapshotsByKey.set(key, value); return { snapshot: clone(value), reused: false };
   }
   get({ sourceArticleId, locale }) { const values = [...this.snapshotsByKey.values()].filter((value) => value.sourceArticleId === sourceArticleId && value.locale === locale).sort((a, b) => Date.parse(b.sourceUpdatedAt) - Date.parse(a.sourceUpdatedAt)); return values[0] ? clone(values[0]) : null; }
+  getById({ snapshotId }) { const value = [...this.snapshotsByKey.values()].find((item) => item.snapshotId === snapshotId); return value ? clone(value) : null; }
   list() { return [...this.snapshotsByKey.values()].map(clone); }
 }
 function fingerprintOf(value) { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }

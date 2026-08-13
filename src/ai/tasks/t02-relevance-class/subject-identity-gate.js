@@ -132,9 +132,15 @@ function industryOverlapPresent(fields, title, summary) {
   return hasIndustryPriorityOverlap(fields, title, summary);
 }
 
+function hasCompanyIdentityHit({ fields = {}, title, summary, body = "" } = {}) {
+  const selfHits = findAliasHits(collectSelfAliases(fields), title, summary, body);
+  const competitorHits = findAliasHits(collectCompetitorAliases(fields), title, summary, body);
+  return selfHits.hits > 0 || competitorHits.hits > 0;
+}
+
 /**
  * Correct subject_relation using entity evidence from company_context.fields.
- * Never hard-codes a brand/industry — only runtime context fields.
+ * Never hard-codes a brand/industry — only runtime fields.
  */
 function applySubjectIdentityGate({
   relevance,
@@ -248,5 +254,6 @@ module.exports = {
   collectCompetitorAliases,
   findAliasHits,
   cleanBody,
+  hasCompanyIdentityHit,
   applySubjectIdentityGate,
 };

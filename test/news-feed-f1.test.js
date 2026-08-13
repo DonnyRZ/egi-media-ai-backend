@@ -13,6 +13,7 @@ const {
 const {
   ARTICLE_SELECT,
   ARTICLE_MIXED_SELECT,
+  ARTICLE_BY_KEYS_SELECT,
   CrawlSourceUnavailableError,
   InvalidCrawlChannelError,
   createCrawlArticleReader,
@@ -116,6 +117,12 @@ test("F1 mixed crawl SQL stays read-only and filters entitled sources", () => {
   assert.doesNotThrow(() => assertCrawlReadOnlyQuery(ARTICLE_MIXED_SELECT));
   assert.match(ARTICLE_MIXED_SELECT, /source_id = ANY\(\$1::text\[\]\)/i);
   assert.match(ARTICLE_MIXED_SELECT, /validation_status\s*=\s*'valid'/i);
+});
+
+test("F1 v4 hydrate SQL stays read-only and keys by source plus hash", () => {
+  assert.doesNotThrow(() => assertCrawlReadOnlyQuery(ARTICLE_BY_KEYS_SELECT));
+  assert.match(ARTICLE_BY_KEYS_SELECT, /unnest\(\$1::text\[\], \$2::text\[\]\)/i);
+  assert.match(ARTICLE_BY_KEYS_SELECT, /validation_status\s*=\s*'valid'/i);
 });
 
 test("F1 mixed crawl reader maps each source and preserves cursor paging", async () => {

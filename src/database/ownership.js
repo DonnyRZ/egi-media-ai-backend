@@ -27,6 +27,8 @@ const DATABASE_OWNERSHIP = Object.freeze({
       "alerts",
       "reports",
       "audit_events",
+      "crawl_industry_decisions",
+      "crawl_industry_score_cursors",
     ]),
   }),
 });
