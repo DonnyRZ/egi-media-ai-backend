@@ -367,3 +367,46 @@ test('F2 crawl and CMS unavailable errors are structured and retryable', async (
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('F2 mixed view lists entitled crawl sources without a channel tab', async () => {
+  const calls = [];
+  const service = createNewsFeedService({
+    crawlArticleReader: {
+      listArticles: async () => ({ items: [], next_cursor: null }),
+      listMixedArticles: async (request) => {
+        calls.push(request);
+        return {
+          items: [
+            crawlItem({ id: 'crawl:detik:a', title: 'Cloud', source_label: 'Detik' }),
+            crawlItem({
+              id: 'crawl:tempo:b',
+              channel: 'tempo',
+              crawl_source_id: 'tempo',
+              title: 'Siber',
+              source_label: 'Tempo',
+            }),
+          ],
+          next_cursor: null,
+        };
+      },
+    },
+    cmsArticleClient: { listPublishedArticles: async () => ({ items: [], nextCursor: null }) },
+    portalBaseUrl: 'http://portal.example',
+  });
+  const server = await listen({ service });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/news-feed?view=mixed&limit=20`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.channel, 'mixed');
+    assert.equal(body.data.label, 'News Feed');
+    assert.equal(body.data.items.length, 2);
+    assert.equal(body.data.items[0].title, 'Cloud');
+    assert.equal(body.data.items[1].title, 'Siber');
+    assert.ok(Array.isArray(calls[0].sourceIds));
+    assert.ok(calls[0].sourceIds.includes('detik'));
+    assert.ok(calls[0].terms.includes('siber'));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

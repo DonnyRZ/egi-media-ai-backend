@@ -58,6 +58,24 @@ const ARTICLE_SINCE_SELECT = `
   LIMIT $3
 `;
 
+const ARTICLE_MIXED_SELECT = `
+  SELECT${ARTICLE_COLUMNS}
+  FROM articles
+  WHERE source_id = ANY($1::text[])
+    AND validation_status = 'valid'
+    AND (
+      $5::text[] IS NULL
+      OR title ILIKE ANY($5::text[])
+      OR COALESCE(summary, '') ILIKE ANY($5::text[])
+    )
+    AND (
+      $2::timestamptz IS NULL
+      OR (COALESCE(published_at, collected_at), article_id) < ($2::timestamptz, $3::bigint)
+    )
+  ORDER BY COALESCE(published_at, collected_at) DESC, article_id DESC
+  LIMIT $4
+`;
+
 class InvalidCrawlChannelError extends Error {
   constructor(channelId) {
     super(`Channel is not a registered crawl channel: ${String(channelId)}`);
@@ -140,6 +158,54 @@ function createCrawlArticleReader(options = {}) {
     }
   }
 
+  async function listMixedArticles({
+    sourceIds = [],
+    limit = DEFAULT_LIMIT,
+    cursor = null,
+    terms = null,
+  } = {}) {
+    const ids = uniqueSourceIds(sourceIds);
+    if (!ids.length) {
+      return { items: [], next_cursor: null };
+    }
+
+    const pageLimit = validateLimit(limit);
+    const decodedCursor = decodeCursor(cursor);
+    const termPatterns = normalizeTermPatterns(terms);
+
+    try {
+      if (!database) database = createCrawlDatabase({ queryTimeoutMs });
+      const result = await withTimeout(
+        database.query(ARTICLE_MIXED_SELECT, [
+          ids,
+          decodedCursor?.effectiveTimestamp || null,
+          decodedCursor?.articleId || null,
+          pageLimit + 1,
+          termPatterns,
+        ]),
+        queryTimeoutMs
+      );
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      const mapped = [];
+      for (const row of rows) {
+        const channel = getChannel(row.source_id);
+        if (!channel || channel.provider !== "crawl") continue;
+        mapped.push(mapCrawlArticle(row, channel));
+      }
+      const hasMore = mapped.length > pageLimit;
+      const pageItems = mapped.slice(0, pageLimit);
+      return {
+        items: pageItems,
+        next_cursor: hasMore && pageItems.length
+          ? encodeCursor(cursorFromRow(rows[pageItems.length - 1]))
+          : null,
+      };
+    } catch (error) {
+      if (isPassthroughError(error)) throw error;
+      throw new CrawlSourceUnavailableError(undefined, { cause: error });
+    }
+  }
+
   async function getArticleByContentHash({ sourceId, contentHash } = {}) {
     const channel = requireCrawlChannel(sourceId);
     if (typeof contentHash !== "string" || !contentHash.trim()) {
@@ -178,7 +244,7 @@ function createCrawlArticleReader(options = {}) {
     }
   }
 
-  return { listArticles, getArticleByContentHash, listArticlesSince };
+  return { listArticles, listMixedArticles, getArticleByContentHash, listArticlesSince };
 }
 
 function requireCrawlChannel(sourceId) {
@@ -224,7 +290,22 @@ function mapCrawlArticle(row, channel) {
     thumbnail_url: nonEmptyString(row.thumbnail_url) || null,
     crawl_source_id: channel.crawl_source_id,
     issue_source_id: issueSourceId,
+    source_label: channel.label,
   };
+}
+
+function uniqueSourceIds(sourceIds) {
+  return [...new Set((Array.isArray(sourceIds) ? sourceIds : [])
+    .filter((id) => typeof id === "string" && id.trim())
+    .map((id) => id.trim()))];
+}
+
+function normalizeTermPatterns(terms) {
+  if (!Array.isArray(terms) || !terms.length) return null;
+  const patterns = terms
+    .filter((term) => typeof term === "string" && term.trim() && term.trim().length <= 40)
+    .map((term) => `%${term.trim()}%`);
+  return patterns.length ? patterns : null;
 }
 
 function cursorFromRow(row) {
@@ -307,6 +388,7 @@ module.exports = {
   ARTICLE_BY_HASH_SELECT,
   ARTICLE_SELECT,
   ARTICLE_SINCE_SELECT,
+  ARTICLE_MIXED_SELECT,
   CrawlArticleNotFoundError,
   CrawlSourceUnavailableError,
   InvalidCrawlChannelError,

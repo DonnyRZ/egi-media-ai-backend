@@ -12,6 +12,7 @@ const {
 } = require("../src/news-feed/channel-registry");
 const {
   ARTICLE_SELECT,
+  ARTICLE_MIXED_SELECT,
   CrawlSourceUnavailableError,
   InvalidCrawlChannelError,
   createCrawlArticleReader,
@@ -109,6 +110,36 @@ test("F1 crawl SQL is read-only and filters only valid stored rows", () => {
   assert.match(ARTICLE_SELECT, /validation_status\s*=\s*'valid'/i);
   assert.doesNotMatch(ARTICLE_SELECT, /\b(INSERT|UPDATE|DELETE|MERGE)\b/i);
   assert.throws(() => assertCrawlReadOnlyQuery("DELETE FROM articles"), /read-only/i);
+});
+
+test("F1 mixed crawl SQL stays read-only and filters entitled sources", () => {
+  assert.doesNotThrow(() => assertCrawlReadOnlyQuery(ARTICLE_MIXED_SELECT));
+  assert.match(ARTICLE_MIXED_SELECT, /source_id = ANY\(\$1::text\[\]\)/i);
+  assert.match(ARTICLE_MIXED_SELECT, /validation_status\s*=\s*'valid'/i);
+});
+
+test("F1 mixed crawl reader maps each source and preserves cursor paging", async () => {
+  const calls = [];
+  const rows = [
+    crawlRow({ article_id: "44", source_id: "detik", content_hash: "d1", title: "Cloud" }),
+    crawlRow({ article_id: "43", source_id: "tempo", content_hash: "t1", title: "Siber" }),
+    crawlRow({ article_id: "42", source_id: "detik", content_hash: "d2", title: "Server" }),
+  ];
+  const reader = createCrawlArticleReader({
+    db: { query: async (...args) => { calls.push(args); return { rows }; } },
+  });
+  const page = await reader.listMixedArticles({
+    sourceIds: ["detik", "tempo"],
+    limit: 2,
+    terms: ["cloud", "siber"],
+  });
+  assert.equal(page.items.length, 2);
+  assert.equal(page.items[0].channel, "detik");
+  assert.equal(page.items[0].source_label, "Detik");
+  assert.equal(page.items[1].channel, "tempo");
+  assert.ok(page.next_cursor);
+  assert.deepEqual(calls[0][1][0], ["detik", "tempo"]);
+  assert.deepEqual(calls[0][1][4], ["%cloud%", "%siber%"]);
 });
 
 test("F1 crawl reader uses deterministic keyset ordering and exclusive cursor", async () => {

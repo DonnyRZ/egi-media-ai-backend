@@ -10,6 +10,7 @@ const {
   CrawlSourceUnavailableError,
 } = require('../news-feed/crawl-article-reader');
 const { UnknownChannelError, requireChannel } = require('../news-feed/channel-registry');
+const { IT_FEED_TERMS } = require('../news-feed/it-feed-terms');
 const {
   assertChannelAllowed,
   listEntitledChannels,
@@ -44,6 +45,18 @@ function createNewsFeedRouter({ getNewsFeedService, getTenantStore } = {}) {
 
     try {
       const tenant = await loadTenant(getTenantStore, req.authContext.tenantId);
+      if (isMixedView(req.query.view)) {
+        const sourceIds = listEntitledChannels(tenant)
+          .filter((channel) => channel.provider === 'crawl')
+          .map((channel) => channel.id);
+        const result = await getNewsFeedService().listMixedFeed({
+          sourceIds,
+          cursor: req.query.cursor,
+          limit: req.query.limit,
+          terms: IT_FEED_TERMS,
+        });
+        return success(res, result, req);
+      }
       const requested = req.query.channel;
       const channelId = requested === undefined || requested === null || requested === ''
         ? resolveDefaultChannelId(tenant)
@@ -95,6 +108,10 @@ function normalizeNewsFeedError(error) {
     return Object.assign(error, { statusCode: 503 });
   }
   return error;
+}
+
+function isMixedView(value) {
+  return value === 'mixed';
 }
 
 function success(res, data, req) {

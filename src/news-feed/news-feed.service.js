@@ -72,7 +72,36 @@ function createNewsFeedService({
     throw error;
   }
 
-  return { listFeed };
+  async function listMixedFeed({
+    sourceIds = [],
+    cursor = null,
+    limit = DEFAULT_LIMIT,
+    terms = null,
+  } = {}) {
+    if (typeof crawlArticleReader.listMixedArticles !== 'function') {
+      const error = new Error('Mixed news feed is not configured');
+      error.code = 'NOT_READY';
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const page = await crawlArticleReader.listMixedArticles({
+      sourceIds,
+      cursor: emptyToNull(cursor),
+      limit: normalizeLimit(limit),
+      terms,
+    });
+    return {
+      channel: 'mixed',
+      label: 'News Feed',
+      layout: 'card',
+      provider: 'crawl',
+      items: Array.isArray(page?.items) ? page.items : [],
+      next_cursor: page?.next_cursor ?? null,
+    };
+  }
+
+  return { listFeed, listMixedFeed };
 }
 
 function resolveChannel(channelId) {
