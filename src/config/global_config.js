@@ -2,10 +2,19 @@ require("dotenv").config();
 const confidence = require("confidence");
 const { readSchedulerConfig } = require("../automation/scheduler-config");
 
+function listenHost() {
+  const requested = process.env.APP_HOST || "localhost";
+  // Railway injects PORT and probes the container. Binding localhost would fail healthchecks.
+  if (process.env.PORT && (requested === "localhost" || requested === "127.0.0.1")) {
+    return "0.0.0.0";
+  }
+  return requested;
+}
+
 const config = {
-  host: process.env.APP_HOST || "localhost",
+  host: listenHost(),
   env: process.env.APP_ENV || "development",
-  port: Number(process.env.APP_PORT || 5003),
+  port: Number(process.env.PORT || process.env.APP_PORT || 5003),
   cors: {
     origins: process.env.CORS_ORIGINS || "http://localhost:3000",
   },
@@ -68,6 +77,11 @@ const config = {
   redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
   automation: readSchedulerConfig(process.env),
   aiBudget: { maxRequests: Number(process.env.AI_MAX_REQUESTS_PER_WINDOW || 0), maxTokens: Number(process.env.AI_MAX_TOKENS_PER_WINDOW || 0), windowMs: Number(process.env.AI_BUDGET_WINDOW_MS || 3600000), enforced: process.env.AI_BUDGET_ENFORCED === "true" },
+  industryPrefilter: {
+    mode: process.env.INDUSTRY_PREFILTER_MODE || "off",
+    url: process.env.INDUSTRY_PREFILTER_URL || "http://127.0.0.1:8091",
+    timeoutMs: Number(process.env.INDUSTRY_PREFILTER_TIMEOUT_MS || 8000),
+  },
 };
 
 const store = new confidence.Store(config);

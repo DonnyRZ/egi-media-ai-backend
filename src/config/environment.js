@@ -1,7 +1,7 @@
 const Joi = require("joi");
 
 const productionSchema = Joi.object({
-  APP_ENV: Joi.string().valid("production").required(), APP_HOST: Joi.string().hostname().required(), APP_PORT: Joi.number().integer().min(1).max(65535).required(), CORS_ORIGINS: Joi.string().min(1).required(),
+  APP_ENV: Joi.string().valid("production").required(), APP_HOST: Joi.alternatives().try(Joi.string().ip(), Joi.string().hostname()).required(), APP_PORT: Joi.number().integer().min(1).max(65535).required(), CORS_ORIGINS: Joi.string().min(1).required(),
   CMS_BASE_URL: Joi.string().uri({ scheme: ["http", "https"] }).required(), PORTAL_BASE_URL: Joi.string().uri({ scheme: ["http", "https"] }).required(),
   AUTH_ACCESS_TOKEN_SECRET: Joi.string().min(32).required(), OPENAI_API_KEY: Joi.string().min(1).required(), OPENAI_MINI_MODEL: Joi.string().min(1).required(), OPENAI_NANO_MODEL: Joi.string().min(1).required(),
   SOURCE_DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }).required(), AI_DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }).required(), CRAWL_DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }).required(),
@@ -30,8 +30,12 @@ function validateEnvironment(env = process.env) {
   return value;
 }
 
+function withListenPort(env) {
+  return { ...env, APP_PORT: env.APP_PORT || env.PORT };
+}
+
 function validateProductionEnvironment(env = process.env) {
-  const { error, value } = productionSchema.validate(env, { abortEarly: false, convert: true });
+  const { error, value } = productionSchema.validate(withListenPort(env), { abortEarly: false, convert: true });
   if (error) throw new Error(`Invalid production environment: ${error.details.map((d) => d.message).join("; ")}`);
   return value;
 }
