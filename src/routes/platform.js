@@ -3,6 +3,8 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { validateTenantStatus } = require("../auth/tenant.store");
+const { provisionThenInvite, serializeMembership } = require("../auth/provision-membership");
+const { getAllowedChannelIds, mergeAllowedNewsChannels } = require("../auth/tenant-news-policy");
 
 function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipStore, getAccessAuditStore, getPlatformHealth } = {}) {
   const router = express.Router();
@@ -23,7 +25,8 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
   }));
   router.post("/api/v1/platform/tenants", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (typeof req.body?.name !== "string" || !req.body.name.trim() || req.body.name.length > 255) throw validationError("Tenant name is required");
-    const result = await getTenantStore().create({ tenantId: req.body.tenant_id, name: req.body.name.trim(), legalName: req.body.legal_name, timezone: req.body.timezone, defaultLocale: req.body.default_locale, status: req.body.status || "pending", metadata: req.body.metadata });
+    const metadata = mergeAllowedNewsChannels({}, req.body.metadata, req.body.allowed_news_channel_ids) ?? req.body.metadata ?? {};
+    const result = await getTenantStore().create({ tenantId: req.body.tenant_id, name: req.body.name.trim(), legalName: req.body.legal_name, timezone: req.body.timezone, defaultLocale: req.body.default_locale, status: req.body.status || "pending", metadata });
     return success(res, { tenant: serialize(result.tenant), reused: result.reused }, req, result.reused ? 200 : 201);
   }));
   router.post("/api/v1/platform/tenants/bulk-lifecycle", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
@@ -61,7 +64,10 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
     if (status !== undefined) validateTenantStatus(status);
     const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
     if (reason.length > 500) throw validationError("Lifecycle reason must be 500 characters or fewer");
-    const result = await getTenantStore().update({ tenantId: req.params.tenantId, name: req.body?.name, legalName: req.body?.legal_name, status, timezone: req.body?.timezone, defaultLocale: req.body?.default_locale, metadata: req.body?.metadata });
+    const current = await getTenantStore().get({ tenantId: req.params.tenantId });
+    if (!current) throw Object.assign(new Error("Tenant was not found"), { code: "NOT_FOUND", statusCode: 404 });
+    const metadata = mergeAllowedNewsChannels(current.metadata, req.body?.metadata, req.body?.allowed_news_channel_ids);
+    const result = await getTenantStore().update({ tenantId: req.params.tenantId, name: req.body?.name, legalName: req.body?.legal_name, status, timezone: req.body?.timezone, defaultLocale: req.body?.default_locale, metadata });
     if (status !== undefined && result.previousStatus !== status) {
       await getAccessAuditStore()?.record?.({
         actorId: req.authContext?.actor?.actorId,
@@ -93,16 +99,24 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
   }));
   router.post("/api/v1/platform/tenants/:tenantId/owner", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (typeof req.body?.email !== "string" || !req.body.email.includes("@")) throw validationError("Owner email is required");
-    const result = await getMembershipStore().invite({ userId: req.body.user_id, email: req.body.email, fullName: req.body.full_name, tenantId: req.params.tenantId, companyId: req.body.company_id || null, role: "tenant_owner" });
+    if (typeof req.body?.company_id !== "string" || !req.body.company_id.trim()) throw validationError("Owner company is required");
+    const result = await provisionThenInvite(req.app.locals.localAuthService, getMembershipStore(), {
+      userId: req.body.user_id,
+      email: req.body.email,
+      password: req.body.password,
+      fullName: req.body.full_name,
+      tenantId: req.params.tenantId,
+      companyId: req.body.company_id.trim(),
+      role: "tenant_owner",
+    });
     return success(res, { membership: serializeMembership(result.membership), reused: result.reused }, req, result.reused ? 200 : 201);
   }));
   router.use((error, req, res, _next) => sendError(res, req, error));
   return router;
 }
 
-function serialize(item) { return { tenant_id: item.tenantId, name: item.name, legal_name: item.legalName || null, status: item.status, timezone: item.timezone || "UTC", default_locale: item.defaultLocale || "id", metadata: item.metadata || {}, created_at: item.createdAt, updated_at: item.updatedAt }; }
+function serialize(item) { return { tenant_id: item.tenantId, name: item.name, legal_name: item.legalName || null, status: item.status, timezone: item.timezone || "UTC", default_locale: item.defaultLocale || "id", metadata: item.metadata || {}, allowed_news_channel_ids: getAllowedChannelIds(item), created_at: item.createdAt, updated_at: item.updatedAt }; }
 function serializeCompany(item) { return { company_id: item.companyId, tenant_id: item.tenantId, name: item.name, legal_name: item.legalName || null, status: item.status, timezone: item.timezone || null, locale: item.locale || null, metadata: item.metadata || {}, created_at: item.createdAt, updated_at: item.updatedAt }; }
-function serializeMembership(item) { return { membership_id: item.membershipId, user_id: item.userId, tenant_id: item.tenantId, company_id: item.companyId, role: item.role, status: item.status, version: item.version, permissions: item.permissions || [] }; }
 function serializeAuditEvent(item) { return { event_id: item.id || item.eventId, actor_id: item.actorId || null, actor_type: item.actorType || "unknown", tenant_id: item.tenantId || null, company_id: item.companyId || null, action: item.action, outcome: item.outcome, request_id: item.requestId || null, metadata: item.metadata || {}, created_at: item.createdAt || item.created_at }; }
 function positiveInt(value, fallback) { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
 function boundedInt(value, fallback, max) { return Math.min(positiveInt(value, fallback), max); }

@@ -21,10 +21,11 @@ test("generic tenant provisioning never requires an EGI company and can issue a 
     assert.equal(tenant.response.status, 201); assert.equal(tenant.body.data.tenant.tenant_id, tenantId);
     const company = await request(base, `/api/v1/platform/tenants/${tenantId}/companies`, { method: "POST", headers: { ...headers, "Idempotency-Key": `company-provisioning-${suffix}` }, body: json({ company_id: companyId, name: "Acme Main", status: "active" }) });
     assert.equal(company.response.status, 201); assert.equal(company.body.data.company.tenant_id, tenantId);
-    const owner = await request(base, `/api/v1/platform/tenants/${tenantId}/owner`, { method: "POST", headers: { ...headers, "Idempotency-Key": `owner-provisioning-${suffix}` }, body: json({ email: ownerEmail, full_name: "Acme Owner", company_id: companyId }) });
+    const owner = await request(base, `/api/v1/platform/tenants/${tenantId}/owner`, { method: "POST", headers: { ...headers, "Idempotency-Key": `owner-provisioning-${suffix}` }, body: json({ email: ownerEmail, full_name: "Acme Owner", password: "AcmeOwner123!", company_id: companyId }) });
     assert.equal(owner.response.status, 201); assert.equal(owner.body.data.membership.role, "tenant_owner");
-    const signup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: ownerEmail, full_name: "Acme Owner", password: "AcmeOwner123!" }) });
-    assert.equal(signup.response.status, 201);
+    assert.equal(owner.body.data.membership.status, "active");
+    const disabledSignup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: ownerEmail, full_name: "Acme Owner", password: "AcmeOwner123!" }) });
+    assert.equal(disabledSignup.response.status, 410);
     const customerLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: ownerEmail, password: "AcmeOwner123!" }) });
     assert.equal(customerLogin.response.status, 200); assert.equal(customerLogin.body.data.tenant_id, tenantId); assert.equal(customerLogin.body.data.company_id, companyId);
     const companies = await request(base, "/api/v1/companies", { headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}` } });
@@ -69,13 +70,12 @@ test("generic tenant provisioning never requires an EGI company and can issue a 
     const invitedAdmin = await request(base, "/api/v1/tenant/memberships", {
       method: "POST",
       headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}`, "Idempotency-Key": `tenant-admin-${suffix}` },
-      body: json({ email: adminEmail, full_name: "Acme Tenant Admin", role: "tenant_admin" }),
+      body: json({ email: adminEmail, full_name: "Acme Tenant Admin", password: "AcmeTenantAdmin123!", role: "tenant_admin" }),
     });
     assert.equal(invitedAdmin.response.status, 201);
     assert.equal(invitedAdmin.body.data.membership.company_id, null);
     assert.equal(invitedAdmin.body.data.membership.role, "tenant_admin");
-    const adminSignup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: adminEmail, full_name: "Acme Tenant Admin", password: "AcmeTenantAdmin123!" }) });
-    assert.equal(adminSignup.response.status, 201);
+    assert.equal(invitedAdmin.body.data.membership.status, "active");
     const adminLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: adminEmail, password: "AcmeTenantAdmin123!" }) });
     assert.equal(adminLogin.response.status, 200);
     assert.equal(adminLogin.body.data.actor.role, "tenant_admin");
@@ -99,13 +99,12 @@ test("generic tenant provisioning never requires an EGI company and can issue a 
     const invitedCompanyAdmin = await request(base, "/api/v1/tenant/memberships", {
       method: "POST",
       headers: { Authorization: `Bearer ${customerLogin.body.data.access_token}`, "Idempotency-Key": `company-admin-${suffix}` },
-      body: json({ email: companyAdminEmail, full_name: "Acme Company Admin", company_id: companyId, role: "company_admin" }),
+      body: json({ email: companyAdminEmail, full_name: "Acme Company Admin", password: "AcmeCompanyAdmin123!", company_id: companyId, role: "company_admin" }),
     });
     assert.equal(invitedCompanyAdmin.response.status, 201);
     assert.equal(invitedCompanyAdmin.body.data.membership.company_id, companyId);
     assert.equal(invitedCompanyAdmin.body.data.membership.role, "company_admin");
-    const companyAdminSignup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: companyAdminEmail, full_name: "Acme Company Admin", password: "AcmeCompanyAdmin123!" }) });
-    assert.equal(companyAdminSignup.response.status, 201);
+    assert.equal(invitedCompanyAdmin.body.data.membership.status, "active");
     const companyAdminLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: companyAdminEmail, password: "AcmeCompanyAdmin123!" }) });
     assert.equal(companyAdminLogin.response.status, 200);
     assert.equal(companyAdminLogin.body.data.actor.role, "company_admin");

@@ -1,6 +1,7 @@
 "use strict";
 
 const { CRAWL_SOURCE_IDS } = require("../news-feed/channel-registry");
+const { assertChannelAllowed, loadTenant } = require("../auth/tenant-news-policy");
 
 const JOB_TYPE_BY_MODE = Object.freeze({
   poll: "cms.poll",
@@ -74,8 +75,15 @@ async function enqueueIngestTrigger({
   maxAttempts = 3,
   copy = "internal",
   assertIntakeReady = null,
+  getTenantStore = null,
 }) {
   const parsed = parseIngestTriggerBody(body, { copy });
+  const tenant = await loadTenant(getTenantStore, tenantId);
+  if (parsed.mode === "crawl-poll") {
+    assertChannelAllowed(tenant, parsed.payload.crawl_source_id);
+  } else if (parsed.mode === "poll") {
+    assertChannelAllowed(tenant, "egi_media");
+  }
   if (typeof assertIntakeReady === "function") {
     await assertIntakeReady({ tenantId, companyId });
   }

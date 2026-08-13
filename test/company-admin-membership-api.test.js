@@ -36,7 +36,7 @@ test("company admin access API is scoped to the active company", async () => {
     const created = await request(base, "/api/v1/company/memberships", {
       method: "POST",
       headers: { "Idempotency-Key": "company-member-invite-0001" },
-      body: JSON.stringify({ email: "reviewer@example.com", role: "reviewer" }),
+      body: JSON.stringify({ email: "reviewer@example.com", full_name: "Company Reviewer", password: "ReviewerPass123!", role: "reviewer" }),
     });
     assert.equal(created.response.status, 201);
     assert.equal(created.body.data.membership.company_id, "company-a");

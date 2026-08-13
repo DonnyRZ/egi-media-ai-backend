@@ -25,6 +25,7 @@ function createNewsIntakeRouter({
   setAutomaticIntake,
   assertIntakeReady,
   getIntakeReadiness,
+  getTenantStore,
   logger,
 } = {}) {
   const router = express.Router();
@@ -106,6 +107,7 @@ function createNewsIntakeRouter({
       maxAttempts: 3,
       copy: "human",
       assertIntakeReady,
+      getTenantStore,
     });
 
     const log = logger || req.app?.locals?.logger;

@@ -10,9 +10,10 @@ test("tenant membership API is backend-scoped and supports invite/revoke lifecyc
   const headers = { Authorization: "Bearer dummy-bearer-token-for-local-ui", "Content-Type": "application/json" };
   try {
     const list = await fetch(`${base}/api/v1/tenant/memberships`, { headers }); assert.equal(list.status, 200);
-    const created = await fetch(`${base}/api/v1/tenant/memberships`, { method: "POST", headers: { ...headers, "Idempotency-Key": "membership-invite-0001" }, body: JSON.stringify({ email: "analyst@example.com", role: "analyst", company_id: "company-a" }) });
+    const created = await fetch(`${base}/api/v1/tenant/memberships`, { method: "POST", headers: { ...headers, "Idempotency-Key": "membership-invite-0001" }, body: JSON.stringify({ email: "analyst@example.com", full_name: "Example Analyst", password: "AnalystPass123!", role: "analyst", company_id: "company-a" }) });
     assert.equal(created.status, 201); const body = await created.json(); const membership = body.data.membership;
-    const repeated = await fetch(`${base}/api/v1/tenant/memberships`, { method: "POST", headers: { ...headers, "Idempotency-Key": "membership-invite-0002" }, body: JSON.stringify({ email: "analyst@example.com", role: "viewer", company_id: "company-a" }) });
+    assert.equal(membership.status, "active");
+    const repeated = await fetch(`${base}/api/v1/tenant/memberships`, { method: "POST", headers: { ...headers, "Idempotency-Key": "membership-invite-0002" }, body: JSON.stringify({ email: "analyst@example.com", full_name: "Example Analyst", password: "AnalystPass123!", role: "viewer", company_id: "company-a" }) });
     assert.equal(repeated.status, 200); const repeatedBody = await repeated.json(); const repeatedMembership = repeatedBody.data.membership; assert.equal(repeatedBody.data.reused, true); assert.equal(repeatedMembership.version, membership.version + 1);
     const revoked = await fetch(`${base}/api/v1/tenant/memberships/${membership.membership_id}`, { method: "DELETE", headers: { ...headers, "Idempotency-Key": "membership-revoke-0001", "If-Match": String(repeatedMembership.version) } });
     assert.equal(revoked.status, 200); assert.equal((await revoked.json()).data.membership.status, "revoked");

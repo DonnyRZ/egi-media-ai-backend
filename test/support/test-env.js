@@ -7,3 +7,6 @@ process.env.OPENAI_API_KEY ||= "sk-test-local";
 process.env.OPENAI_MODEL ||= "gpt-test-model";
 process.env.OPENAI_MINI_MODEL ||= "gpt-test-model";
 process.env.OPENAI_NANO_MODEL ||= "gpt-test-model";
+if (process.env.AI_TEST_USE_POSTGRES !== "true") {
+  process.env.AI_PERSISTENCE_MODE = "memory";
+}

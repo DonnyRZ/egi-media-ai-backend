@@ -4,7 +4,7 @@ const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { enqueueIngestTrigger, requireIdempotencyKey } = require("../ingest/ingest-trigger");
 
-function createIngestRouter({ getIngestRuntime, assertIntakeReady } = {}) {
+function createIngestRouter({ getIngestRuntime, assertIntakeReady, getTenantStore } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({ tenant: true, company: true, trustedScope: true, permission: "ai.pipeline.run" });
   router.post("/api/v1/internal/pipeline/ingest", scope, (req, res, next) => requireIdempotencyKey(req, res, next, sendError), asyncHandler(async (req, res) => {
@@ -18,6 +18,7 @@ function createIngestRouter({ getIngestRuntime, assertIntakeReady } = {}) {
       maxAttempts: 3,
       copy: "internal",
       assertIntakeReady,
+      getTenantStore,
     });
     return res.status(202).json({
       success: true,

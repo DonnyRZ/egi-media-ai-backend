@@ -34,10 +34,8 @@ test("platform tenant lifecycle is explicit, auditable, and blocks suspended cus
     assert.equal(created.response.status, 201);
     const company = await request(base, `/api/v1/platform/tenants/${tenantId}/companies`, { method: "POST", headers: { ...auth, "Idempotency-Key": `lifecycle-company-${suffix}` }, body: json({ company_id: companyId, name: "Lifecycle Company", status: "active" }) });
     assert.equal(company.response.status, 201);
-    const owner = await request(base, `/api/v1/platform/tenants/${tenantId}/owner`, { method: "POST", headers: { ...auth, "Idempotency-Key": `lifecycle-owner-${suffix}` }, body: json({ email: ownerEmail, full_name: "Lifecycle Owner", company_id: companyId }) });
+    const owner = await request(base, `/api/v1/platform/tenants/${tenantId}/owner`, { method: "POST", headers: { ...auth, "Idempotency-Key": `lifecycle-owner-${suffix}` }, body: json({ email: ownerEmail, full_name: "Lifecycle Owner", password: "LifecycleOwner123!", company_id: companyId }) });
     assert.equal(owner.response.status, 201);
-    const signup = await request(base, "/api/v1/auth/signup", { method: "POST", body: json({ email: ownerEmail, full_name: "Lifecycle Owner", password: "LifecycleOwner123!" }) });
-    assert.equal(signup.response.status, 201);
     const customerLogin = await request(base, "/api/v1/auth/login", { method: "POST", body: json({ email: ownerEmail, password: "LifecycleOwner123!" }) });
     assert.equal(customerLogin.response.status, 200);
     const customerToken = customerLogin.body.data.access_token;

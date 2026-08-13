@@ -33,5 +33,14 @@ test("repeating an invite for the same user and company reuses the membership", 
   assert.equal(result.membership.membershipId, "membership-1");
   assert.equal(result.membership.version, 2);
   assert.equal(result.membership.role, "viewer");
+  assert.equal(result.membership.status, "invited");
   assert.equal((await store.list({ tenantId: "tenant-1" })).total, 1);
+});
+
+test("invite can activate a membership when status is active", async () => {
+  const store = new InMemoryMembershipStore();
+  const result = await store.invite({ email: "owner@example.com", fullName: "Owner", tenantId: "tenant-1", companyId: "company-1", role: "tenant_owner", status: "active" });
+  assert.equal(result.membership.status, "active");
+  assert.equal(result.membership.fullName, "Owner");
+  assert.equal(result.membership.email, "owner@example.com");
 });

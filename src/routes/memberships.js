@@ -3,6 +3,7 @@ const { requireAuthContext } = require("../auth/auth-context");
 const { getRequestId, getCorrelationId } = require("../app/request-context");
 const { sendError } = require("../app/error-contract");
 const { ROLES } = require("../auth/rbac");
+const { provisionThenInvite, serializeMembership } = require("../auth/provision-membership");
 
 function createMembershipRouter({ getMembershipStore, getAccessAuditStore } = {}) {
   const router = express.Router();
@@ -26,7 +27,16 @@ function createMembershipRouter({ getMembershipStore, getAccessAuditStore } = {}
     return success(res, { items: result.items.map(serializeMembership), meta: { page: result.page, limit: result.limit, total: result.total } }, req);
   }));
   router.post("/api/v1/tenant/memberships", adminScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
-    validateInput(req.body); const membership = await getMembershipStore().invite({ userId: req.body.user_id, email: req.body.email, fullName: req.body.full_name, tenantId: req.authContext.tenantId, companyId: req.body.company_id || null, role: req.body.role });
+    validateInput(req.body);
+    const membership = await provisionThenInvite(req.app.locals.localAuthService, getMembershipStore(), {
+      userId: req.body.user_id,
+      email: req.body.email,
+      password: req.body.password,
+      fullName: req.body.full_name,
+      tenantId: req.authContext.tenantId,
+      companyId: req.body.company_id || null,
+      role: req.body.role,
+    });
     return success(res, { membership: serializeMembership(membership.membership), reused: membership.reused }, req, membership.reused ? 200 : 201);
   }));
   router.patch("/api/v1/tenant/memberships/:membershipId", adminScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
@@ -47,7 +57,15 @@ function createMembershipRouter({ getMembershipStore, getAccessAuditStore } = {}
   router.post("/api/v1/company/memberships", companyAdminScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     validateInput(req.body, COMPANY_MEMBER_ROLES);
     assertCompanyBodyScope(req);
-    const membership = await getMembershipStore().invite({ userId: req.body.user_id, email: req.body.email, fullName: req.body.full_name, tenantId: req.authContext.tenantId, companyId: req.authContext.companyId, role: req.body.role });
+    const membership = await provisionThenInvite(req.app.locals.localAuthService, getMembershipStore(), {
+      userId: req.body.user_id,
+      email: req.body.email,
+      password: req.body.password,
+      fullName: req.body.full_name,
+      tenantId: req.authContext.tenantId,
+      companyId: req.authContext.companyId,
+      role: req.body.role,
+    });
     return success(res, { membership: serializeMembership(membership.membership), reused: membership.reused }, req, membership.reused ? 200 : 201);
   }));
   router.patch("/api/v1/company/memberships/:membershipId", companyAdminScope, requireIdempotencyKey, asyncHandler(async (req, res) => {
@@ -69,7 +87,6 @@ function createMembershipRouter({ getMembershipStore, getAccessAuditStore } = {}
 }
 const TENANT_MEMBER_ROLES = Object.freeze(["tenant_admin", "company_admin", "executive", "executive_viewer", "analyst", "reviewer", "viewer"]);
 const COMPANY_MEMBER_ROLES = Object.freeze(["company_admin", "executive", "executive_viewer", "analyst", "reviewer", "viewer"]);
-function serializeMembership(item) { return { membership_id: item.membershipId, user_id: item.userId, tenant_id: item.tenantId, company_id: item.companyId, role: item.role, status: item.status, version: item.version, permissions: item.permissions || [] }; }
 function serializeAuditEvent(item) { return { event_id: item.id || item.eventId, actor_id: item.actorId || null, actor_type: item.actorType || "unknown", tenant_id: item.tenantId || null, company_id: item.companyId || null, action: item.action, outcome: item.outcome, request_id: item.requestId || null, metadata: item.metadata || {}, created_at: item.createdAt || item.created_at }; }
 function validateInput(body, allowedRoles = TENANT_MEMBER_ROLES) { if (!body || (typeof body.email !== "string" && typeof body.user_id !== "string") || !allowedRoles.includes(body.role)) throw validationError("Membership invite requires a permitted customer role and user identity"); }
 function assertCompanyBodyScope(req) { if (Object.hasOwn(req.body || {}, "company_id") && req.body.company_id !== req.authContext.companyId) throw scopeError(); }

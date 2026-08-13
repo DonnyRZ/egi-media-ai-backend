@@ -23,13 +23,46 @@ class LocalAuthService {
     return { accessToken: jwt.sign(actor, this.secret, { expiresIn: "8h" }), actor };
   }
 
-  async signup({ email, password, fullName }) {
+  async signup() {
+    throw Object.assign(new Error("Public signup is disabled. An administrator must create the account."), { code: "SIGNUP_DISABLED", statusCode: 410 });
+  }
+
+  async provision({ email, password, fullName }) {
     const normalizedEmail = String(email || "").trim().toLowerCase();
-    if (!normalizedEmail.includes("@") || String(password || "").length < 8 || !String(fullName || "").trim()) throw Object.assign(new Error("Signup requires full name, valid email, and password of at least 8 characters"), { code: "VALIDATION_ERROR", statusCode: 400 });
-    if (this.accounts.has(normalizedEmail) || await this.accountStore?.find?.(normalizedEmail)) throw Object.assign(new Error("An account with this email already exists"), { code: "CONFLICT", statusCode: 409 });
-    const passwordHash = hashPassword(password); const account = { email: normalizedEmail, fullName: String(fullName).trim(), role: null, actorType: "human", passwordHash };
-    await this.accountStore?.save?.({ userId: `user:${normalizedEmail}`, ...account }); this.accounts.set(normalizedEmail, account);
-    return { userId: `user:${normalizedEmail}`, email: normalizedEmail, fullName: String(fullName).trim(), status: "active" };
+    if (!normalizedEmail.includes("@")) {
+      throw Object.assign(new Error("A valid email is required"), { code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+
+    const existing = this.accounts.get(normalizedEmail) || await this.accountStore?.findAny?.(normalizedEmail) || null;
+    const hasPassword = Boolean(existing?.passwordHash);
+    const name = String(fullName || existing?.fullName || "").trim();
+
+    if (!hasPassword) {
+      if (String(password || "").length < 8) {
+        throw Object.assign(new Error("Password must be at least 8 characters"), { code: "VALIDATION_ERROR", statusCode: 400 });
+      }
+      if (!name) {
+        throw Object.assign(new Error("Full name is required"), { code: "VALIDATION_ERROR", statusCode: 400 });
+      }
+    }
+
+    const passwordHash = hasPassword ? existing.passwordHash : hashPassword(password);
+    const account = {
+      email: normalizedEmail,
+      fullName: name || existing?.fullName || null,
+      role: existing?.role ?? null,
+      actorType: "human",
+      passwordHash,
+    };
+    await this.accountStore?.save?.({ userId: `user:${normalizedEmail}`, email: normalizedEmail, fullName: account.fullName, passwordHash });
+    this.accounts.set(normalizedEmail, account);
+    return {
+      userId: `user:${normalizedEmail}`,
+      email: normalizedEmail,
+      fullName: account.fullName,
+      status: "active",
+      reused: Boolean(existing),
+    };
   }
 
   issueScopedToken({ actor, tenantId, companyId, membershipId, role }) {

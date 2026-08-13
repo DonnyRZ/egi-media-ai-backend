@@ -33,10 +33,10 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
   server.use(createAnalysisRouter({ getT07Service, getT08Service, getCitationGate }));
   server.use(createPriorityRouter({ getT09Service, getT10Service }));
   server.use(createDashboardRouter({ getExecutiveSummaryService, getIssueReadService }));
-  server.use(createNewsFeedRouter({ getNewsFeedService }));
+  server.use(createNewsFeedRouter({ getNewsFeedService, getTenantStore }));
   server.use(createAlertRouter({ getAlertRuntime, getT12Service, getAlertBlurbStore, getEmailDeliveryService }));
   server.use(createReportRouter({ getReportRuntime }));
-  server.use(createIngestRouter({ getIngestRuntime, assertIntakeReady }));
+  server.use(createIngestRouter({ getIngestRuntime, assertIntakeReady, getTenantStore }));
   server.use(createNewsIntakeRouter({
     getIngestRuntime,
     getStatus: getAutomationStatus,
@@ -44,6 +44,7 @@ module.exports = (server, { companyContextService, getCompanyContextDraftService
     setAutomaticIntake,
     assertIntakeReady,
     getIntakeReadiness,
+    getTenantStore,
   }));
   server.use(createAutomationRouter({ getStatus: getAutomationStatus, getJobs: getAutomationJobs }));
 };

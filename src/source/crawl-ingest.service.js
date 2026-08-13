@@ -3,6 +3,7 @@
 const { CmsSourceGateError } = require("../cms/cms-source.errors");
 const { CRAWL_SOURCE_IDS } = require("../news-feed/channel-registry");
 const { assessArticleContent } = require("../ingest/content-quality-gate");
+const { assertChannelAllowed, loadTenant } = require("../auth/tenant-news-policy");
 
 const DEFAULT_LIMIT = 25;
 
@@ -13,7 +14,7 @@ const DEFAULT_LIMIT = 25;
  * (internal ingest trigger or an operator script) invoke `pollSource`.
  */
 class CrawlIngestService {
-  constructor({ crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now = Date.now, assessContent = assessArticleContent, logger = null }) {
+  constructor({ crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now = Date.now, assessContent = assessArticleContent, logger = null, getTenantStore = null }) {
     if (!crawlArticleReader?.listArticlesSince) {
       throw new CmsSourceGateError("Crawl ingest requires a read-only crawl article reader", {
         code: "CRAWL_SOURCE_CONFIGURATION_INVALID",
@@ -30,7 +31,7 @@ class CrawlIngestService {
     if (typeof enqueueStageJob !== "function") {
       throw new TypeError("Crawl ingest requires a stage job enqueue function");
     }
-    Object.assign(this, { crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now, assessContent, logger: logger || { info() {}, warn() {} } });
+    Object.assign(this, { crawlArticleReader, sourceGate, snapshotStore, watermarkStore, enqueueStageJob, now, assessContent, logger: logger || { info() {}, warn() {} }, getTenantStore });
   }
 
   static watermarkName(sourceId) {
@@ -44,6 +45,8 @@ class CrawlIngestService {
         details: { sourceId },
       });
     }
+    const tenant = await loadTenant(this.getTenantStore, tenantId);
+    assertChannelAllowed(tenant, sourceId);
     const sourceName = CrawlIngestService.watermarkName(sourceId);
     const previous = await this.watermarkStore.get({ sourceName, locale });
     const page = await this.crawlArticleReader.listArticlesSince({

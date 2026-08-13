@@ -38,8 +38,8 @@ function createAuthRouter({ getCompanyStore, getTenantStore } = {}) {
       return res.json({ success: true, data: { access_token: accessToken, token_type: "Bearer", actor: { id: result.actor.id, email: result.actor.email, role, type: result.actor.actor_type }, tenant_id: scoped?.tenantId || null, company_id: scoped?.companyId || null, permissions, authorized_companies: authorizedCompanies }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } });
     } catch (error) { return next(error); }
   });
-  router.post("/api/v1/auth/signup", async (req, res, next) => {
-    try { const user = await req.app.locals.localAuthService.signup({ email: req.body?.email, password: req.body?.password, fullName: req.body?.full_name }); await req.app.locals.membershipStore?.activateByUser?.({ userId: user.userId }); return res.status(201).json({ success: true, data: { user: { user_id: user.userId, email: user.email, full_name: user.fullName, status: user.status } }, meta: { request_id: getRequestId(req), correlation_id: getCorrelationId(req) } }); } catch (error) { return next(error); }
+  router.post("/api/v1/auth/signup", async (_req, _res, next) => {
+    next(Object.assign(new Error("Public signup is disabled. An administrator must create the account."), { code: "SIGNUP_DISABLED", statusCode: 410 }));
   });
   const actorOnly = requireAuthContext({ tenant: false, company: false });
   router.post("/api/v1/auth/switch-context", actorOnly, async (req, res, next) => {

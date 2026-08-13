@@ -9,9 +9,15 @@ const {
   InvalidCrawlCursorError,
   CrawlSourceUnavailableError,
 } = require('../news-feed/crawl-article-reader');
-const { UnknownChannelError } = require('../news-feed/channel-registry');
+const { UnknownChannelError, requireChannel } = require('../news-feed/channel-registry');
+const {
+  assertChannelAllowed,
+  listEntitledChannels,
+  loadTenant,
+  resolveDefaultChannelId,
+} = require('../auth/tenant-news-policy');
 
-function createNewsFeedRouter({ getNewsFeedService } = {}) {
+function createNewsFeedRouter({ getNewsFeedService, getTenantStore } = {}) {
   const router = express.Router();
   const scope = requireAuthContext({
     tenant: true,
@@ -19,6 +25,12 @@ function createNewsFeedRouter({ getNewsFeedService } = {}) {
     trustedScope: true,
     permission: 'dashboard.read',
   });
+
+  router.get('/api/v1/news-feed/channels', scope, asyncHandler(async (req, res) => {
+    scopedCompany(req, req.query.company_id || req.authContext.companyId);
+    const tenant = await loadTenant(getTenantStore, req.authContext.tenantId);
+    return success(res, { items: listEntitledChannels(tenant) }, req);
+  }));
 
   router.get('/api/v1/news-feed', scope, asyncHandler(async (req, res) => {
     if (typeof getNewsFeedService !== 'function') {
@@ -31,8 +43,21 @@ function createNewsFeedRouter({ getNewsFeedService } = {}) {
     scopedCompany(req, req.query.company_id || req.authContext.companyId);
 
     try {
+      const tenant = await loadTenant(getTenantStore, req.authContext.tenantId);
+      const requested = req.query.channel;
+      const channelId = requested === undefined || requested === null || requested === ''
+        ? resolveDefaultChannelId(tenant)
+        : requested;
+      if (!channelId) {
+        throw Object.assign(new Error('This workspace is not entitled to that news source'), {
+          code: 'CHANNEL_NOT_ENTITLED',
+          statusCode: 403,
+        });
+      }
+      requireChannel(channelId);
+      assertChannelAllowed(tenant, channelId);
       const result = await getNewsFeedService().listFeed({
-        channelId: req.query.channel,
+        channelId,
         cursor: req.query.cursor,
         limit: req.query.limit,
       });
