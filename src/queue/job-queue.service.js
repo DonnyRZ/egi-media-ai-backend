@@ -20,9 +20,9 @@ class JobQueueService {
     return result;
   }
 
-  async processNext({ queueName, handler, workerId = this.workerId, tenantIds = null } = {}) {
+  async processNext({ queueName, handler, workerId = this.workerId, tenantIds = null, excludeEval = true } = {}) {
     if (typeof queueName !== "string" || typeof handler !== "function") throw validationError("Queue name and handler are required");
-    const job = await this.jobStore.claimNext({ queueName, workerId, now: this.now(), tenantIds });
+    const job = await this.jobStore.claimNext({ queueName, workerId, now: this.now(), tenantIds, excludeEval });
     if (!job) return null;
     this.logger.info("job_started", { tenantId: job.tenantId, companyId: job.companyId, jobId: job.jobId, queueName, jobType: job.jobType, attempt: job.attempts });
     try {

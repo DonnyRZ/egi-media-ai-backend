@@ -20,11 +20,14 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return usage();
 
+  assertEvaluationEnvironmentAllowed(process.env);
+
   const runId = args.runId || `eval-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
   const tenantId = `eval-tenant-${runId}`;
   const companyId = `eval-company-${runId}`;
   const ai = new Pool({ connectionString: process.env.AI_DATABASE_URL, max: 2 });
   const crawl = new Pool({ connectionString: process.env.CRAWL_DATABASE_URL, max: 2 });
+  let createdTenantId = null;
 
   try {
     if (args.cleanupTenant) {
@@ -39,6 +42,7 @@ async function main() {
     if (articles.length < args.limit) throw new Error(`Only ${articles.length} eligible crawl articles found; need ${args.limit}`);
 
     await createEvaluationScope(ai, { tenantId, companyId, runId, source });
+    createdTenantId = tenantId;
     console.log(JSON.stringify({ event: "evaluation_scope_created", runId, tenantId, companyId, sourceCompanyId: source.companyId, contextVersion: source.contextVersion, articleCount: articles.length }));
 
     const batches = chunk(articles, args.batchSize);
@@ -64,10 +68,38 @@ async function main() {
 
     const summary = await readSummary(ai, { tenantId, companyId });
     console.log(JSON.stringify({ event: "evaluation_complete", runId, tenantId, companyId, processed, requested: articles.length, summary, usage: await readUsage(ai, tenantId, companyId) }));
-    console.log(`KEEP_SCOPE tenant=${tenantId} company=${companyId}`);
+    if (args.keepScope) {
+      console.log(`KEEP_SCOPE tenant=${tenantId} company=${companyId}`);
+    } else {
+      await cleanupTenant(ai, tenantId);
+      createdTenantId = null;
+      console.log(JSON.stringify({ event: "evaluation_scope_cleaned", tenantId, companyId, reason: "default_cleanup" }));
+    }
+  } catch (error) {
+    if (createdTenantId && !args.keepScope) {
+      try {
+        await cleanupTenant(ai, createdTenantId);
+        console.log(JSON.stringify({ event: "evaluation_scope_cleaned", tenantId: createdTenantId, reason: "failed_run_cleanup" }));
+      } catch (cleanupError) {
+        console.error(JSON.stringify({ event: "evaluation_scope_cleanup_failed", tenantId: createdTenantId, message: cleanupError.message }));
+      }
+    }
+    throw error;
   } finally {
     await ai.end();
     await crawl.end();
+  }
+}
+
+/** Block accidental eval writes against production unless explicitly overridden. */
+function assertEvaluationEnvironmentAllowed(env = process.env) {
+  const appEnv = env.APP_ENV || "development";
+  if (appEnv === "production" && env.AI_ALLOW_EVAL_IN_PRODUCTION !== "true") {
+    const error = new Error(
+      "Refusing to run pipeline evaluation against APP_ENV=production. Use a non-production AI database, or set AI_ALLOW_EVAL_IN_PRODUCTION=true only for a controlled run."
+    );
+    error.code = "EVALUATION_PRODUCTION_BLOCKED";
+    throw error;
   }
 }
 
@@ -355,11 +387,26 @@ function chunk(items, size) {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, batchSize: 10, pollMs: 5000, batchTimeoutMs: 3_600_000, estimatedUsdPerArticle: 0.002, sourceCompany: "Arunika", keywords: [], manifestFile: null, manifestSplit: null, manifestCompany: null, contextFile: null, identityFile: null };
+  const args = {
+    limit: 10,
+    batchSize: 10,
+    pollMs: 5000,
+    batchTimeoutMs: 3_600_000,
+    estimatedUsdPerArticle: 0.002,
+    sourceCompany: "Arunika",
+    keywords: [],
+    manifestFile: null,
+    manifestSplit: null,
+    manifestCompany: null,
+    contextFile: null,
+    identityFile: null,
+    keepScope: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help") args.help = true;
     else if (value === "--cleanup-tenant") args.cleanupTenant = argv[++i];
+    else if (value === "--keep-scope") args.keepScope = true;
     else if (value === "--limit") args.limit = positive(argv[++i], "limit");
     else if (value === "--batch-size") args.batchSize = positive(argv[++i], "batch-size");
     else if (value === "--run-id") args.runId = argv[++i];
@@ -389,10 +436,42 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 async function cleanupTenant(db, tenantId) {
   await db.query("BEGIN");
   try {
+    await db.query(`
+      DELETE FROM ai.report_items
+      WHERE report_version_id IN (
+        SELECT rv.id FROM ai.report_versions rv
+        JOIN ai.reports r ON r.id = rv.report_id
+        WHERE r.tenant_id = $1
+      )`, [tenantId]);
+    await db.query(`
+      DELETE FROM ai.report_versions
+      WHERE report_id IN (SELECT id FROM ai.reports WHERE tenant_id = $1)`, [tenantId]);
     for (const table of [
-      "ai.alert_events", "ai.issue_developments", "ai.issue_articles", "ai.issue_priorities",
-      "ai.issue_analyses", "ai.issues", "ai.article_relevance", "ai.stage_runs", "ai.pipeline_states",
-      "ai.queue_jobs", "ai.management_identities", "ai.company_contexts", "ai.companies", "ai.tenants",
+      "ai.email_deliveries",
+      "ai.alert_events",
+      "ai.alert_preferences",
+      "ai.saved_issues",
+      "ai.feedback",
+      "ai.issue_priorities",
+      "ai.issue_developments",
+      "ai.issue_articles",
+      "ai.issue_analyses",
+      "ai.issues",
+      "ai.reports",
+      "ai.article_relevance",
+      "ai.stage_runs",
+      "ai.pipeline_states",
+      "ai.queue_jobs",
+      "ai.management_identities",
+      "ai.company_context_upload_requests",
+      "ai.company_context_drafts",
+      "ai.company_contexts",
+      "ai.tenant_ai_usage_events",
+      "ai.tenant_rate_limit_windows",
+      "ai.access_audit_events",
+      "ai.memberships",
+      "ai.companies",
+      "ai.tenants",
     ]) {
       const predicate = table === "ai.tenants" ? "id=$1" : "tenant_id=$1";
       await db.query(`DELETE FROM ${table} WHERE ${predicate}`, [tenantId]);
@@ -404,6 +483,21 @@ async function cleanupTenant(db, tenantId) {
   }
 }
 
-function usage() { console.log("Usage: node scripts/run-ai-pipeline-evaluation.js [--limit 10] [--batch-size 10] [--manifest-file path --manifest-split train|validation|test --manifest-company acme-1] [--context-file path --identity-file path] [--keywords hotel,resort,restoran] [--source-company Arunika] [--run-id id] [--cleanup-tenant tenant-id]"); }
+function usage() {
+  console.log([
+    "Usage: node scripts/run-ai-pipeline-evaluation.js [options]",
+    "",
+    "Safety defaults:",
+    "  - Refuses APP_ENV=production unless AI_ALLOW_EVAL_IN_PRODUCTION=true",
+    "  - Deletes the eval tenant/company/jobs after the run (use --keep-scope to retain)",
+    "",
+    "Options:",
+    "  --limit N --batch-size N --run-id id --source-company name",
+    "  --manifest-file path --manifest-split train|validation|test --manifest-company acme-1",
+    "  --context-file path --identity-file path --keywords a,b",
+    "  --keep-scope              Keep eval tenant after run (NOT recommended on shared DBs)",
+    "  --cleanup-tenant id       Only delete an existing eval tenant and exit",
+  ].join("\n"));
+}
 
 main().catch((error) => { console.error(JSON.stringify({ event: "evaluation_failed", code: error.code || "EVALUATION_FAILED", message: error.message })); process.exitCode = 1; });
