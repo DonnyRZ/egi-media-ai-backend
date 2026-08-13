@@ -34,6 +34,7 @@ const { PollEnqueueService } = require("../automation/poll-enqueue.service");
 const { MultiTenantIngestScheduler } = require("../automation/scheduler");
 const { QueueWorkerRunner } = require("../automation/worker-runner");
 const { resolveAutomationStart } = require("../automation/start-policy");
+const { resolveWorkerTenantPolicy, filterEligibleScopes } = require("../automation/worker-tenant-policy");
 const {
   InMemoryAutomaticIntakeSettingsStore,
   FileAutomaticIntakeSettingsStore,
@@ -648,7 +649,7 @@ class Server {
       const enqueueStageJob = async ({ tenantId, companyId, stage, sourceSnapshotId, sourceArticleId, locale }) => queue.enqueue({ tenantId, companyId, queueName: "pipeline-stage", jobType: `${stage}.dispatch`, idempotencyKey: `stage-${sourceSnapshotId}-${companyId}`.slice(0, 255), payload: { stage, source_snapshot_id: sourceSnapshotId, source_article_id: sourceArticleId, locale }, maxAttempts: 3 });
       const worker = new IngestWorker({ sourceGate: this._getIssueSourceResolver(), articleListClient: this.cmsSourceGate.cmsArticleClient, snapshotStore, watermarkStore, enqueueStageJob, logger: this.logger });
       const crawlIngestService = new CrawlIngestService({ crawlArticleReader: this._getCrawlArticleReader(), sourceGate: this._getIssueSourceResolver(), snapshotStore, watermarkStore, enqueueStageJob, logger: this.logger });
-      const runNext = ({ tenantIds = null } = {}) => queue.processNext({ queueName: "ingest", tenantIds, handler: (job) => job.payload.mode === "crawl-poll" ? crawlIngestService.pollSource({ tenantId: job.tenantId, companyId: job.companyId, sourceId: job.payload.crawl_source_id, locale: job.payload.locale, limit: job.payload.limit }) : job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
+      const runNext = ({ tenantIds = null, excludeEval = true } = {}) => queue.processNext({ queueName: "ingest", tenantIds, excludeEval, handler: (job) => job.payload.mode === "crawl-poll" ? crawlIngestService.pollSource({ tenantId: job.tenantId, companyId: job.companyId, sourceId: job.payload.crawl_source_id, locale: job.payload.locale, limit: job.payload.limit }) : job.payload.mode === "article" ? worker.triggerArticle({ tenantId: job.tenantId, companyId: job.companyId, articleId: job.payload.article_id, locale: job.payload.locale }) : worker.poll({ tenantId: job.tenantId, companyId: job.companyId, locale: job.payload.locale, limit: job.payload.limit }) });
       this.ingestRuntime = { queue, jobStore, worker, crawlIngestService, snapshotStore, watermarkStore, runNext };
     }
     return this.ingestRuntime;
@@ -716,14 +717,20 @@ class Server {
     const ingest = this._getIngestRuntime();
     const pipeline = this._getPipelineRuntime();
     const pollEnqueue = new PollEnqueueService({ queue: ingest.queue, maxAttempts: automation.maxAttempts });
-    this.scheduler = new MultiTenantIngestScheduler({ config: automation, listEligible: () => this._getPipelineRuntime().companyStore.listEligible(), enqueuePoll: (input) => pollEnqueue.enqueuePoll(input), stateStore: this.schedulerStateStore, logger: this.logger });
+    const workerTenantPolicy = resolveWorkerTenantPolicy(process.env);
+    this.workerTenantPolicy = workerTenantPolicy;
+    const listEligibleScoped = async () => filterEligibleScopes(
+      await this._getPipelineRuntime().companyStore.listEligible(),
+      workerTenantPolicy
+    );
+    this.scheduler = new MultiTenantIngestScheduler({ config: automation, listEligible: listEligibleScoped, enqueuePoll: (input) => pollEnqueue.enqueuePoll(input), stateStore: this.schedulerStateStore, logger: this.logger });
     const taskQueues = ["T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T12", "T13", "T14"].map((taskId) => `ai-task-${taskId}`);
-    const workerTenantIds = String(process.env.AI_WORKER_TENANT_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
     this.workerRunner = new QueueWorkerRunner({ queueNames: ["ingest", "pipeline-stage", ...taskQueues], concurrency: Math.max(automation.ingestConcurrency, automation.pipelineConcurrency), recoverStale: () => ingest.jobStore.recoverStale?.({ olderThanMs: automation.workerStaleTimeoutMs }), processNext: (queueName) => {
-      const tenantIds = workerTenantIds.length ? workerTenantIds : null;
-      if (queueName === "ingest") return ingest.runNext({ tenantIds });
-      if (queueName === "pipeline-stage") return ingest.queue.processNext({ queueName, workerId: "pipeline-stage-worker", tenantIds, handler: (job) => pipeline.dispatcher.dispatch(job.payload) });
-      if (queueName.startsWith("ai-task-")) return pipeline.worker.processNext({ taskId: queueName.replace("ai-task-", ""), tenantIds });
+      const tenantIds = workerTenantPolicy.tenantIds;
+      const excludeEval = workerTenantPolicy.excludeEval;
+      if (queueName === "ingest") return ingest.runNext({ tenantIds, excludeEval });
+      if (queueName === "pipeline-stage") return ingest.queue.processNext({ queueName, workerId: "pipeline-stage-worker", tenantIds, excludeEval, handler: (job) => pipeline.dispatcher.dispatch(job.payload) });
+      if (queueName.startsWith("ai-task-")) return pipeline.worker.processNext({ taskId: queueName.replace("ai-task-", ""), tenantIds, excludeEval });
       return null;
     }, logger: this.logger });
     // Automatic intake (scheduler) and queue workers are independent. Manual
@@ -731,6 +738,12 @@ class Server {
     const { startScheduler, startWorkers } = resolveAutomationStart(automation);
     if (startScheduler) this.scheduler.start();
     if (startWorkers) this.workerRunner.start();
+    this.logger.info("worker_tenant_policy_loaded", {
+      allowEval: workerTenantPolicy.allowEval,
+      excludeEval: workerTenantPolicy.excludeEval,
+      allowlistCount: Array.isArray(workerTenantPolicy.tenantIds) ? workerTenantPolicy.tenantIds.length : null,
+      failClosed: workerTenantPolicy.isProduction,
+    });
   }
 
   _getPipelineRuntime() {

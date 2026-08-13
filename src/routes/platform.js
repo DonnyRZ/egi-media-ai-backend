@@ -80,7 +80,7 @@ function createPlatformRouter({ getTenantStore, getCompanyStore, getMembershipSt
   }));
   router.post("/api/v1/platform/tenants/:tenantId/companies", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {
     if (typeof req.body?.name !== "string" || !req.body.name.trim() || req.body.name.length > 255) throw validationError("Company name is required");
-    const result = await getCompanyStore().create({ tenantId: req.params.tenantId, companyId: req.body.company_id, name: req.body.name.trim(), legalName: req.body.legal_name, timezone: req.body.timezone, locale: req.body.locale, status: req.body.status || "pending", metadata: req.body.metadata });
+    const result = await getCompanyStore().create({ tenantId: req.params.tenantId, companyId: req.body.company_id, name: req.body.name.trim(), legalName: req.body.legal_name, timezone: req.body.timezone, locale: req.body.locale, status: req.body.status || "active", metadata: req.body.metadata });
     return success(res, { company: serializeCompany(result.company), reused: result.reused }, req, result.reused ? 200 : 201);
   }));
   router.patch("/api/v1/platform/tenants/:tenantId/companies/:companyId", scope, requireIdempotencyKey, asyncHandler(async (req, res) => {

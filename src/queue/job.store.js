@@ -18,7 +18,28 @@ class InMemoryJobStore {
     return jobs.map(clone);
   }
   recoverStale({ olderThanMs = 300000, now = this.now() } = {}) { const cutoff = now - olderThanMs; let count = 0; for (const job of this.jobsById.values()) if (job.status === "running" && Date.parse(job.lockedAt || job.updatedAt) < cutoff) { job.status = "retrying"; job.lockedBy = null; job.lockedAt = null; job.availableAt = new Date(now).toISOString(); job.updatedAt = new Date(now).toISOString(); count += 1; } return count; }
-  claimNext({ queueName, workerId, now = this.now() }) { const candidate = [...this.jobsById.values()].filter((job) => job.queueName === queueName && ["queued", "retrying"].includes(job.status) && Date.parse(job.availableAt) <= now).sort((a, b) => Date.parse(a.availableAt) - Date.parse(b.availableAt) || Date.parse(a.createdAt) - Date.parse(b.createdAt))[0]; if (!candidate) return null; const timestamp = new Date(now).toISOString(); candidate.status = "running"; candidate.attempts += 1; candidate.lockedBy = workerId; candidate.lockedAt = timestamp; candidate.updatedAt = timestamp; return clone(candidate); }
+  claimNext({ queueName, workerId, now = this.now(), tenantIds = null, excludeEval = true }) {
+    if (Array.isArray(tenantIds) && tenantIds.length === 0) return null;
+    const candidate = [...this.jobsById.values()]
+      .filter((job) => job.queueName === queueName && ["queued", "retrying"].includes(job.status) && Date.parse(job.availableAt) <= now)
+      .filter((job) => {
+        if (Array.isArray(tenantIds) && tenantIds.length) return tenantIds.includes(job.tenantId);
+        if (excludeEval) {
+          const id = String(job.tenantId || "");
+          if (id.startsWith("eval-") || id.includes("eval-tenant")) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => Date.parse(a.availableAt) - Date.parse(b.availableAt) || Date.parse(a.createdAt) - Date.parse(b.createdAt))[0];
+    if (!candidate) return null;
+    const timestamp = new Date(now).toISOString();
+    candidate.status = "running";
+    candidate.attempts += 1;
+    candidate.lockedBy = workerId;
+    candidate.lockedAt = timestamp;
+    candidate.updatedAt = timestamp;
+    return clone(candidate);
+  }
   complete({ jobId, workerId }) { const job = this._locked(jobId, workerId); job.status = "succeeded"; job.lockedBy = null; job.lockedAt = null; job.updatedAt = new Date(this.now()).toISOString(); return clone(job); }
   retry({ jobId, workerId, availableAt, errorCode, errorMessage }) { const job = this._locked(jobId, workerId); job.status = "retrying"; job.availableAt = new Date(availableAt).toISOString(); job.lockedBy = null; job.lockedAt = null; job.lastErrorCode = errorCode; job.lastErrorMessage = errorMessage; job.updatedAt = new Date(this.now()).toISOString(); return clone(job); }
   deadLetter({ jobId, workerId, errorCode, errorMessage }) { const job = this._locked(jobId, workerId); const now = new Date(this.now()).toISOString(); job.status = "dead_letter"; job.lockedBy = null; job.lockedAt = null; job.lastErrorCode = errorCode; job.lastErrorMessage = errorMessage; job.deadLetteredAt = now; job.updatedAt = now; return clone(job); }

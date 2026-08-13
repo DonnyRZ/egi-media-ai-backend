@@ -35,11 +35,18 @@ class PostgresJobStore {
     return r.rows.map(mapJob);
   }
   async recoverStale({ olderThanMs = 300000 } = {}) { const r = await this.db.query("UPDATE ai.queue_jobs SET status='retrying',locked_by=NULL,locked_at=NULL,available_at=now(),updated_at=now() WHERE status='running' AND locked_at < now() - ($1::int * interval '1 millisecond')", [olderThanMs]); return r.rowCount; }
-  async claimNext({ queueName, workerId, now = Date.now, tenantIds = null }) {
+  async claimNext({ queueName, workerId, now = Date.now, tenantIds = null, excludeEval = true }) {
     const timestamp = new Date(typeof now === "function" ? now() : now).toISOString();
+    // Empty allowlist must claim nothing (fail closed). null means unrestricted (minus eval filter).
+    if (Array.isArray(tenantIds) && tenantIds.length === 0) return null;
     const values = [workerId, timestamp, queueName];
-    const scope = Array.isArray(tenantIds) && tenantIds.length ? ` AND tenant_id = ANY($${values.length + 1}::text[])` : "";
-    if (scope) values.push(tenantIds);
+    let scope = "";
+    if (Array.isArray(tenantIds) && tenantIds.length) {
+      values.push(tenantIds);
+      scope += ` AND tenant_id = ANY($${values.length}::text[])`;
+    } else if (excludeEval) {
+      scope += " AND tenant_id NOT LIKE 'eval-%' AND tenant_id NOT LIKE '%eval-tenant%'";
+    }
     const r = await this.db.query(`UPDATE ai.queue_jobs SET status='running',attempts=attempts+1,locked_by=$1,locked_at=$2,updated_at=$2 WHERE id=(SELECT id FROM ai.queue_jobs WHERE queue_name=$3 AND status IN ('queued','retrying') AND available_at <= $2${scope} ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, values);
     return r.rows[0] ? mapJob(r.rows[0]) : null;
   }
